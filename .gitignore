@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+build/
+dist/
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Local SQLite database. Disposable dev artefact (see web/SETUP-NOTES.md); it
+# also holds real admin password hashes, so it stays out of the repo.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Test output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
