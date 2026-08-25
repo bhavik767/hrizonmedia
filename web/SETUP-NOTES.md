@@ -82,3 +82,26 @@ post meta titles. Kept as a worked example of bulk-updating documents through th
 The template's site name has been replaced throughout `src/` with EncryptStream, which
 affects page titles, the SEO plugin's title suffix and Open Graph defaults. The homepage
 itself is still the stock template layout.
+
+## Accounts and email
+
+The project account is **app.encryptstream@gmail.com**. It is the Payload admin login and
+the address that receives form submissions. It is deliberately **not published anywhere on
+the site** — no footer contact link, no mailto.
+
+**It cannot send the launch email, and this matters.** The early-access capture promises
+"we will email you once, when it is ready", so eventually one message goes out to the whole
+list. A gmail.com address cannot do that:
+
+- Every ESP (Resend, SendGrid, Postmark) requires DNS verification of the sending domain.
+  You cannot add DNS records to `gmail.com`, so sending *as* this address through any of
+  them is impossible.
+- Gmail SMTP does work with an app password, but free accounts cap around 500 recipients
+  per day and Google's terms exclude bulk marketing mail.
+
+Before launch, register a sending address on `encryptstream.com` (see ADR-0001, which
+records that we own it) and verify that domain with whichever ESP is chosen. Keep the Gmail
+account as the admin login and inbox.
+
+Do not wire Gmail SMTP as the transport. It will appear to work in testing and hit the
+ceiling on the one day it matters.
