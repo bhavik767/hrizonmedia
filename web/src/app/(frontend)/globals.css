@@ -17,8 +17,39 @@
   h4,
   h5,
   h6 {
-    font-weight: unset;
-    font-size: unset;
+    color: var(--heading);
+    font-family: var(--font-display);
+  }
+
+  h1 {
+    font-size: var(--text-h1);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+  }
+
+  h2 {
+    font-size: var(--text-h2);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: var(--text-h3);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: var(--font-mono);
   }
 }
 
@@ -43,8 +74,35 @@
   --breakpoint-lg: 64rem;
   --breakpoint-xl: 80rem;
   --breakpoint-2xl: 86rem;
-  --font-mono: var(--font-geist-mono);
-  --font-sans: var(--font-geist-sans);
+  --font-display: var(--font-manrope);
+  --font-mono: var(--font-plex-mono);
+  --font-sans: var(--font-plex-sans);
+
+  /*
+   * The brand book's type scale, adopted as given. Display sizes are fluid at
+   * small viewports; body size is not, because a reader's measure should not
+   * move under them.
+   */
+  --text-h1: clamp(2rem, 1.25rem + 3.75vw, 3rem);
+  --text-h1--line-height: 1.02;
+  --text-h1--letter-spacing: -0.03em;
+  --text-h1--font-weight: 800;
+  --text-h2: clamp(1.5rem, 1.15rem + 1.75vw, 2rem);
+  --text-h2--line-height: 1.1;
+  --text-h2--letter-spacing: -0.02em;
+  --text-h2--font-weight: 800;
+  --text-h3: 1.25rem;
+  --text-h3--line-height: 1.25;
+  --text-h3--letter-spacing: -0.01em;
+  --text-h3--font-weight: 700;
+  --text-body: 1rem;
+  --text-body--line-height: 1.65;
+  --text-mono: 0.875rem;
+  --text-mono--line-height: 1.5;
+  --text-mono--letter-spacing: 0.02em;
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1.4;
+  --text-label--letter-spacing: 0.18em;
 }
 
 @layer utilities {
@@ -86,86 +144,94 @@
   }
 }
 
+/*
+ * Light theme. ADR-0003 is the source of truth for these values, not the brand
+ * book — the brand book is dark-only. The scale mirrors the dark scale's faint
+ * blue-violet hue so the two themes read as one site.
+ */
 :root {
-  --background: oklch(100% 0 0deg);
-  --foreground: oklch(14.5% 0 0deg);
-  --card: oklch(96.5% 0.005 265deg);
-  --card-foreground: oklch(14.5% 0 0deg);
-  --popover: oklch(100% 0 0deg);
-  --popover-foreground: oklch(14.5% 0 0deg);
-  --primary: oklch(20.5% 0 0deg);
-  --primary-foreground: oklch(98.5% 0 0deg);
-  --secondary: oklch(97% 0 0deg);
-  --secondary-foreground: oklch(20.5% 0 0deg);
-  --muted: oklch(97% 0 0deg);
-  --muted-foreground: oklch(55.6% 0 0deg);
-  --accent: oklch(97% 0 0deg);
-  --accent-foreground: oklch(20.5% 0 0deg);
-  --destructive: oklch(57.7% 0.245 27.325deg);
-  --destructive-foreground: oklch(57.7% 0.245 27.325deg);
-  --border: oklch(92.2% 0 0deg);
-  --input: oklch(92.2% 0 0deg);
-  --ring: oklch(70.8% 0 0deg);
-  --chart-1: oklch(64.6% 0.222 41.116deg);
-  --chart-2: oklch(60% 0.118 184.704deg);
-  --chart-3: oklch(39.8% 0.07 227.392deg);
-  --chart-4: oklch(82.8% 0.189 84.429deg);
-  --chart-5: oklch(76.9% 0.188 70.08deg);
-  --radius: 0.625rem;
-  --sidebar: oklch(98.5% 0 0deg);
-  --sidebar-foreground: oklch(14.5% 0 0deg);
-  --sidebar-primary: oklch(20.5% 0 0deg);
-  --sidebar-primary-foreground: oklch(98.5% 0 0deg);
-  --sidebar-accent: oklch(97% 0 0deg);
-  --sidebar-accent-foreground: oklch(20.5% 0 0deg);
-  --sidebar-border: oklch(92.2% 0 0deg);
-  --sidebar-ring: oklch(70.8% 0 0deg);
-  --success: oklch(78% 0.08 200deg);
-  --warning: oklch(89% 0.1 75deg);
-  --error: oklch(75% 0.15 25deg);
+  --background: #fbfbfd;
+  --foreground: #3c3c46;
+  --heading: #08080b;
+  --caption: #6e6e7a;
+  --link: #8a6e05;
+  --card: #ffffff;
+  --card-foreground: #3c3c46;
+  --popover: #ffffff;
+  --popover-foreground: #3c3c46;
+  --primary: #f3c30c;
+  --primary-foreground: #08080b;
+  --secondary: #f4f4f7;
+  --secondary-foreground: #08080b;
+  --muted: #f4f4f7;
+  --muted-foreground: #6e6e7a;
+  --accent: #f4f4f7;
+  --accent-foreground: #08080b;
+  --destructive: #b4231f;
+  --destructive-foreground: #b4231f;
+  --border: #e5e5eb;
+  --input: #e5e5eb;
+  --ring: #8a6e05;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #3c3c46;
+  --sidebar-primary: #f3c30c;
+  --sidebar-primary-foreground: #08080b;
+  --sidebar-accent: #f4f4f7;
+  --sidebar-accent-foreground: #08080b;
+  --sidebar-border: #e5e5eb;
+  --sidebar-ring: #8a6e05;
+  --success: #1f7a4d;
+  --warning: #8a6e05;
+  --error: #b4231f;
 }
 
+/*
+ * Dark theme, straight from the brand book. Elevation inverts against the
+ * light theme — panels sit lighter than the ground in both — and that is the
+ * correct convention for each, not a defect.
+ */
 [data-theme='dark'] {
-  --background: oklch(14.5% 0 0deg);
-  --foreground: oklch(98.5% 0 0deg);
-  --card: oklch(17% 0 0deg);
-  --card-foreground: oklch(98.5% 0 0deg);
-  --popover: oklch(14.5% 0 0deg);
-  --popover-foreground: oklch(98.5% 0 0deg);
-  --primary: oklch(98.5% 0 0deg);
-  --primary-foreground: oklch(20.5% 0 0deg);
-  --secondary: oklch(26.9% 0 0deg);
-  --secondary-foreground: oklch(98.5% 0 0deg);
-  --muted: oklch(26.9% 0 0deg);
-  --muted-foreground: oklch(70.8% 0 0deg);
-  --accent: oklch(26.9% 0 0deg);
-  --accent-foreground: oklch(98.5% 0 0deg);
-  --destructive: oklch(39.6% 0.141 25.723deg);
-  --destructive-foreground: oklch(63.7% 0.237 25.331deg);
-  --border: oklch(26.9% 0 0deg);
-  --input: oklch(26.9% 0 0deg);
-  --ring: oklch(43.9% 0 0deg);
-  --chart-1: oklch(48.8% 0.243 264.376deg);
-  --chart-2: oklch(69.6% 0.17 162.48deg);
-  --chart-3: oklch(76.9% 0.188 70.08deg);
-  --chart-4: oklch(62.7% 0.265 303.9deg);
-  --chart-5: oklch(64.5% 0.246 16.439deg);
-  --sidebar: oklch(20.5% 0 0deg);
-  --sidebar-foreground: oklch(98.5% 0 0deg);
-  --sidebar-primary: oklch(48.8% 0.243 264.376deg);
-  --sidebar-primary-foreground: oklch(98.5% 0 0deg);
-  --sidebar-accent: oklch(26.9% 0 0deg);
-  --sidebar-accent-foreground: oklch(98.5% 0 0deg);
-  --sidebar-border: oklch(26.9% 0 0deg);
-  --sidebar-ring: oklch(43.9% 0 0deg);
-  --success: oklch(28% 0.1 200deg);
-  --warning: oklch(35% 0.08 70deg);
-  --error: oklch(45% 0.1 25deg);
+  --background: #08080b;
+  --foreground: #8c8c9a;
+  --heading: #ffffff;
+  --caption: #5c5c68;
+  --link: #f3c30c;
+  --card: #101015;
+  --card-foreground: #8c8c9a;
+  --popover: #101015;
+  --popover-foreground: #8c8c9a;
+  --primary: #f3c30c;
+  --primary-foreground: #08080b;
+  --secondary: #191920;
+  --secondary-foreground: #ffffff;
+  --muted: #191920;
+  --muted-foreground: #8c8c9a;
+  --accent: #191920;
+  --accent-foreground: #ffffff;
+  --destructive: #ff5a5a;
+  --destructive-foreground: #ff5a5a;
+  --border: #26262f;
+  --input: #26262f;
+  --ring: #f3c30c;
+  --sidebar: #101015;
+  --sidebar-foreground: #8c8c9a;
+  --sidebar-primary: #f3c30c;
+  --sidebar-primary-foreground: #08080b;
+  --sidebar-accent: #191920;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #26262f;
+  --sidebar-ring: #f3c30c;
+  --success: #3fd07f;
+  --warning: #f3c30c;
+  --error: #ff5a5a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-heading: var(--heading);
+  --color-caption: var(--caption);
+  --color-link: var(--link);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -183,26 +249,22 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-error: var(--error);
+
+  /*
+   * Radius takes exactly three steps and no others. The stock `sm`/`md`/`lg`/
+   * `xl` names are remapped onto them so a leftover template utility cannot
+   * reintroduce a fourth value.
+   */
+  --radius-pill: 999px;
+  --radius-card: 16px;
+  --radius-plate: 20px;
+  --radius-sm: 16px;
+  --radius-md: 16px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 }
 
 @layer base {
@@ -210,15 +272,27 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground min-h-[100vh] flex flex-col;
+    @apply bg-background text-foreground min-h-[100vh] flex flex-col font-sans;
+
+    font-size: var(--text-body);
+    line-height: 1.65;
+  }
+
+  a {
+    color: var(--link);
   }
 }
 
-html {
-  opacity: 0;
-}
-
-html[data-theme='dark'],
-html[data-theme='light'] {
-  opacity: initial;
+/* A reader who has asked their system for less motion is taken at their word. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-delay: 0s !important;
+    transition-duration: 0s !important;
+  }
 }
