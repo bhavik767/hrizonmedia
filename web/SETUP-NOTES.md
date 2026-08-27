@@ -77,11 +77,37 @@ Two things to know if you write your own seed scripts:
 `scripts/fix-meta-titles.ts` is a one-off that removed a duplicated site-name suffix from
 post meta titles. Kept as a worked example of bulk-updating documents through the Local API.
 
+## Seeding the chrome
+
+`scripts/seed-navigation.ts` writes the header and footer link sets into the `header` and
+`footer` globals, and creates the two pages the footer's legal links point at.
+
+    npm run payload -- run scripts/seed-navigation.ts
+
+**Restart the dev server afterwards.** The chrome reads its globals through
+`unstable_cache`, and the hook that drops that cache runs inside the Next process — a
+script writing through the Local API from outside it leaves the rendered page showing the
+previous links. Edits made in the admin panel revalidate normally and need no restart.
+
+The three category links point at `/posts?category=<slug>`. The listing ignores the query
+today; issue #8 makes the filter real and issue #7 moves the path to `/articles`. Both are
+changes to the globals, not to the components.
+
+The privacy and terms pages carry placeholder copy stating that EncryptStream is not open
+yet. They exist so the footer does not point a reader at a 404, and are the Author's to
+replace before launch.
+
 ## Branding
 
 The template's site name has been replaced throughout `src/` with EncryptStream, which
 affects page titles, the SEO plugin's title suffix and Open Graph defaults. The homepage
 itself is still the stock template layout.
+
+The logo files served by the site live in `public/brand/`, copied from
+`brand_guidelines/assets/`. The lockup leads the header and the mark alone sits in the
+footer; each ships in two variants and the theme picks between them in CSS, so the correct
+artwork is painted with the first frame. Never re-type the wordmark in a typeface — it is
+artwork, and Manrope is close enough to be mistaken for it.
 
 ## Accounts and email
 

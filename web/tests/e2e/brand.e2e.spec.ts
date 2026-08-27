@@ -5,6 +5,7 @@ import {
   cleanupBrandArticle,
   seedBrandArticle,
 } from '../helpers/seedBrandArticle'
+import { storeThemePreference } from '../helpers/theme'
 
 const HOME = 'http://localhost:3000'
 
@@ -89,13 +90,6 @@ async function bodyCopyContrast(page: Page): Promise<number> {
 
     return (lighter + 0.05) / (darker + 0.05)
   }, brandArticleFixture.paragraphText)
-}
-
-/** Seeds the stored theme preference before the page's inline script reads it. */
-async function storeThemePreference(page: Page, theme: 'dark' | 'light'): Promise<void> {
-  await page.addInitScript((value) => {
-    window.localStorage.setItem('payload-theme', value)
-  }, theme)
 }
 
 test.describe('Brand foundation', () => {
