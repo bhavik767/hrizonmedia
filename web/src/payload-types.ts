@@ -1657,7 +1657,33 @@ export interface Header {
  */
 export interface Footer {
   id: number;
+  /**
+   * The categories a reader can browse. Shown as the footer’s main links.
+   */
   navItems?:
+    | {
+        link: {
+          type?: ('reference' | 'custom') | null;
+          newTab?: boolean | null;
+          reference?:
+            | ({
+                relationTo: 'pages';
+                value: number | Page;
+              } | null)
+            | ({
+                relationTo: 'posts';
+                value: number | Post;
+              } | null);
+          url?: string | null;
+          label: string;
+        };
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Policy and terms links, set on the legal line.
+   */
+  legalItems?:
     | {
         link: {
           type?: ('reference' | 'custom') | null;
@@ -1709,6 +1735,20 @@ export interface HeaderSelect<T extends boolean = true> {
  */
 export interface FooterSelect<T extends boolean = true> {
   navItems?:
+    | T
+    | {
+        link?:
+          | T
+          | {
+              type?: T;
+              newTab?: T;
+              reference?: T;
+              url?: T;
+              label?: T;
+            };
+        id?: T;
+      };
+  legalItems?:
     | T
     | {
         link?:

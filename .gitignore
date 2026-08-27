@@ -24,6 +24,9 @@ playwright-report/
 blob-report/
 playwright/.cache/
 
+# Incremental TypeScript build state. Local artefact, regenerated on every build.
+*.tsbuildinfo
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
