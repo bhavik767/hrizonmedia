@@ -22,6 +22,14 @@ export default defineConfig({
    * happened to lose the race.
    */
   workers: 1,
+  /*
+   * Playwright's 5s default assertion timeout is too tight for the first visit
+   * to a route. The suite runs against a freshly reset database and an empty
+   * Turbopack cache, so the first navigation to a page compiles it on demand —
+   * `/search` has flaked here. This is headroom for a cold compile, not cover
+   * for a slow page: a genuinely broken assertion still fails, just later.
+   */
+  expect: { timeout: 15_000 },
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -41,6 +49,13 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     reuseExistingServer: true,
+    /*
+     * Playwright's 60s default is not enough for a cold start. The suite is
+     * meant to run against a freshly reset database (`npm run test:reset`), so
+     * the first boot pays for Payload creating the whole schema and Turbopack
+     * compiling from an empty cache at the same time.
+     */
+    timeout: 180_000,
     url: 'http://localhost:3000',
   },
 })
