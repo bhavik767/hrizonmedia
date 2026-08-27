@@ -9,28 +9,29 @@ import {
 } from '@/components/ui/select'
 import React, { useState } from 'react'
 
-import type { Theme } from './types'
+import type { Theme } from '../types'
 
 import { useTheme } from '..'
-import { themeLocalStorageKey } from './types'
+import { defaultTheme, themeLocalStorageKey } from '../shared'
+import { themeIsValid } from '../types'
 
+/**
+ * Only the two themes that exist are offered. There is no "auto" — resolution
+ * no longer consults the operating system (ADR-0003), so an auto option would
+ * be an alias for dark wearing a misleading label.
+ */
 export const ThemeSelector: React.FC = () => {
   const { setTheme } = useTheme()
-  const [value, setValue] = useState('')
+  const [value, setValue] = useState<Theme>(defaultTheme)
 
-  const onThemeChange = (themeToSet: Theme & 'auto') => {
-    if (themeToSet === 'auto') {
-      setTheme(null)
-      setValue('auto')
-    } else {
-      setTheme(themeToSet)
-      setValue(themeToSet)
-    }
+  const onThemeChange = (themeToSet: Theme) => {
+    setTheme(themeToSet)
+    setValue(themeToSet)
   }
 
   React.useEffect(() => {
     const preference = window.localStorage.getItem(themeLocalStorageKey)
-    setValue(preference ?? 'auto')
+    setValue(themeIsValid(preference) ? preference : defaultTheme)
   }, [])
 
   return (
@@ -42,9 +43,8 @@ export const ThemeSelector: React.FC = () => {
         <SelectValue placeholder="Theme" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="auto">Auto</SelectItem>
-        <SelectItem value="light">Light</SelectItem>
         <SelectItem value="dark">Dark</SelectItem>
+        <SelectItem value="light">Light</SelectItem>
       </SelectContent>
     </Select>
   )

@@ -71,7 +71,9 @@ export default function RichText(props: Props) {
         {
           container: enableGutter,
           'max-w-none': !enableGutter,
-          'mx-auto prose md:prose-md dark:prose-invert': enableProse,
+          // No `prose-invert`: the prose variables are already wired to the
+          // brand tokens, which switch with the theme themselves.
+          'mx-auto prose': enableProse,
         },
         className,
       )}

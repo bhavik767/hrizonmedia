@@ -16,7 +16,7 @@ export const PostHero: React.FC<{
 
   return (
     <div className="relative -mt-[10.4rem] flex items-end">
-      <div className="container z-10 relative lg:grid lg:grid-cols-[1fr_48rem_1fr] text-white pb-8">
+      <div className="container z-10 relative lg:grid lg:grid-cols-[1fr_48rem_1fr] text-foreground pb-8">
         <div className="col-start-1 col-span-1 md:col-start-2 md:col-span-2">
           <div className="uppercase text-sm mb-6">
             {categories?.map((category, index) => {
@@ -66,7 +66,14 @@ export const PostHero: React.FC<{
         {heroImage && typeof heroImage !== 'string' && (
           <Media fill priority imgClassName="-z-10 object-cover" resource={heroImage} />
         )}
-        <div className="absolute pointer-events-none left-0 bottom-0 w-full h-1/2 bg-linear-to-t from-black to-transparent" />
+        {/*
+          The scrim fades to the page's ground, not to black. A fixed black
+          scrim would sit under the heading in the light theme and swallow it.
+        */}
+        <div
+          className="absolute pointer-events-none left-0 bottom-0 w-full h-1/2 bg-linear-to-t from-background to-transparent"
+          data-hero-scrim
+        />
       </div>
     </div>
   )
