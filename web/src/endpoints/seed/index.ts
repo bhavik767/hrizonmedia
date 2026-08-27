@@ -20,7 +20,12 @@ const collections: CollectionSlug[] = [
   'search',
 ]
 
-const globals: GlobalSlug[] = ['header', 'footer']
+/*
+ * The globals this seed clears. Typed as a tuple rather than `GlobalSlug[]` so
+ * `navItems` is checked against the two navigation globals: widened to every
+ * global, the data no longer matches the ones that carry links.
+ */
+const globals = ['header', 'footer'] as const satisfies readonly GlobalSlug[]
 
 const categories = ['Technology', 'News', 'Finance', 'Design', 'Software', 'Engineering']
 

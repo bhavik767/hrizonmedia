@@ -10,7 +10,10 @@ import RichText from '@/components/RichText'
 
 import type { Post } from '@/payload-types'
 
+import { ArticleContents, ArticleContentsDisclosure } from '@/components/ArticleContents'
+import { AuthorBiography } from '@/components/AuthorBiography'
 import { PostHero } from '@/heros/PostHero'
+import { articleHeadings } from '@/utilities/articleHeadings'
 import { generateMeta } from '@/utilities/generateMeta'
 import PageClient from './page.client'
 import { LivePreviewListener } from '@/components/LivePreviewListener'
@@ -51,8 +54,10 @@ export default async function Post({ params: paramsPromise }: Args) {
 
   if (!post) return <PayloadRedirects url={url} />
 
+  const headings = articleHeadings(post.content)
+
   return (
-    <article className="pt-16 pb-16">
+    <article className="pb-20">
       <PageClient />
 
       {/* Allows redirects for valid pages too */}
@@ -62,17 +67,36 @@ export default async function Post({ params: paramsPromise }: Args) {
 
       <PostHero post={post} />
 
-      <div className="flex flex-col items-center gap-4 pt-8">
-        <div className="container">
-          <RichText className="max-w-[48rem] mx-auto" data={post.content} enableGutter={false} />
-          {post.relatedPosts && post.relatedPosts.length > 0 && (
-            <RelatedPosts
-              className="mt-12 max-w-[52rem] lg:grid lg:grid-cols-subgrid col-start-1 col-span-3 grid-rows-[2fr]"
-              docs={post.relatedPosts.filter((post) => typeof post === 'object')}
-            />
-          )}
+      {/*
+        The body takes the primary column and the contents the secondary one.
+        The rail is sticky so a reader can leave for another section from any
+        point in a long piece without scrolling back to the top.
+      */}
+      <div className="container pt-12">
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_15rem] lg:items-start lg:gap-12 xl:gap-16">
+          <div>
+            <ArticleContentsDisclosure className="lg:hidden" headings={headings} />
+
+            {/*
+              `enableGutter={false}` sets `max-w-none`, which would otherwise
+              undo the 65-character measure the prose styles set.
+            */}
+            <RichText className="max-w-[65ch]" data={post.content} enableGutter={false} />
+          </div>
+
+          <aside className="hidden lg:block lg:sticky lg:top-24">
+            <ArticleContents headings={headings} />
+          </aside>
         </div>
       </div>
+
+      <AuthorBiography />
+
+      {post.relatedPosts && post.relatedPosts.length > 0 && (
+        <div className="container pt-16">
+          <RelatedPosts docs={post.relatedPosts.filter((post) => typeof post === 'object')} />
+        </div>
+      )}
     </article>
   )
 }
