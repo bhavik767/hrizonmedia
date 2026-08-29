@@ -35,10 +35,15 @@ test.describe('The Article page', () => {
       const contents = page.getByRole('navigation', { name: 'On this page' })
 
       await expect(contents.getByRole('link')).toHaveText([
+        articlePageFixture.takeawaysHeading,
         articlePageFixture.topHeading,
         articlePageFixture.subheadingText,
         articlePageFixture.collidingHeading,
         articlePageFixture.collidingHeading,
+        articlePageFixture.faqHeading,
+        articlePageFixture.faqQuestions[0]![0],
+        articlePageFixture.faqQuestions[1]![0],
+        articlePageFixture.faqRepeatedQuestion,
       ])
     })
 
@@ -53,10 +58,15 @@ test.describe('The Article page', () => {
         .evaluateAll((links) => links.map((link) => link.getAttribute('href')))
 
       expect(hrefs).toEqual([
+        '#what-this-article-argues',
         '#how-a-licence-exchange-works',
         '#widevine-fairplay-and-playready',
         '#what-this-actually-costs',
         '#what-this-actually-costs-2',
+        '#questions-about-licences',
+        '#does-aes-128-count-as-drm',
+        '#is-one-packaging-pass-enough-for-all-three-ecosystems',
+        '#does-aes-128-count-as-drm-2',
       ])
 
       for (const href of hrefs) {
@@ -133,7 +143,7 @@ test.describe('The Article page', () => {
       await page.goto(ARTICLE)
 
       const contents = page.getByRole('navigation', { name: 'On this page' })
-      await expect(contents.getByRole('link')).toHaveCount(4)
+      await expect(contents.getByRole('link')).toHaveCount(9)
 
       await contents.getByRole('link', { name: articlePageFixture.topHeading }).click()
 
@@ -272,6 +282,98 @@ test.describe('The Article page', () => {
 
       await expect(surface).toHaveCSS('background-color', 'rgb(255, 255, 255)')
       await expect(surface).toHaveCSS('border-top-color', 'rgb(229, 229, 235)')
+    })
+  })
+
+  test.describe('key takeaways', () => {
+    test('the box hands a skimmer the argument as a numbered list of claims', async ({ page }) => {
+      await page.goto(ARTICLE)
+
+      const box = page.getByRole('region', { name: articlePageFixture.takeawaysHeading })
+
+      await expect(box.getByRole('listitem')).toHaveText(articlePageFixture.takeaways)
+      await expect(box.getByRole('list')).toHaveCSS('list-style-type', 'decimal')
+    })
+  })
+
+  test.describe('frequently asked questions', () => {
+    test('every question is answered in place, with nothing to open first', async ({ page }) => {
+      await page.goto(ARTICLE)
+
+      const faq = page.getByRole('region', { name: articlePageFixture.faqHeading })
+
+      for (const [question, answer] of articlePageFixture.faqQuestions) {
+        await expect(faq.getByRole('heading', { name: question })).toBeVisible()
+        await expect(faq.getByText(answer)).toBeVisible()
+      }
+    })
+
+    test('a second cluster elsewhere renders too, and its repeated question keeps its own anchor', async ({
+      page,
+    }) => {
+      await page.goto(ARTICLE)
+
+      const second = page.getByRole('region', { name: 'Frequently asked questions' })
+      await expect(second.getByText(articlePageFixture.faqRepeatedAnswer)).toBeVisible()
+
+      const anchors = await page
+        .getByRole('heading', { name: articlePageFixture.faqRepeatedQuestion })
+        .evaluateAll((headings) => headings.map((heading) => heading.id))
+
+      expect(anchors).toEqual(['does-aes-128-count-as-drm', 'does-aes-128-count-as-drm-2'])
+    })
+  })
+
+  test.describe('the two blocks together', () => {
+    test('an Article written without them carries neither', async ({ page }) => {
+      await page.goto(`${HOME}/posts/${articlePageFixture.relatedSlug}`)
+
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+        articlePageFixture.relatedTitle,
+      )
+
+      for (const name of [
+        articlePageFixture.takeawaysHeading,
+        'Key takeaways',
+        articlePageFixture.faqHeading,
+        'Frequently asked questions',
+      ]) {
+        await expect(page.getByRole('region', { name })).toHaveCount(0)
+      }
+    })
+
+    test('both sit on a panel and a hairline, at a permitted radius, in either theme', async ({
+      page,
+    }) => {
+      await page.goto(ARTICLE)
+
+      const surfaces = [
+        page.getByRole('region', { name: articlePageFixture.takeawaysHeading }),
+        page
+          .getByRole('region', { name: articlePageFixture.faqHeading })
+          .getByRole('listitem')
+          .first(),
+      ]
+
+      for (const surface of surfaces) {
+        await expect(surface).toHaveCSS('box-shadow', 'none')
+        await expect(surface).toHaveCSS('background-color', 'rgb(16, 16, 21)')
+        await expect(surface).toHaveCSS('border-top-color', 'rgb(38, 38, 47)')
+
+        // The brand book allows three radii and no fourth.
+        const radius = await surface.evaluate(
+          (element) => getComputedStyle(element).borderTopLeftRadius,
+        )
+        expect(['16px', '20px', '999px']).toContain(radius)
+      }
+
+      await storeThemePreference(page, 'light')
+      await page.reload()
+
+      for (const surface of surfaces) {
+        await expect(surface).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+        await expect(surface).toHaveCSS('border-top-color', 'rgb(229, 229, 235)')
+      }
     })
   })
 

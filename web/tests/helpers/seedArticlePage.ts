@@ -16,8 +16,9 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
  * One Article carrying every element the reading experience has to hold: a
  * category, a lede, headings at both contents levels, a pair of headings that
  * collide so anchor disambiguation has something to disambiguate, a level the
- * contents must ignore, a technical term set as code inside a sentence, and a
- * related Article to close on.
+ * contents must ignore, a technical term set as code inside a sentence, a Key
+ * takeaways box, two FAQ blocks — the second unheaded and repeating a question
+ * from the first — and a related Article to close on.
  */
 export const articlePageFixture = {
   /*
@@ -29,6 +30,17 @@ export const articlePageFixture = {
   codeTerm: '#EXT-X-KEY',
   collidingHeading: 'What this actually costs',
   deepHeading: 'A level the contents ignores',
+  /* The second FAQ block carries no heading and asks the first one's question again. */
+  faqHeading: 'Questions about licences',
+  faqRepeatedAnswer: 'Asked again, in a second cluster, so the anchors have to differ.',
+  faqRepeatedQuestion: 'Does AES-128 count as DRM?',
+  faqQuestions: [
+    ['Does AES-128 count as DRM?', 'No. The key travels to the browser in the clear.'],
+    [
+      'Is one packaging pass enough for all three ecosystems?',
+      'Yes, where the packaging is done once against a common encryption scheme.',
+    ],
+  ] as [string, string][],
   figureAlt: 'Widevine security levels, from L3 to L1',
   figureCaption: 'Source: Widevine device security levels, Google, 2025',
   ledeText: 'Encryption alone is not DRM, because the key is not protected.',
@@ -36,6 +48,11 @@ export const articlePageFixture = {
   relatedTitle: 'Test Related Article For The Article Page',
   slug: 'test-article-page',
   subheadingText: 'Widevine, FairPlay and PlayReady',
+  takeaways: [
+    'A key that reaches the browser unprotected is not protected at all.',
+    'Watermarking does not stop a leak; it names whoever leaked it.',
+  ],
+  takeawaysHeading: 'What this Article argues',
   title: 'Test Article For The Article Page',
   topHeading: 'How a licence exchange works',
 }
@@ -203,11 +220,43 @@ function mediaBlock(mediaId: number | string) {
   }
 }
 
+function keyTakeawaysBlock(heading: string, statements: string[]) {
+  return {
+    type: 'block',
+    fields: {
+      blockName: '',
+      blockType: 'keyTakeaways',
+      heading,
+      takeaways: statements.map((statement) => ({ statement })),
+    },
+    format: '',
+    version: 2,
+  }
+}
+
+function faqBlock(heading: null | string, questions: [string, string][]) {
+  return {
+    type: 'block',
+    fields: {
+      blockName: '',
+      blockType: 'faq',
+      heading,
+      questions: questions.map(([question, answer]) => ({
+        answer: doc([paragraph(answer)]),
+        question,
+      })),
+    },
+    format: '',
+    version: 2,
+  }
+}
+
 function buildContent(
   figureId: number | string,
 ): RequiredDataFromCollectionSlug<'posts'>['content'] {
   return doc([
     paragraph(articlePageFixture.ledeText),
+    keyTakeawaysBlock(articlePageFixture.takeawaysHeading, articlePageFixture.takeaways),
     heading('h2', articlePageFixture.topHeading),
     ...section('A licence exchange hands the client a key it never gets to keep.'),
     mediaBlock(figureId),
@@ -224,5 +273,9 @@ function buildContent(
     ...section('The same words again, one level down, so the anchors have to differ.'),
     heading('h4', articlePageFixture.deepHeading),
     ...section('Below the two levels the contents is derived from.'),
+    faqBlock(articlePageFixture.faqHeading, articlePageFixture.faqQuestions),
+    faqBlock(null, [
+      [articlePageFixture.faqRepeatedQuestion, articlePageFixture.faqRepeatedAnswer],
+    ]),
   ])
 }

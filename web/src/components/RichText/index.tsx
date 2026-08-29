@@ -16,16 +16,29 @@ import { CodeBlock, CodeBlockProps } from '@/blocks/Code/Component'
 import type {
   BannerBlock as BannerBlockProps,
   CallToActionBlock as CTABlockProps,
+  FaqBlock as FaqBlockProps,
+  KeyTakeawaysBlock as KeyTakeawaysBlockProps,
   MediaBlock as MediaBlockProps,
 } from '@/payload-types'
+import type { RenderedAnchors } from '@/utilities/articleHeadings'
+
 import { BannerBlock } from '@/blocks/Banner/Component'
 import { CallToActionBlock } from '@/blocks/CallToAction/Component'
+import { FaqBlock } from '@/blocks/Faq/Component'
+import { KeyTakeawaysBlock } from '@/blocks/KeyTakeaways/Component'
 import { cn } from '@/utilities/ui'
-import { headingAnchors } from '@/utilities/articleHeadings'
+import { renderedAnchors } from '@/utilities/articleHeadings'
 
 type NodeTypes =
   | DefaultNodeTypes
-  | SerializedBlockNode<CTABlockProps | MediaBlockProps | BannerBlockProps | CodeBlockProps>
+  | SerializedBlockNode<
+      | BannerBlockProps
+      | CodeBlockProps
+      | CTABlockProps
+      | FaqBlockProps
+      | KeyTakeawaysBlockProps
+      | MediaBlockProps
+    >
 
 const internalDocToHref = ({ linkNode }: { linkNode: SerializedLinkNode }) => {
   const { value, relationTo } = linkNode.fields.doc!
@@ -38,16 +51,16 @@ const internalDocToHref = ({ linkNode }: { linkNode: SerializedLinkNode }) => {
 
 /**
  * Headings carry the same anchors the table of contents points at. Both come
- * from `headingAnchors` over the same document, so the two cannot drift: the
- * contents is not told what the body rendered, it derives it.
+ * from one walk over the same document, so the two cannot drift: the contents
+ * is not told what the body rendered, it derives it.
  */
 const buildJsxConverters =
-  (anchors: Record<number, string>): JSXConvertersFunction<NodeTypes> =>
+  ({ blocks, headings }: RenderedAnchors): JSXConvertersFunction<NodeTypes> =>
   ({ defaultConverters }) => ({
     ...defaultConverters,
     heading: ({ childIndex, node, nodesToJSX, parent }) => {
       const Tag = node.tag
-      const id = parent?.type === 'root' ? anchors[childIndex] : undefined
+      const id = parent?.type === 'root' ? headings[childIndex] : undefined
 
       return (
         <Tag className="scroll-mt-28" id={id}>
@@ -70,6 +83,16 @@ const buildJsxConverters =
       ),
       code: ({ node }) => <CodeBlock className="col-start-2" {...node.fields} />,
       cta: ({ node }) => <CallToActionBlock {...node.fields} />,
+      faq: ({ childIndex, node }) => (
+        <FaqBlock
+          anchor={blocks[childIndex]?.heading}
+          questionAnchors={blocks[childIndex]?.questions}
+          {...node.fields}
+        />
+      ),
+      keyTakeaways: ({ childIndex, node }) => (
+        <KeyTakeawaysBlock anchor={blocks[childIndex]?.heading} {...node.fields} />
+      ),
     },
   })
 
@@ -83,7 +106,7 @@ export default function RichText(props: Props) {
   const { className, enableProse = true, enableGutter = true, ...rest } = props
   return (
     <ConvertRichText
-      converters={buildJsxConverters(headingAnchors(props.data))}
+      converters={buildJsxConverters(renderedAnchors(props.data))}
       className={cn(
         'payload-richtext',
         {
