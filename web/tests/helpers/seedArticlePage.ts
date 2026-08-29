@@ -16,7 +16,8 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
  * One Article carrying every element the reading experience has to hold: a
  * category, a lede, headings at both contents levels, a pair of headings that
  * collide so anchor disambiguation has something to disambiguate, a level the
- * contents must ignore, and a related Article to close on.
+ * contents must ignore, a technical term set as code inside a sentence, and a
+ * related Article to close on.
  */
 export const articlePageFixture = {
   /*
@@ -25,6 +26,7 @@ export const articlePageFixture = {
    * Articles would strip theirs on the next run.
    */
   category: 'Test category for the Article page',
+  codeTerm: '#EXT-X-KEY',
   collidingHeading: 'What this actually costs',
   deepHeading: 'A level the contents ignores',
   figureAlt: 'Widevine security levels, from L3 to L1',
@@ -117,11 +119,14 @@ async function deleteFixture({ payload }: { payload: Payload }): Promise<void> {
   })
 }
 
-function text(value: string) {
+/** Lexical's bit for a run of text marked as code. */
+const IS_CODE = 16
+
+function text(value: string, format = 0) {
   return {
     type: 'text' as const,
     detail: 0,
-    format: 0,
+    format,
     mode: 'normal' as const,
     style: '',
     text: value,
@@ -137,6 +142,20 @@ function heading(tag: 'h2' | 'h3' | 'h4', value: string) {
     format: '',
     indent: 0,
     tag,
+    version: 1,
+  }
+}
+
+/** A paragraph that names a technical term, marked as code within the prose. */
+function paragraphWithCode(before: string, code: string, after: string) {
+  return {
+    type: 'paragraph',
+    children: [text(before), text(code, IS_CODE), text(after)],
+    direction: 'ltr',
+    format: '',
+    indent: 0,
+    textFormat: 0,
+    textStyle: '',
     version: 1,
   }
 }
@@ -193,6 +212,11 @@ function buildContent(
     ...section('A licence exchange hands the client a key it never gets to keep.'),
     mediaBlock(figureId),
     heading('h3', articlePageFixture.subheadingText),
+    paragraphWithCode(
+      'The manifest names its key with a ',
+      articlePageFixture.codeTerm,
+      ' tag, which is where the difference between encryption and DRM shows.',
+    ),
     ...section('Three ecosystems, one pipeline, if the packaging is done once.'),
     heading('h2', articlePageFixture.collidingHeading),
     ...section('Licence fees, packaging and the storage the encrypted renditions need.'),

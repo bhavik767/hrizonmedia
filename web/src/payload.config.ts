@@ -58,10 +58,25 @@ export default buildConfig({
   },
   // This config helps us configure global or default features that the other editors can inherit
   editor: defaultLexical,
+  /*
+   * SQLite's default rollback journal takes an exclusive lock for the whole of
+   * a write, and with a busy timeout of zero any reader that arrives during one
+   * fails outright with "database is locked" rather than waiting. Several
+   * processes touch this file at once — the request handler, the worker Next
+   * runs `generateStaticParams` in, and the test process seeding fixtures — so
+   * that default turns ordinary contention into a 500 on whichever page lost
+   * the race.
+   *
+   * WAL lets readers carry on while a write is in flight, and the busy timeout
+   * covers the writer-against-writer case that is left. Neither hides a real
+   * error: a query that is still blocked after ten seconds still fails.
+   */
   db: sqliteAdapter({
+    busyTimeout: 10_000,
     client: {
       url: process.env.DATABASE_URI || 'file:./encryptstream.db',
     },
+    wal: true,
   }),
   collections: [Pages, Posts, Media, Categories, Users],
   cors: [getServerSideURL()].filter(Boolean),

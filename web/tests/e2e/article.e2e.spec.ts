@@ -210,6 +210,27 @@ test.describe('The Article page', () => {
       expect(measure).toBeLessThanOrEqual(sixtyFiveCharacters * 1.05)
     })
 
+    test('a technical term set as code is told apart from the prose around it', async ({ page }) => {
+      await page.goto(ARTICLE)
+
+      const term = page.locator('article code', { hasText: articlePageFixture.codeTerm })
+      await expect(term).toHaveCount(1)
+
+      const { code, prose } = await page.evaluate((needle) => {
+        const element = Array.from(document.querySelectorAll('article code')).find((node) =>
+          node.textContent?.includes(needle),
+        )!
+
+        const family = (node: Element) => getComputedStyle(node).fontFamily
+
+        return { code: family(element), prose: family(element.closest('p')!) }
+      }, articlePageFixture.codeTerm)
+
+      expect(code).toContain('IBM Plex Mono')
+      expect(code).toMatch(/monospace/)
+      expect(code).not.toBe(prose)
+    })
+
     test('a figure carries its caption as a source line beneath the picture', async ({ page }) => {
       await page.goto(ARTICLE)
 
