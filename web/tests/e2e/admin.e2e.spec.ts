@@ -21,7 +21,13 @@ test.describe('Admin Panel', () => {
   test('can navigate to dashboard', async () => {
     await page.goto('http://localhost:3000/admin')
     await expect(page).toHaveURL('http://localhost:3000/admin')
-    const dashboardArtifact = page.locator('.step-nav__first').first()
+    /*
+     * The dashboard is the view that lists what you can edit, so its own
+     * heading over that list is the landmark. The sidebar says "Collections"
+     * too, but as a button, so asking for the heading tells the two apart
+     * without reaching for a class name.
+     */
+    const dashboardArtifact = page.getByRole('heading', { name: 'Collections' })
     await expect(dashboardArtifact).toBeVisible()
   })
 
