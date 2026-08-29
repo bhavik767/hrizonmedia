@@ -10,6 +10,14 @@ import { Media } from '@/components/Media'
 
 export type CardPostData = Pick<Post, 'slug' | 'categories' | 'meta' | 'title'>
 
+/**
+ * One Article, shown so a reader can tell whether it applies to them without
+ * opening it: what it is about, what it is called, and a line of supporting
+ * detail.
+ *
+ * Depth is a hairline and the panel colour, never a shadow, and there is no
+ * glow on a card — the page's one glow is behind the hero.
+ */
 export const Card: React.FC<{
   alignItems?: 'center'
   className?: string
@@ -32,18 +40,20 @@ export const Card: React.FC<{
   return (
     <article
       className={cn(
-        'border border-border rounded-card overflow-hidden bg-card hover:cursor-pointer',
+        'flex flex-col overflow-hidden rounded-card border border-border bg-card transition-colors hover:cursor-pointer hover:bg-accent',
         className,
       )}
       ref={card.ref}
     >
-      <div className="relative w-full ">
-        {!metaImage && <div className="">No image</div>}
-        {metaImage && typeof metaImage !== 'string' && <Media resource={metaImage} size="33vw" />}
-      </div>
-      <div className="p-4">
+      {metaImage && typeof metaImage !== 'string' && (
+        <div className="relative w-full border-b border-border">
+          <Media resource={metaImage} size="33vw" />
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 p-5">
         {showCategories && hasCategories && (
-          <div className="uppercase text-sm mb-4">
+          <p className="text-label uppercase tracking-[0.18em] text-caption">
             {categories?.map((category, index) => {
               if (typeof category === 'object') {
                 const { title: titleFromCategory } = category
@@ -62,18 +72,22 @@ export const Card: React.FC<{
 
               return null
             })}
-          </div>
+          </p>
         )}
+
         {titleToUse && (
-          <div className="prose">
-            <h3>
-              <Link className="not-prose" href={href} ref={link.ref}>
-                {titleToUse}
-              </Link>
-            </h3>
-          </div>
+          <h3 className="text-h3">
+            <Link
+              className="text-heading no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              href={href}
+              ref={link.ref}
+            >
+              {titleToUse}
+            </Link>
+          </h3>
         )}
-        {description && <div className="mt-2">{description && <p>{sanitizedDescription}</p>}</div>}
+
+        {description && <p className="text-sm">{sanitizedDescription}</p>}
       </div>
     </article>
   )

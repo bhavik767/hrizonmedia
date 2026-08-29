@@ -110,13 +110,15 @@ export const Posts: CollectionConfig<'posts'> = {
               admin: {
                 position: 'sidebar',
               },
-              filterOptions: ({ id }) => {
-                return {
-                  id: {
-                    not_in: [id],
-                  },
-                }
-              },
+              /*
+               * An Article cannot be related to itself. On create there is no
+               * id yet, and returning `not_in: [undefined]` compiles to
+               * `id not in (null)`, which is never true — so every candidate
+               * is rejected and the create fails validation. Unfiltered is
+               * correct there: a document that does not exist cannot be
+               * chosen.
+               */
+              filterOptions: ({ id }) => (id ? { id: { not_in: [id] } } : true),
               hasMany: true,
               relationTo: 'posts',
             },
