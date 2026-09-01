@@ -7,7 +7,6 @@ import React from 'react'
 
 import { ArticleListing } from '@/components/ArticleListing'
 import { CATEGORY_PARAM, articleListingPageCount } from '@/utilities/routes'
-import PageClient from './page.client'
 
 export const revalidate = 600
 
@@ -29,12 +28,7 @@ export default async function Page({
 
   if (!Number.isInteger(sanitizedPageNumber)) notFound()
 
-  return (
-    <>
-      <PageClient />
-      <ArticleListing category={category} pageNumber={sanitizedPageNumber} />
-    </>
-  )
+  return <ArticleListing category={category} pageNumber={sanitizedPageNumber} />
 }
 
 export async function generateMetadata({ params: paramsPromise }: Args): Promise<Metadata> {

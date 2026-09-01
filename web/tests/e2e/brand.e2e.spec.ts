@@ -178,6 +178,33 @@ test.describe('Brand foundation', () => {
         .poll(() => page.evaluate(() => window.__themeWhenBodyAppeared))
         .toBe('dark')
     })
+
+    /*
+     * Every surface, not just the Article that was caught repainting itself.
+     *
+     * Each of these once ran a copy of the template's `page.client.tsx`, which
+     * pushed a theme at the chrome from the page under it. The Article's asked
+     * for 'dark' and was a visible defect; the rest asked for 'light' and were
+     * inert only because the light scale is defined on `:root` and has no
+     * attribute selector to match. That is a coincidence of how the tokens are
+     * written, not a decision, and it would stop being true the day someone
+     * adds a `[data-theme='light']` block. The writers are gone; this is what
+     * keeps them gone.
+     */
+    for (const surface of [
+      { name: 'the home page', path: '/' },
+      { name: 'the Article index', path: '/articles' },
+      { name: 'search', path: '/search' },
+    ]) {
+      test(`the chrome on ${surface.name} stays on the theme the reader chose`, async ({
+        page,
+      }) => {
+        await storeThemePreference(page, 'light')
+        await page.goto(`${HOME}${surface.path}`)
+
+        expect(await headerGrounds(page)).toEqual(['rgb(251, 251, 253)'])
+      })
+    }
   })
 
   test.describe('typefaces', () => {
