@@ -186,7 +186,7 @@ test.describe('Brand foundation', () => {
   })
 
   test.describe('an Article on the brand', () => {
-    const ARTICLE = `${HOME}/posts/${brandArticleFixture.slug}`
+    const ARTICLE = `${HOME}/articles/${brandArticleFixture.slug}`
 
     test.beforeAll(async () => {
       await seedBrandArticle()

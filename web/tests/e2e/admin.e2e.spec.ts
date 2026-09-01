@@ -38,6 +38,17 @@ test.describe('Admin Panel', () => {
     await expect(listViewArtifact).toBeVisible()
   })
 
+  /*
+   * The collection is stored as `posts` — renaming it would cost a migration
+   * for a name nobody sees — but the Author is never shown that word. The list
+   * view is where it would surface first.
+   */
+  test('calls the Article collection by its canonical name', async () => {
+    await page.goto('http://localhost:3000/admin/collections/posts')
+    const listViewArtifact = page.locator('h1', { hasText: 'Articles' }).first()
+    await expect(listViewArtifact).toBeVisible()
+  })
+
   test('can navigate to edit view', async () => {
     await page.goto('http://localhost:3000/admin/collections/pages/create')
     await expect(page).toHaveURL(/\/admin\/collections\/pages\/[a-zA-Z0-9-_]+/)

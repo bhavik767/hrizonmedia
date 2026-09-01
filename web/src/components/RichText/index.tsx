@@ -26,6 +26,7 @@ import { BannerBlock } from '@/blocks/Banner/Component'
 import { CallToActionBlock } from '@/blocks/CallToAction/Component'
 import { FaqBlock } from '@/blocks/Faq/Component'
 import { KeyTakeawaysBlock } from '@/blocks/KeyTakeaways/Component'
+import { documentPath } from '@/utilities/routes'
 import { cn } from '@/utilities/ui'
 import { renderedAnchors } from '@/utilities/articleHeadings'
 
@@ -45,8 +46,7 @@ const internalDocToHref = ({ linkNode }: { linkNode: SerializedLinkNode }) => {
   if (typeof value !== 'object') {
     throw new Error('Expected value to be an object')
   }
-  const slug = value.slug
-  return relationTo === 'posts' ? `/posts/${slug}` : `/${slug}`
+  return documentPath(relationTo, String(value.slug))
 }
 
 /**

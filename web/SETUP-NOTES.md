@@ -89,9 +89,9 @@ post meta titles. Kept as a worked example of bulk-updating documents through th
 script writing through the Local API from outside it leaves the rendered page showing the
 previous links. Edits made in the admin panel revalidate normally and need no restart.
 
-The three category links point at `/posts?category=<slug>`. The listing ignores the query
-today; issue #8 makes the filter real and issue #7 moves the path to `/articles`. Both are
-changes to the globals, not to the components.
+The three category links point at `/articles?category=<slug>`. The listing ignores the
+query today; issue #8 makes the filter real. That is a change to the globals, not to the
+components.
 
 The privacy and terms pages carry placeholder copy stating that EncryptStream is not open
 yet. They exist so the footer does not point a reader at a 404, and are the Author's to

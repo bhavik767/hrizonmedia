@@ -20,8 +20,8 @@ const collectionLabels = {
     singular: 'Page',
   },
   posts: {
-    plural: 'Posts',
-    singular: 'Post',
+    plural: 'Articles',
+    singular: 'Article',
   },
   projects: {
     plural: 'Projects',

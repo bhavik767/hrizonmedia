@@ -32,7 +32,7 @@ export default async function Page() {
       <PageClient />
       <div className="container mb-16">
         <div className="prose max-w-none">
-          <h1>Posts</h1>
+          <h1>Articles</h1>
         </div>
       </div>
 
@@ -58,6 +58,6 @@ export default async function Page() {
 
 export function generateMetadata(): Metadata {
   return {
-    title: `EncryptStream Posts`,
+    title: `EncryptStream Articles`,
   }
 }

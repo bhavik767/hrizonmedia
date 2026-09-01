@@ -38,7 +38,7 @@ export default async function Page({ params: paramsPromise }: Args) {
       <PageClient />
       <div className="container mb-16">
         <div className="prose max-w-none">
-          <h1>Posts</h1>
+          <h1>Articles</h1>
         </div>
       </div>
 
@@ -65,7 +65,7 @@ export default async function Page({ params: paramsPromise }: Args) {
 export async function generateMetadata({ params: paramsPromise }: Args): Promise<Metadata> {
   const { pageNumber } = await paramsPromise
   return {
-    title: `EncryptStream Posts Page ${pageNumber || ''}`,
+    title: `EncryptStream Articles Page ${pageNumber || ''}`,
   }
 }
 
