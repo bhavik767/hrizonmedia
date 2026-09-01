@@ -14,13 +14,15 @@ import { useRouter } from 'next/navigation'
 import React from 'react'
 
 export const Pagination: React.FC<{
+  /** The category the listing is narrowed to, carried from page to page. */
+  category?: string
   className?: string
   page: number
   totalPages: number
 }> = (props) => {
   const router = useRouter()
 
-  const { className, page, totalPages } = props
+  const { category, className, page, totalPages } = props
   const hasNextPage = page < totalPages
   const hasPrevPage = page > 1
 
@@ -35,7 +37,7 @@ export const Pagination: React.FC<{
             <PaginationPrevious
               disabled={!hasPrevPage}
               onClick={() => {
-                router.push(articleListingPath(page - 1))
+                router.push(articleListingPath(page - 1, category))
               }}
             />
           </PaginationItem>
@@ -50,7 +52,7 @@ export const Pagination: React.FC<{
             <PaginationItem>
               <PaginationLink
                 onClick={() => {
-                  router.push(articleListingPath(page - 1))
+                  router.push(articleListingPath(page - 1, category))
                 }}
               >
                 {page - 1}
@@ -62,7 +64,7 @@ export const Pagination: React.FC<{
             <PaginationLink
               isActive
               onClick={() => {
-                router.push(articleListingPath(page))
+                router.push(articleListingPath(page, category))
               }}
             >
               {page}
@@ -73,7 +75,7 @@ export const Pagination: React.FC<{
             <PaginationItem>
               <PaginationLink
                 onClick={() => {
-                  router.push(articleListingPath(page + 1))
+                  router.push(articleListingPath(page + 1, category))
                 }}
               >
                 {page + 1}
@@ -91,7 +93,7 @@ export const Pagination: React.FC<{
             <PaginationNext
               disabled={!hasNextPage}
               onClick={() => {
-                router.push(articleListingPath(page + 1))
+                router.push(articleListingPath(page + 1, category))
               }}
             />
           </PaginationItem>

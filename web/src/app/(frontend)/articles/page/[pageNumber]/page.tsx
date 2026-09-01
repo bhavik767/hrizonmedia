@@ -1,14 +1,13 @@
 import type { Metadata } from 'next/types'
 
-import { CollectionArchive } from '@/components/CollectionArchive'
-import { PageRange } from '@/components/PageRange'
-import { Pagination } from '@/components/Pagination'
 import configPromise from '@payload-config'
+import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import React from 'react'
+
+import { ArticleListing } from '@/components/ArticleListing'
+import { CATEGORY_PARAM, articleListingPageCount } from '@/utilities/routes'
 import PageClient from './page.client'
-import { notFound } from 'next/navigation'
-import { ARTICLES_PER_PAGE, articleListingPageCount } from '@/utilities/routes'
 
 export const revalidate = 600
 
@@ -16,50 +15,25 @@ type Args = {
   params: Promise<{
     pageNumber: string
   }>
+  searchParams: Promise<{ [CATEGORY_PARAM]?: string }>
 }
 
-export default async function Page({ params: paramsPromise }: Args) {
+export default async function Page({
+  params: paramsPromise,
+  searchParams: searchParamsPromise,
+}: Args) {
   const { pageNumber } = await paramsPromise
-  const payload = await getPayload({ config: configPromise })
+  const { [CATEGORY_PARAM]: category } = await searchParamsPromise
 
   const sanitizedPageNumber = Number(pageNumber)
 
   if (!Number.isInteger(sanitizedPageNumber)) notFound()
 
-  const posts = await payload.find({
-    collection: 'posts',
-    depth: 1,
-    limit: ARTICLES_PER_PAGE,
-    page: sanitizedPageNumber,
-    overrideAccess: false,
-  })
-
   return (
-    <div className="pt-24 pb-24">
+    <>
       <PageClient />
-      <div className="container mb-16">
-        <div className="prose max-w-none">
-          <h1>Articles</h1>
-        </div>
-      </div>
-
-      <div className="container mb-8">
-        <PageRange
-          collection="posts"
-          currentPage={posts.page}
-          limit={ARTICLES_PER_PAGE}
-          totalDocs={posts.totalDocs}
-        />
-      </div>
-
-      <CollectionArchive posts={posts.docs} />
-
-      <div className="container">
-        {posts?.page && posts?.totalPages > 1 && (
-          <Pagination page={posts.page} totalPages={posts.totalPages} />
-        )}
-      </div>
-    </div>
+      <ArticleListing category={category} pageNumber={sanitizedPageNumber} />
+    </>
   )
 }
 
@@ -70,6 +44,11 @@ export async function generateMetadata({ params: paramsPromise }: Args): Promise
   }
 }
 
+/*
+ * Which paginated addresses are prerendered. The unfiltered listing is the one
+ * worth building: a narrowed one is a query string, and there is no page count
+ * to enumerate for a filter a reader may or may not use.
+ */
 export async function generateStaticParams() {
   const payload = await getPayload({ config: configPromise })
   const { totalDocs } = await payload.count({

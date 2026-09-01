@@ -7,9 +7,9 @@ import { ARTICLES_PATH } from '../../utilities/routes'
  * globals rather than in the components, so the Author can change them in the
  * admin panel without a deploy — this module only decides what they start as.
  *
- * The category links point at the listing with a category on the query string.
- * The listing ignores it today; issue #8 makes the filter real. That is a data
- * change to the globals, not a component change.
+ * The category links point at the listing with a category on the query string,
+ * the same address the index's own filter row uses. Which categories appear
+ * here is data in the globals, not a component change.
  */
 
 export const categories = [
