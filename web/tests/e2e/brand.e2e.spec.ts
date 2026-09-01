@@ -50,6 +50,31 @@ async function fontFamilyOf(page: Page, selector: string): Promise<string> {
 }
 
 /**
+ * Every ground the header is seen on over a few seconds, in the order it takes
+ * them.
+ *
+ * Sampled over time rather than read once because the failure this guards
+ * against only appears after hydration: an effect fired late and repainted the
+ * chrome on the other theme's tokens, so a single read taken early sees the
+ * right answer and the reader still ends up looking at the wrong one.
+ */
+async function headerGrounds(page: Page): Promise<string[]> {
+  const seen: string[] = []
+
+  for (let sample = 0; sample < 15; sample++) {
+    const ground = await page.evaluate(
+      () => getComputedStyle(document.querySelector('header')!).backgroundColor,
+    )
+
+    if (ground !== seen[seen.length - 1]) seen.push(ground)
+
+    await page.waitForTimeout(200)
+  }
+
+  return seen
+}
+
+/**
  * The gradient painted over the foot of the Article hero. A hard-coded black
  * scrim would swallow the heading in the light theme, so it has to resolve to
  * whichever ground the reader is on.
@@ -238,6 +263,13 @@ test.describe('Brand foundation', () => {
       await storeThemePreference(page, 'light')
       await page.reload()
       expect(await bodyCopyContrast(page)).toBeGreaterThanOrEqual(4.5)
+    })
+
+    test('the chrome stays on the theme the reader chose', async ({ page }) => {
+      await storeThemePreference(page, 'light')
+      await page.goto(ARTICLE)
+
+      expect(await headerGrounds(page)).toEqual(['rgb(251, 251, 253)'])
     })
 
     test('links inside prose take Signal Yellow in the dark theme', async ({ page }) => {
