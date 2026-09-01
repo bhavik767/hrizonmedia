@@ -52,6 +52,26 @@ Regenerate Payload artefacts after changing collections:
     npm run generate:types
     npm run generate:importmap
 
+## Visual baselines
+
+`tests/e2e/visualBaselines.e2e.spec.ts` photographs an Article and the Article index in
+both themes at a desktop and a phone width — eight full-page baselines, committed
+alongside the spec in `tests/e2e/visualBaselines.e2e.spec.ts-snapshots/`.
+
+They are rendered by this machine's Chromium, so they are only comparable to themselves.
+A design change is expected to break them; that is the point. Redraw them with
+
+    npm run test:e2e -- --update-snapshots visualBaselines
+
+and then **look at every PNG that changed** before committing it. An updated baseline
+nobody read is a regression nobody noticed.
+
+The comparison is exact — `threshold: 0`, not Playwright's default of 0.2, which is wide
+enough to pass a page whose ground has quietly drifted off the brand. If a baseline will
+not hold still between runs, the page is doing something at an unpredictable moment and
+that is the thing to fix. Widening the tolerance until it passes buys a test that cannot
+fail, which is worse than having none.
+
 ## Seeding the articles
 
 `scripts/seed-articles.ts` creates the ten planned launch articles plus their three

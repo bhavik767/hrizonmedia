@@ -61,7 +61,7 @@ export async function seedIndexArticles(): Promise<void> {
 
   await deleteFixture({ payload })
 
-  const categoryIds = await categoryIdsByTitle(payload)
+  const categoryIds = await ensureSiteCategories(payload)
 
   for (const [index, category] of membership) {
     await payload.create({
@@ -85,10 +85,18 @@ export async function cleanupIndexArticles(): Promise<void> {
 }
 
 /**
- * The three categories the site has. They are left in place afterwards — they
- * are site content the seed owns, not this fixture's to remove.
+ * The three categories the site has, created if they are not there yet, keyed
+ * by title. They are left in place afterwards — they are site content the seed
+ * owns, not a fixture's to remove.
+ *
+ * Exported because a fixture that renders the index depends on the whole set
+ * existing: the filter row lists every category there is, so a spec that ran
+ * alone against a reset database would otherwise show fewer filters than the
+ * same spec running after one that seeded them.
  */
-async function categoryIdsByTitle(payload: Payload): Promise<Record<string, number | string>> {
+export async function ensureSiteCategories(
+  payload: Payload,
+): Promise<Record<string, number | string>> {
   const ids: Record<string, number | string> = {}
 
   for (const title of articleCategories) {

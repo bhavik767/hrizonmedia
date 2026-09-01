@@ -16,7 +16,6 @@ import { EmailCapture } from '@/components/EmailCapture'
 import { PostHero } from '@/heros/PostHero'
 import { articleHeadings } from '@/utilities/articleHeadings'
 import { generateMeta } from '@/utilities/generateMeta'
-import PageClient from './page.client'
 import { LivePreviewListener } from '@/components/LivePreviewListener'
 
 export async function generateStaticParams() {
@@ -59,8 +58,6 @@ export default async function Post({ params: paramsPromise }: Args) {
 
   return (
     <article className="pb-20">
-      <PageClient />
-
       {/* Allows redirects for valid pages too */}
       <PayloadRedirects disableNotFound url={url} />
 

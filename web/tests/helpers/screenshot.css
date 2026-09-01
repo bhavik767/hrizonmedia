@@ -1,0 +1,28 @@
+/*
+ * Applied to the page only while a visual baseline is being taken.
+ *
+ * The dev overlay is the reason this file exists. The suite runs against
+ * `next dev`, which mounts its own indicator into a `nextjs-portal` element in
+ * the corner of every page. It is the development server's furniture, not the
+ * site, and it changes with the framework rather than with the design — so it
+ * is hidden rather than photographed.
+ *
+ * The rest is belt and braces over Playwright's `animations: 'disabled'`: a
+ * caret blinking in a focused field and a smooth scroll are both motion, and
+ * motion in a screenshot is a diff that means nothing.
+ */
+nextjs-portal {
+  display: none !important;
+}
+
+*,
+*::before,
+*::after {
+  animation: none !important;
+  caret-color: transparent !important;
+  transition: none !important;
+}
+
+html {
+  scroll-behavior: auto !important;
+}

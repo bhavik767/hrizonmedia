@@ -4,7 +4,6 @@ import React from 'react'
 
 import { ArticleListing } from '@/components/ArticleListing'
 import { CATEGORY_PARAM } from '@/utilities/routes'
-import PageClient from './page.client'
 
 /*
  * Not `force-static`. The listing narrows to a category off the query string,
@@ -19,12 +18,7 @@ type Args = {
 export default async function Page({ searchParams: searchParamsPromise }: Args) {
   const { [CATEGORY_PARAM]: category } = await searchParamsPromise
 
-  return (
-    <>
-      <PageClient />
-      <ArticleListing category={category} />
-    </>
-  )
+  return <ArticleListing category={category} />
 }
 
 export function generateMetadata(): Metadata {
