@@ -20,7 +20,8 @@
     "test": "npm run test:int && npm run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts",
     "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
-    "test:reset": "rm -f encryptstream.db encryptstream.db-journal encryptstream.db-wal encryptstream.db-shm"
+    "test:db:template": "cross-env NODE_OPTIONS=--no-deprecation node scripts/reset-db.mjs --rebuild",
+    "test:reset": "cross-env NODE_OPTIONS=--no-deprecation node scripts/reset-db.mjs"
   },
   "dependencies": {
     "@payloadcms/admin-bar": "3.88.0",

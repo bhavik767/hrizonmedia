@@ -7,10 +7,13 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     /*
-     * The suite is meant to run against a freshly reset database, and the first
-     * `getPayload()` in a `beforeAll` creates the entire schema before it
-     * resolves. That takes well over Vitest's 10s default on a cold file — it
-     * is ~1s once the database exists.
+     * The first `getPayload()` in a `beforeAll` has to connect before it
+     * resolves, and on a database with no schema that means creating the whole
+     * schema first — well over Vitest's 10s default, against ~1s once the
+     * tables exist. `npm run test:reset` now restores a prebuilt template so
+     * the tables always do exist, but the timeout stays: the one run that
+     * rebuilds the template still pays the cold cost, and headroom on a hook
+     * that finishes in a second costs nothing.
      */
     hookTimeout: 120_000,
     /*
