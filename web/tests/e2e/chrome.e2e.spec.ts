@@ -54,7 +54,7 @@ test.describe('Chrome', () => {
     test('takes its links from the header global, so they change without a deploy', async ({
       page,
     }) => {
-      const renamed = [{ href: '/posts?category=comparisons', title: 'Head to head' }]
+      const renamed = [{ href: '/articles?category=comparisons', title: 'Head to head' }]
 
       try {
         await writeNavigation({ headerNavItems: renamed })

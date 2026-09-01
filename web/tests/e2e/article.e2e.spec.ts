@@ -7,7 +7,7 @@ import { storeThemePreference } from '../helpers/theme'
 import { cleanupGlobalsUser, writeGlobal } from '../helpers/writeGlobal'
 
 const HOME = 'http://localhost:3000'
-const ARTICLE = `${HOME}/posts/${articlePageFixture.slug}`
+const ARTICLE = `${HOME}/articles/${articlePageFixture.slug}`
 
 /** Puts a section at the top of the viewport, as scrolling to it would. */
 async function scrollTo(page: Page, id: string): Promise<void> {
@@ -326,7 +326,7 @@ test.describe('The Article page', () => {
 
   test.describe('the two blocks together', () => {
     test('an Article written without them carries neither', async ({ page }) => {
-      await page.goto(`${HOME}/posts/${articlePageFixture.relatedSlug}`)
+      await page.goto(`${HOME}/articles/${articlePageFixture.relatedSlug}`)
 
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(
         articlePageFixture.relatedTitle,
@@ -389,7 +389,7 @@ test.describe('The Article page', () => {
         await storeThemePreference(page, theme)
 
         for (const article of launchArticles) {
-          await page.goto(`${HOME}/posts/${article.slug}`)
+          await page.goto(`${HOME}/articles/${article.slug}`)
 
           await expect(page.getByRole('heading', { level: 1 })).toHaveText(article.title)
           await expect(page.locator('article > header')).toContainText(article.category)
@@ -414,7 +414,7 @@ test.describe('The Article page', () => {
       await expect(card).toHaveCount(1)
       await expect(card.getByRole('link', { name: articlePageFixture.relatedTitle })).toHaveAttribute(
         'href',
-        `/posts/${articlePageFixture.relatedSlug}`,
+        `/articles/${articlePageFixture.relatedSlug}`,
       )
       await expect(card).toContainText(articlePageFixture.category)
       await expect(card).toContainText('What the related Article is about, in one line.')

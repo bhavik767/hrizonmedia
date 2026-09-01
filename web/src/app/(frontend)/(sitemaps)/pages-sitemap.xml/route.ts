@@ -3,6 +3,8 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { unstable_cache } from 'next/cache'
 
+import { ARTICLES_PATH } from '@/utilities/routes'
+
 const getPagesSitemap = unstable_cache(
   async () => {
     const payload = await getPayload({ config })
@@ -37,7 +39,7 @@ const getPagesSitemap = unstable_cache(
         lastmod: dateFallback,
       },
       {
-        loc: `${SITE_URL}/posts`,
+        loc: `${SITE_URL}${ARTICLES_PATH}`,
         lastmod: dateFallback,
       },
     ]

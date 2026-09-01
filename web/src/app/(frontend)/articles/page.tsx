@@ -7,6 +7,7 @@ import configPromise from '@payload-config'
 import { getPayload } from 'payload'
 import React from 'react'
 import PageClient from './page.client'
+import { ARTICLES_PER_PAGE } from '@/utilities/routes'
 
 export const dynamic = 'force-static'
 export const revalidate = 600
@@ -17,7 +18,7 @@ export default async function Page() {
   const posts = await payload.find({
     collection: 'posts',
     depth: 1,
-    limit: 12,
+    limit: ARTICLES_PER_PAGE,
     overrideAccess: false,
     select: {
       title: true,
@@ -32,7 +33,7 @@ export default async function Page() {
       <PageClient />
       <div className="container mb-16">
         <div className="prose max-w-none">
-          <h1>Posts</h1>
+          <h1>Articles</h1>
         </div>
       </div>
 
@@ -40,7 +41,7 @@ export default async function Page() {
         <PageRange
           collection="posts"
           currentPage={posts.page}
-          limit={12}
+          limit={ARTICLES_PER_PAGE}
           totalDocs={posts.totalDocs}
         />
       </div>
@@ -58,6 +59,6 @@ export default async function Page() {
 
 export function generateMetadata(): Metadata {
   return {
-    title: `EncryptStream Posts`,
+    title: `EncryptStream Articles`,
   }
 }

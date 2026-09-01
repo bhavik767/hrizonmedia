@@ -7,7 +7,7 @@ import { articlePageFixture, cleanupArticlePage, seedArticlePage } from '../help
 import { storeThemePreference } from '../helpers/theme'
 
 const HOME = 'http://localhost:3000'
-const ARTICLE = `${HOME}/posts/${articlePageFixture.slug}`
+const ARTICLE = `${HOME}/articles/${articlePageFixture.slug}`
 
 /** Every address this spec signs up, so it can take them back out again. */
 const signedUp: string[] = []

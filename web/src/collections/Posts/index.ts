@@ -31,6 +31,15 @@ import { slugField } from 'payload'
 
 export const Posts: CollectionConfig<'posts'> = {
   slug: 'posts',
+  /*
+   * The slug stays `posts` — renaming it would buy a database migration for a
+   * name nobody sees. "Post" is a code-only word, so the Author is shown the
+   * canonical one instead, in the sidebar and every view built from these.
+   */
+  labels: {
+    plural: 'Articles',
+    singular: 'Article',
+  },
   access: {
     create: authenticated,
     delete: authenticated,

@@ -1,20 +1,21 @@
 import type { Payload, RequiredDataFromCollectionSlug } from 'payload'
 
+import { ARTICLES_PATH } from '../../utilities/routes'
+
 /**
  * The link sets the chrome ships with. They live in the `header` and `footer`
  * globals rather than in the components, so the Author can change them in the
  * admin panel without a deploy — this module only decides what they start as.
  *
  * The category links point at the listing with a category on the query string.
- * The listing ignores it today; issue #8 makes the filter real and issue #7
- * moves the path to `/articles`. Both are data changes to the globals, not
- * component changes.
+ * The listing ignores it today; issue #8 makes the filter real. That is a data
+ * change to the globals, not a component change.
  */
 
 export const categories = [
-  { href: '/posts?category=piracy-problems', title: 'Piracy problems' },
-  { href: '/posts?category=comparisons', title: 'Comparisons' },
-  { href: '/posts?category=platform-guides', title: 'Platform guides' },
+  { href: `${ARTICLES_PATH}?category=piracy-problems`, title: 'Piracy problems' },
+  { href: `${ARTICLES_PATH}?category=comparisons`, title: 'Comparisons' },
+  { href: `${ARTICLES_PATH}?category=platform-guides`, title: 'Platform guides' },
 ]
 
 export const legal = [
