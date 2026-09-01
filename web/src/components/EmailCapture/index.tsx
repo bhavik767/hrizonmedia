@@ -1,13 +1,21 @@
 import React from 'react'
 
+import { getEarlyAccessForm } from '@/utilities/getEarlyAccessForm'
+
+import { EmailCaptureForm } from './Form'
+
 /**
- * The footer's place for the site's single ask.
+ * The site's single ask, wherever it appears: the sticky sidebar beside an
+ * Article, the end of the Article body, and the footer. All three submit to the
+ * same form, so a reader reaches the same list whichever one convinced them.
  *
- * The capture itself — its form, its copy and its states — is built in the
- * email capture slice. Until then this reserves the position and renders
- * nothing: a placeholder form would take a reader's address and drop it, which
- * is a worse thing to ship than an empty corner.
+ * Renders nothing at all if the form is missing. A capture that takes an
+ * address and drops it is worse than an empty corner.
  */
-export const EmailCaptureSlot: React.FC = () => (
-  <div className="md:w-[22rem]" data-email-capture-slot />
-)
+export async function EmailCapture({ className }: { className?: string }) {
+  const form = await getEarlyAccessForm()
+
+  if (!form) return null
+
+  return <EmailCaptureForm className={className} formId={form.id} />
+}

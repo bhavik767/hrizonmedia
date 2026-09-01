@@ -10,6 +10,7 @@ import { Pages } from './collections/Pages'
 import { Posts } from './collections/Posts'
 import { Users } from './collections/Users'
 import { Author } from './Author/config'
+import { ensureEarlyAccessForm } from './forms/earlyAccess'
 import { Footer } from './Footer/config'
 import { Header } from './Header/config'
 import { plugins } from './plugins'
@@ -81,6 +82,16 @@ export default buildConfig({
   collections: [Pages, Posts, Media, Categories, Users],
   cors: [getServerSideURL()].filter(Boolean),
   globals: [Header, Footer, Author],
+  /*
+   * The site's single ask needs a form to submit against, and it appears on
+   * every Article and in the footer. Ensuring it on boot rather than leaving it
+   * to a seed means a freshly reset database still collects addresses — the
+   * capture is the only conversion surface here, so an empty corner where it
+   * should be is a lost reader, not a cosmetic defect.
+   */
+  onInit: async (payload) => {
+    await ensureEarlyAccessForm(payload)
+  },
   plugins,
   secret: process.env.PAYLOAD_SECRET,
   sharp,

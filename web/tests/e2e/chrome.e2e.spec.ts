@@ -20,10 +20,17 @@ test.describe('Chrome', () => {
      * first request, and the search test clicks through to it — the click
      * fired, the route began compiling, and the URL was still / when the
      * assertion gave up. Paying the compile here keeps it out of the test.
+     *
+     * The body is read to the end, not just awaited for its headers. Next dev
+     * streams the response, so a `fetch` that resolves has only reached the
+     * point where the server started answering; the compile it is meant to pay
+     * for can still be in flight. This raced and lost on a cold full run.
      */
-    await fetch(`${HOME}/search`).catch(() => {
-      /* Best effort: if /search is genuinely broken, its own test says so. */
-    })
+    await fetch(`${HOME}/search`)
+      .then((response) => response.text())
+      .catch(() => {
+        /* Best effort: if /search is genuinely broken, its own test says so. */
+      })
   })
 
   test.afterAll(async () => {
@@ -143,15 +150,22 @@ test.describe('Chrome', () => {
       }
     })
 
-    test('reserves the second email capture without shipping a form that goes nowhere', async ({
-      page,
-    }) => {
+    /*
+     * This slot was empty until the email capture slice: the footer reserved the
+     * position and shipped no form, because a form that takes an address and
+     * drops it is worse than an empty corner. The form now exists, so what is
+     * asserted is that the footer carries it and says the same words as the
+     * captures beside an Article — all three submit to the same form.
+     */
+    test('carries the site’s one ask, in the words it was given', async ({ page }) => {
       await page.goto(HOME)
 
-      const footer = page.getByRole('contentinfo')
+      const capture = page
+        .getByRole('contentinfo')
+        .getByRole('region', { name: 'Be first when EncryptStream opens' })
 
-      await expect(footer.locator('[data-email-capture-slot]')).toHaveCount(1)
-      await expect(footer.locator('form')).toHaveCount(0)
+      await expect(capture).toContainText("We'll email you once, when it's ready")
+      await expect(capture.getByRole('button', { name: 'Get early access' })).toBeVisible()
     })
   })
 
