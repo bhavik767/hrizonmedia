@@ -30,3 +30,7 @@ playwright/.cache/
 # OS / editor cruft
 .DS_Store
 Thumbs.db
+
+# Hash of the schema sources the template database was built from. Derived, and
+# it changes on every schema edit, so it is noise in a diff.
+*.db.hash
