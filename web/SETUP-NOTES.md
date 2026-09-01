@@ -89,9 +89,10 @@ post meta titles. Kept as a worked example of bulk-updating documents through th
 script writing through the Local API from outside it leaves the rendered page showing the
 previous links. Edits made in the admin panel revalidate normally and need no restart.
 
-The three category links point at `/articles?category=<slug>`. The listing ignores the
-query today; issue #8 makes the filter real. That is a change to the globals, not to the
-components.
+The three category links point at `/articles?category=<slug>`, which is the same address
+the index's own filter row uses. The index resolves the slug against the categories that
+exist and drops one that matches nothing, so a link left in the globals after a category
+is renamed shows the whole index rather than an empty page.
 
 The privacy and terms pages carry placeholder copy stating that EncryptStream is not open
 yet. They exist so the footer does not point a reader at a 404, and are the Author's to

@@ -225,6 +225,15 @@ export const launchArticles: LaunchArticle[] = [
  * categories they belong to. Existing Articles are left alone: they may carry
  * edits the Author has made since.
  */
+/**
+ * The categories Articles are filed under. Derived from the Articles rather
+ * than listed again beside them, so "the three categories that exist" has one
+ * answer and the index's filters cannot drift from the content.
+ */
+export const articleCategories: string[] = [
+  ...new Set(launchArticles.map((article) => article.category)),
+]
+
 /** The slug the Categories collection would generate from a title. */
 export const categorySlug = (title: string): string =>
   title
@@ -235,7 +244,7 @@ export const categorySlug = (title: string): string =>
 export async function seedLaunchArticles(payload: Payload): Promise<void> {
   const categoryIds: Record<string, number | string> = {}
 
-  for (const title of [...new Set(launchArticles.map((article) => article.category))]) {
+  for (const title of articleCategories) {
     const existing = await payload.find({
       collection: 'categories',
       limit: 1,

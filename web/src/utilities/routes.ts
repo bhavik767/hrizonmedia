@@ -11,12 +11,26 @@
 /** The Article listing. */
 export const ARTICLES_PATH = '/articles'
 
+/**
+ * The query string the listing is narrowed by. A category is a filter on the
+ * listing, not a place of its own — an Article has one address, and the reader
+ * who arrives from the header is looking at the index, filtered.
+ */
+export const CATEGORY_PARAM = 'category'
+
 /** One Article. */
 export const articlePath = (slug: string): string => `${ARTICLES_PATH}/${slug}`
 
-/** A page of the listing. Page one is the listing itself. */
-export const articleListingPath = (pageNumber: number): string =>
-  pageNumber <= 1 ? ARTICLES_PATH : `${ARTICLES_PATH}/page/${pageNumber}`
+/**
+ * A page of the listing, optionally narrowed to one category. Page one is the
+ * listing itself, and the category rides on the query string so that paging
+ * through a filtered index keeps the filter.
+ */
+export const articleListingPath = (pageNumber: number, category?: string): string => {
+  const path = pageNumber <= 1 ? ARTICLES_PATH : `${ARTICLES_PATH}/page/${pageNumber}`
+
+  return category ? `${path}?${CATEGORY_PARAM}=${encodeURIComponent(category)}` : path
+}
 
 /**
  * Where a document of a linkable collection is read. Pages sit at the root;
