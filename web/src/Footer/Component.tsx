@@ -3,12 +3,12 @@ import Link from 'next/link'
 import React from 'react'
 
 import { CMSLink } from '@/components/Link'
-import { EmailCaptureSlot } from '@/components/EmailCapture'
+import { EmailCapture } from '@/components/EmailCapture'
 import { Logo } from '@/components/Logo/Logo'
 
 /**
  * A panel sitting on the page ground, separated by a hairline rather than a
- * shadow. It repeats the categories, reserves the second email capture, and
+ * shadow. It repeats the categories, carries the second email capture, and
  * closes on the legal line. The theme toggle is not here — it appears once, in
  * the header.
  */
@@ -41,7 +41,7 @@ export async function Footer() {
             </nav>
           </div>
 
-          <EmailCaptureSlot />
+          <EmailCapture className="md:w-[22rem]" />
         </div>
 
         <div className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-sm text-caption md:flex-row md:items-center md:justify-between">

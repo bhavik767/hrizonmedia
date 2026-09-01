@@ -12,6 +12,7 @@ import type { Post } from '@/payload-types'
 
 import { ArticleContents, ArticleContentsDisclosure } from '@/components/ArticleContents'
 import { AuthorBiography } from '@/components/AuthorBiography'
+import { EmailCapture } from '@/components/EmailCapture'
 import { PostHero } from '@/heros/PostHero'
 import { articleHeadings } from '@/utilities/articleHeadings'
 import { generateMeta } from '@/utilities/generateMeta'
@@ -82,10 +83,22 @@ export default async function Post({ params: paramsPromise }: Args) {
               undo the 65-character measure the prose styles set.
             */}
             <RichText className="max-w-[65ch]" data={post.content} enableGutter={false} />
+
+            {/*
+              And again where the body ends, so a reader who was convinced by
+              the whole piece does not have to scroll back to act on it.
+            */}
+            <EmailCapture className="mt-12 max-w-[65ch]" />
           </div>
 
+          {/*
+            The contents first, then the site's one ask beneath it, so a reader
+            can act at the moment they are convinced without leaving the piece.
+          */}
           <aside className="hidden lg:block lg:sticky lg:top-24">
             <ArticleContents headings={headings} />
+
+            <EmailCapture className="mt-8" />
           </aside>
         </div>
       </div>
