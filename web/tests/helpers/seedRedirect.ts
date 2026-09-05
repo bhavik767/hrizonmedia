@@ -5,7 +5,7 @@ import config from '../../src/payload.config.js'
 const SERVER_URL = 'http://localhost:3000'
 
 const seedUser = {
-  email: 'redirect-fixture@encryptstream.test',
+  email: 'redirect-fixture@hrizonmedia.test',
   password: 'redirect-fixture',
 }
 

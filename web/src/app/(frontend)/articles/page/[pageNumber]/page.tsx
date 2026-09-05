@@ -34,7 +34,7 @@ export default async function Page({
 export async function generateMetadata({ params: paramsPromise }: Args): Promise<Metadata> {
   const { pageNumber } = await paramsPromise
   return {
-    title: `EncryptStream Articles Page ${pageNumber || ''}`,
+    title: `hrizonmedia Articles Page ${pageNumber || ''}`,
   }
 }
 

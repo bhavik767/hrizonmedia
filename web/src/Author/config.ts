@@ -30,7 +30,7 @@ export const Author: GlobalConfig = {
       type: 'textarea',
       admin: {
         description:
-          'Who is behind EncryptStream. The same on every Article, so it describes the company rather than a contributor.',
+          'Who is behind hrizonmedia. The same on every Article, so it describes the company rather than a contributor.',
       },
       defaultValue: defaultAuthor.biography,
     },

@@ -23,7 +23,7 @@ export const earlyAccessForm = {
  * yet, so nobody signs up expecting a product today.
  */
 export const earlyAccessCopy = {
-  heading: 'Be first when EncryptStream opens',
+  heading: 'Be first when hrizonmedia opens',
   supporting: "We'll email you once, when it's ready",
   button: 'Get early access',
   /* The three states a reader can end up in, each said in canonical language. */

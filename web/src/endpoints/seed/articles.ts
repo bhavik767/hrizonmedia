@@ -137,7 +137,7 @@ export const launchArticles: LaunchArticle[] = [
       ['DoveRunner (formerly PallyCon)', 'Enterprise-focused multi-DRM with strong forensic watermarking. Capable, but heavier than most course creators need.'],
       ['Muvi and Gumlet', 'Broader video platforms where security is one feature among many. Good if you want an all-in-one OTT stack, less focused if DRM is your actual problem.'],
       ['Bunny Stream and api.video', 'Excellent, inexpensive video infrastructure with encryption but not full studio DRM. The right answer when your risk is casual sharing rather than organised resale.'],
-      ['EncryptStream', 'Multi-DRM through a licensing partner, dynamic watermarking, and pricing aimed at individual creators rather than enterprises. We resell DRM licences rather than holding certification directly — worth knowing when you compare.'],
+      ['hrizonmedia', 'Multi-DRM through a licensing partner, dynamic watermarking, and pricing aimed at individual creators rather than enterprises. We resell DRM licences rather than holding certification directly — worth knowing when you compare.'],
       ['How to choose without overbuying', 'Start from what you are defending against. Most creators need less than the enterprise tier and more than an unlisted link.'],
     ],
   },

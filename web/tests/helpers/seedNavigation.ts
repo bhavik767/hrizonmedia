@@ -13,7 +13,7 @@ export { categories, legal } from '../../src/endpoints/seed/navigation.js'
 const SERVER_URL = 'http://localhost:3000'
 
 const seedUser = {
-  email: 'chrome-fixture@encryptstream.test',
+  email: 'chrome-fixture@hrizonmedia.test',
   password: 'chrome-fixture',
 }
 

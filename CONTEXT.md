@@ -1,4 +1,4 @@
-# EncryptStream
+# hrizonmedia
 
 A secure video platform: customers upload video, we encrypt, store and deliver it,
 and issue DRM licences so it plays on approved devices and nowhere else.
@@ -25,7 +25,7 @@ from the site.
 ### Domain terms
 
 **Secure video platform**:
-What EncryptStream is as a whole — upload, transcoding, encrypted storage, delivery,
+What hrizonmedia is as a whole — upload, transcoding, encrypted storage, delivery,
 DRM licensing and playback, sold as one product.
 _Avoid_: DRM service, DRM provider, video CDN
 
@@ -46,7 +46,7 @@ is not protected by a licence exchange.
 _Avoid_: treating encryption and DRM as interchangeable
 
 **Customer**:
-The business or individual that buys EncryptStream and uploads video. The primary
+The business or individual that buys hrizonmedia and uploads video. The primary
 segment is course creators and edtech platforms; OTT services and enterprises are
 secondary.
 _Avoid_: user, client, account
@@ -58,13 +58,13 @@ not as encryption or DRM.
 _Avoid_: educator, teacher, instructor (too narrow — many are businesses)
 
 **Viewer**:
-The person who watches a customer's video. Never buys from EncryptStream directly.
+The person who watches a customer's video. Never buys from hrizonmedia directly.
 _Avoid_: user, end user, subscriber, student, learner — including in article titles.
 "Student" is the one searcher term not granted a title exemption: it narrows the
 audience to classrooms when many customers sell to businesses and parents.
 
 **Article**:
-A published piece of writing on the EncryptStream site. Opens in searcher language
+A published piece of writing on the hrizonmedia site. Opens in searcher language
 and moves the reader to canonical language — the register shift described above is
 the article's job, not an accident of it.
 _Avoid_: post, blog post, content piece. "Post" is the Payload template's word,
