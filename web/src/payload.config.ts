@@ -15,6 +15,7 @@ import { Author } from './Author/config'
 import { ensureEarlyAccessForm } from './forms/earlyAccess'
 import { Footer } from './Footer/config'
 import { Header } from './Header/config'
+import { migrations } from './migrations'
 import { plugins } from './plugins'
 import { defaultLexical } from '@/fields/defaultLexical'
 import { getServerSideURL } from './utilities/getURL'
@@ -28,6 +29,7 @@ const usesPostgres =
 
 const db = usesPostgres
   ? postgresAdapter({
+      prodMigrations: migrations,
       pool: {
         connectionString: databaseURL,
       },
