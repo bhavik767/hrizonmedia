@@ -1,7 +1,7 @@
-import PageTemplate, { generateMetadata } from './[slug]/page'
+import ArticleIndex, { generateMetadata } from './articles/page'
 
 export const dynamic = 'force-dynamic'
 
-export default PageTemplate
+export default ArticleIndex
 
 export { generateMetadata }

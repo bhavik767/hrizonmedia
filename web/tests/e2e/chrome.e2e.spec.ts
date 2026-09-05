@@ -184,6 +184,7 @@ test.describe('Chrome', () => {
         '/',
         ...categoryHrefs,
         ...legal.map((item) => item.href),
+        '/admin',
       ]
 
       const reached: string[] = []

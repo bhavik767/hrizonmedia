@@ -47,17 +47,26 @@ export async function Footer() {
         <div className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-sm text-caption md:flex-row md:items-center md:justify-between">
           <p>© {new Date().getFullYear()} hrizonmedia</p>
 
-          {legalItems.length > 0 && (
-            <nav aria-label="Legal">
-              <ul className="flex gap-6">
-                {legalItems.map(({ link }, i) => (
-                  <li key={i}>
-                    <CMSLink {...link} className="text-caption no-underline hover:text-heading" />
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          )}
+          <div className="flex flex-wrap items-center gap-6">
+            {legalItems.length > 0 && (
+              <nav aria-label="Legal">
+                <ul className="flex gap-6">
+                  {legalItems.map(({ link }, i) => (
+                    <li key={i}>
+                      <CMSLink {...link} className="text-caption no-underline hover:text-heading" />
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            )}
+            <Link
+              href="/admin"
+              prefetch={false}
+              className="text-caption no-underline hover:text-heading"
+            >
+              Admin
+            </Link>
+          </div>
         </div>
       </div>
     </footer>
