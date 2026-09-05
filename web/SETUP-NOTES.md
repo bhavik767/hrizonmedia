@@ -21,13 +21,17 @@ together** — they are released in lockstep and mixing versions breaks the admi
 The stock template ships `@payloadcms/db-mongodb`. This project uses
 `@payloadcms/db-sqlite` so that local development needs no database server at all.
 
-**This is a local-development choice, not a production decision.** The production database
-is still open. If it becomes PostgreSQL the move is small, because the SQLite and Postgres
-adapters are both Drizzle-based and share migration tooling. If it becomes MongoDB, expect
-real rework — the document model differs enough that collection behaviour changes.
+**This is a local-development choice.** Production uses Railway PostgreSQL. The config
+selects PostgreSQL when `DATABASE_URL` is a Postgres connection string and otherwise falls
+back to SQLite, so local development still needs no database server. Both adapters are
+Drizzle-based and share migration tooling.
 
 The database file is `web/encryptstream.db` and is disposable: delete it and restart to get
 a clean instance.
+
+Production uploads use a private Railway Storage Bucket. Payload issues signed download
+URLs after applying collection access control; local development keeps using `public/media`.
+See ADR-0004 for the hosting decision.
 
 ## 4. `engines.node` relaxed to `>=20.9.0`
 
@@ -114,13 +118,13 @@ the index's own filter row uses. The index resolves the slug against the categor
 exist and drops one that matches nothing, so a link left in the globals after a category
 is renamed shows the whole index rather than an empty page.
 
-The privacy and terms pages carry placeholder copy stating that EncryptStream is not open
+The privacy and terms pages carry placeholder copy stating that hrizonmedia is not open
 yet. They exist so the footer does not point a reader at a 404, and are the Author's to
 replace before launch.
 
 ## Branding
 
-The template's site name has been replaced throughout `src/` with EncryptStream, which
+The template's site name has been replaced throughout `src/` with hrizonmedia, which
 affects page titles, the SEO plugin's title suffix and Open Graph defaults. The homepage
 itself is still the stock template layout.
 
@@ -141,12 +145,12 @@ the site** — no footer contact link, no mailto.
 list. A gmail.com address cannot do that:
 
 - Every ESP (Resend, SendGrid, Postmark) requires DNS verification of the sending domain.
-  You cannot add DNS records to `gmail.com`, so sending *as* this address through any of
+  You cannot add DNS records to `gmail.com`, so sending _as_ this address through any of
   them is impossible.
 - Gmail SMTP does work with an app password, but free accounts cap around 500 recipients
   per day and Google's terms exclude bulk marketing mail.
 
-Before launch, register a sending address on `encryptstream.com` (see ADR-0001, which
+Before launch, register a sending address on `hrizonmedia.com` (see ADR-0001, which
 records that we own it) and verify that domain with whichever ESP is chosen. Keep the Gmail
 account as the admin login and inbox.
 

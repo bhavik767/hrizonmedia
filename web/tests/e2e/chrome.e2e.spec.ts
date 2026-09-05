@@ -108,10 +108,10 @@ test.describe('Chrome', () => {
       ])
     })
 
-    test('leads with the EncryptStream lockup, served from this site', async ({ page }) => {
+    test('leads with the hrizonmedia lockup, served from this site', async ({ page }) => {
       await page.goto(HOME)
 
-      const home = page.getByRole('banner').getByRole('link', { name: 'EncryptStream' })
+      const home = page.getByRole('banner').getByRole('link', { name: 'hrizonmedia' })
 
       await expect(home).toHaveAttribute('href', '/')
       await expect(home.locator('img').first()).toHaveAttribute('src', /^\/|^http:\/\/localhost:3000/)
@@ -124,7 +124,7 @@ test.describe('Chrome', () => {
 
       const footer = page.getByRole('contentinfo')
 
-      await expect(footer.getByRole('link', { name: 'EncryptStream' })).toHaveAttribute('href', '/')
+      await expect(footer.getByRole('link', { name: 'hrizonmedia' })).toHaveAttribute('href', '/')
 
       for (const category of categories) {
         await expect(footer.getByRole('link', { name: category.title })).toHaveAttribute(
@@ -162,7 +162,7 @@ test.describe('Chrome', () => {
 
       const capture = page
         .getByRole('contentinfo')
-        .getByRole('region', { name: 'Be first when EncryptStream opens' })
+        .getByRole('region', { name: 'Be first when hrizonmedia opens' })
 
       await expect(capture).toContainText("We'll email you once, when it's ready")
       await expect(capture.getByRole('button', { name: 'Get early access' })).toBeVisible()
@@ -227,7 +227,7 @@ test.describe('Chrome', () => {
 
       const header = page.getByRole('banner')
 
-      await expect(header.getByRole('link', { name: 'EncryptStream' })).toBeVisible()
+      await expect(header.getByRole('link', { name: 'hrizonmedia' })).toBeVisible()
       await expect(header.getByRole('link', { name: 'Search' })).toBeVisible()
       await expect(header.getByRole('combobox', { name: 'Select a theme' })).toBeVisible()
 

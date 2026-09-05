@@ -2,14 +2,9 @@ import clsx from 'clsx'
 import React from 'react'
 
 /**
- * The mark is artwork, never re-typed: the brand book bars setting
- * "EncryptStream" in a typeface, so both variants below are the supplied files
- * served from this site rather than a remote or a re-drawn SVG.
- *
- * Both variants are always in the document and one is hidden by CSS, so the
- * correct artwork is painted with the first frame. Choosing in JavaScript would
- * flash the wrong lockup on every load, and a hidden image is out of the
- * accessibility tree, so the link still announces one name.
+ * The original key/play symbol is preserved as supplied artwork. The new
+ * hrizonmedia wordmark is typeset beside it so the name stays sharp, searchable,
+ * and correctly announced at every size.
  */
 
 type LogoKind = 'lockup' | 'mark'
@@ -21,21 +16,11 @@ interface Props {
   priority?: 'auto' | 'high' | 'low'
 }
 
-const artwork: Record<LogoKind, { dark: string; height: number; light: string; width: number }> = {
-  /* Primary on a dark ground, mono black on a light one. Full colour is the
-   * default; mono is reached for only where the ground rules out the yellow. */
-  lockup: {
-    dark: '/brand/logo-lockup.png',
-    height: 240,
-    light: '/brand/logo-lockup-black.png',
-    width: 740,
-  },
-  mark: {
-    dark: '/brand/logo-mark.png',
-    height: 233,
-    light: '/brand/logo-mark-black.png',
-    width: 140,
-  },
+const mark = {
+  dark: '/brand/logo-mark.png',
+  height: 233,
+  light: '/brand/logo-mark-black.png',
+  width: 140,
 }
 
 export const Logo = (props: Props) => {
@@ -43,36 +28,70 @@ export const Logo = (props: Props) => {
 
   const loading = loadingFromProps || 'lazy'
   const priority = priorityFromProps || 'low'
-  const { dark, height, light, width } = artwork[kind]
+  const imageClassName = 'h-auto shrink-0'
 
-  /* Never below the brand book's minimum: 140px for the lockup, 24px for the
-   * mark. Under those the teeth on the key shaft fill in and it stops reading. */
-  const size = kind === 'lockup' ? 'w-[140px] md:w-[160px]' : 'w-8'
+  if (kind === 'lockup') {
+    return (
+      <span
+        aria-label="hrizonmedia"
+        className={clsx(
+          'inline-flex w-[140px] items-center gap-[7px] text-[#08080B] md:w-[160px] md:gap-2 dark:text-white',
+          className,
+        )}
+      >
+        <span aria-hidden="true" className="relative block w-[24px] shrink-0 md:w-[27px]">
+          <img
+            alt=""
+            className={clsx(imageClassName, 'w-full dark:hidden')}
+            decoding="async"
+            fetchPriority={priority}
+            height={mark.height}
+            loading={loading}
+            src={mark.light}
+            width={mark.width}
+          />
+          <img
+            alt=""
+            className={clsx(imageClassName, 'hidden w-full dark:block')}
+            decoding="async"
+            fetchPriority={priority}
+            height={mark.height}
+            loading={loading}
+            src={mark.dark}
+            width={mark.width}
+          />
+        </span>
+        <span className="[font-family:var(--font-display)] whitespace-nowrap text-[18px] font-extrabold leading-none tracking-[-0.045em] md:text-[21px]">
+          hrizonmedia
+        </span>
+      </span>
+    )
+  }
 
-  const shared = clsx('h-auto max-w-full', size, className)
+  const shared = clsx('h-auto w-8 max-w-full', className)
 
   return (
     /* eslint-disable @next/next/no-img-element */
     <>
       <img
-        alt="EncryptStream"
+        alt="hrizonmedia"
         className={clsx(shared, 'dark:hidden')}
         decoding="async"
         fetchPriority={priority}
-        height={height}
+        height={mark.height}
         loading={loading}
-        src={light}
-        width={width}
+        src={mark.light}
+        width={mark.width}
       />
       <img
-        alt="EncryptStream"
+        alt="hrizonmedia"
         className={clsx(shared, 'hidden dark:block')}
         decoding="async"
         fetchPriority={priority}
-        height={height}
+        height={mark.height}
         loading={loading}
-        src={dark}
-        width={width}
+        src={mark.dark}
+        width={mark.width}
       />
     </>
   )

@@ -1,3 +1,5 @@
+> Superseded on 2026-09-05: the brand is now **hrizonmedia**, retaining the existing logo. The desired domain is `hrizonmedia.com`; registration and ownership are not yet confirmed. The original decision below is retained as history.
+
 # Brand name and domain: encryptstream.com
 
 We needed a name for a secure video platform competing in VdoCipher's market, on a

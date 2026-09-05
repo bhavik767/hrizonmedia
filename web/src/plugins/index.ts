@@ -14,7 +14,7 @@ import { Page, Post } from '@/payload-types'
 import { getServerSideURL } from '@/utilities/getURL'
 
 const generateTitle: GenerateTitle<Post | Page> = ({ doc }) => {
-  return doc?.title ? `${doc.title} | EncryptStream` : 'EncryptStream'
+  return doc?.title ? `${doc.title} | hrizonmedia` : 'hrizonmedia'
 }
 
 const generateURL: GenerateURL<Post | Page> = ({ doc }) => {

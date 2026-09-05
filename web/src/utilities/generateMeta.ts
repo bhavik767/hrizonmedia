@@ -27,8 +27,8 @@ export const generateMeta = async (args: {
   const ogImage = getImageURL(doc?.meta?.image)
 
   const title = doc?.meta?.title
-    ? doc?.meta?.title + ' | EncryptStream'
-    : 'EncryptStream'
+    ? doc?.meta?.title + ' | hrizonmedia'
+    : 'hrizonmedia'
 
   return {
     description: doc?.meta?.description,

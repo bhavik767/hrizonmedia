@@ -15,9 +15,9 @@ test.describe('Frontend', () => {
 
   test('can load homepage', async ({ page }) => {
     await page.goto('http://localhost:3000')
-    await expect(page).toHaveTitle(/EncryptStream/)
+    await expect(page).toHaveTitle(/hrizonmedia/)
     const heading = page.locator('h1').first()
-    await expect(heading).toHaveText('EncryptStream')
+    await expect(heading).toHaveText('hrizonmedia')
   })
 
   test.describe('post detail', () => {

@@ -1,0 +1,14 @@
+.git
+.next
+node_modules
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+public/media
+test-results
+playwright-report
+blob-report
+dev-server*.log

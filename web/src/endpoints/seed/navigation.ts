@@ -31,23 +31,23 @@ export const navItemsFor = (items: { href: string; title: string }[]) =>
 /**
  * The pages the legal links land on. They exist so the footer does not point a
  * reader at a 404 — the copy is a placeholder that states the true position
- * today, and is for the Author to replace before EncryptStream opens.
+ * today, and is for the Author to replace before hrizonmedia opens.
  */
 export const legalPages = [
   {
     slug: 'privacy',
     title: 'Privacy',
     body:
-      'EncryptStream is not open yet. The only thing this site collects is an email ' +
+      'hrizonmedia is not open yet. The only thing this site collects is an email ' +
       'address you choose to give us, so that we can write to you once when the ' +
       'platform opens. It is not passed to anyone else. A full privacy policy is ' +
-      'published here before EncryptStream opens.',
+      'published here before hrizonmedia opens.',
   },
   {
     slug: 'terms',
     title: 'Terms',
     body:
-      'EncryptStream is not open yet, so there is nothing here to agree to. The terms ' +
+      'hrizonmedia is not open yet, so there is nothing here to agree to. The terms ' +
       'that govern buying and using the platform are published here before it opens.',
   },
 ]

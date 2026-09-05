@@ -1,4 +1,6 @@
+import { postgresAdapter } from '@payloadcms/db-postgres'
 import { sqliteAdapter } from '@payloadcms/db-sqlite'
+import { s3Storage } from '@payloadcms/storage-s3'
 import sharp from 'sharp'
 import path from 'path'
 import { buildConfig, PayloadRequest } from 'payload'
@@ -19,6 +21,54 @@ import { getServerSideURL } from './utilities/getURL'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
+
+const databaseURL = process.env.DATABASE_URL
+const usesPostgres =
+  databaseURL?.startsWith('postgres://') || databaseURL?.startsWith('postgresql://')
+
+const db = usesPostgres
+  ? postgresAdapter({
+      pool: {
+        connectionString: databaseURL,
+      },
+    })
+  : sqliteAdapter({
+      busyTimeout: 10_000,
+      client: {
+        url: process.env.DATABASE_URI || 'file:./encryptstream.db',
+      },
+      wal: true,
+    })
+
+const bucketConfigured = Boolean(
+  process.env.BUCKET &&
+  process.env.ACCESS_KEY_ID &&
+  process.env.SECRET_ACCESS_KEY &&
+  process.env.ENDPOINT,
+)
+
+const railwayStorage = s3Storage({
+  alwaysInsertFields: true,
+  bucket: process.env.BUCKET || 'local-storage-disabled',
+  collections: {
+    media: {
+      signedDownloads: {
+        expiresIn: 24 * 60 * 60,
+      },
+    },
+  },
+  config: {
+    credentials: {
+      accessKeyId: process.env.ACCESS_KEY_ID || '',
+      secretAccessKey: process.env.SECRET_ACCESS_KEY || '',
+    },
+    endpoint: process.env.ENDPOINT,
+    forcePathStyle:
+      process.env.S3_FORCE_PATH_STYLE === 'true' || process.env.AWS_S3_URL_STYLE === 'path',
+    region: process.env.REGION || 'auto',
+  },
+  enabled: bucketConfigured,
+})
 
 export default buildConfig({
   admin: {
@@ -72,13 +122,7 @@ export default buildConfig({
    * covers the writer-against-writer case that is left. Neither hides a real
    * error: a query that is still blocked after ten seconds still fails.
    */
-  db: sqliteAdapter({
-    busyTimeout: 10_000,
-    client: {
-      url: process.env.DATABASE_URI || 'file:./encryptstream.db',
-    },
-    wal: true,
-  }),
+  db,
   collections: [Pages, Posts, Media, Categories, Users],
   cors: [getServerSideURL()].filter(Boolean),
   globals: [Header, Footer, Author],
@@ -92,7 +136,7 @@ export default buildConfig({
   onInit: async (payload) => {
     await ensureEarlyAccessForm(payload)
   },
-  plugins,
+  plugins: [...plugins, railwayStorage],
   secret: process.env.PAYLOAD_SECRET,
   sharp,
   typescript: {

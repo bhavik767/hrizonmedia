@@ -45,7 +45,7 @@ export async function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col gap-3 border-t border-border pt-6 text-sm text-caption md:flex-row md:items-center md:justify-between">
-          <p>© {new Date().getFullYear()} EncryptStream</p>
+          <p>© {new Date().getFullYear()} hrizonmedia</p>
 
           {legalItems.length > 0 && (
             <nav aria-label="Legal">

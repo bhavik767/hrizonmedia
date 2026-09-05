@@ -50,7 +50,7 @@ async function signUp(capture: Locator, value: string): Promise<void> {
  * thing it exists to catch.
  */
 const COPY = {
-  heading: 'Be first when EncryptStream opens',
+  heading: 'Be first when hrizonmedia opens',
   supporting: "We'll email you once, when it's ready",
   button: 'Get early access',
 } as const

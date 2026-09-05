@@ -490,7 +490,7 @@ test.describe('The Article page', () => {
     }) => {
       await page.goto(ARTICLE)
 
-      const biography = page.getByRole('heading', { name: 'Who is behind EncryptStream' })
+      const biography = page.getByRole('heading', { name: 'Who is behind hrizonmedia' })
 
       await expect(biography).toHaveCount(1)
       await expect(page.getByText(defaultAuthor.biography)).toBeVisible()
