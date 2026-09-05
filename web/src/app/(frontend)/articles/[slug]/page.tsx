@@ -18,6 +18,9 @@ import { articleHeadings } from '@/utilities/articleHeadings'
 import { generateMeta } from '@/utilities/generateMeta'
 import { LivePreviewListener } from '@/components/LivePreviewListener'
 
+// Content is fetched from Payload only at runtime, where Railway provides the database and secret.
+export const dynamic = 'force-dynamic'
+
 export async function generateStaticParams() {
   const payload = await getPayload({ config: configPromise })
   const posts = await payload.find({
