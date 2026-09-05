@@ -17,7 +17,11 @@ test.describe('Frontend', () => {
     await page.goto('http://localhost:3000')
     await expect(page).toHaveTitle(/hrizonmedia/)
     const heading = page.locator('h1').first()
-    await expect(heading).toHaveText('hrizonmedia')
+    await expect(heading).toHaveText('Articles')
+    await expect(page.getByRole('link', { name: 'Visit the admin dashboard' })).toHaveCount(0)
+    await expect(
+      page.getByRole('contentinfo').getByRole('link', { name: 'Admin', exact: true }),
+    ).toHaveAttribute('href', '/admin')
   })
 
   test.describe('post detail', () => {
