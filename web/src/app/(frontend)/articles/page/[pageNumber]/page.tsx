@@ -43,6 +43,9 @@ export async function generateMetadata({ params: paramsPromise }: Args): Promise
  * worth building: a narrowed one is a query string, and there is no page count
  * to enumerate for a filter a reader may or may not use.
  */
+// Content is fetched from Payload only at runtime, where Railway provides the database and secret.
+export const dynamic = 'force-dynamic'
+
 export async function generateStaticParams() {
   const payload = await getPayload({ config: configPromise })
   const { totalDocs } = await payload.count({
