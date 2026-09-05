@@ -6,7 +6,7 @@ import { getPayload } from 'payload'
 import React from 'react'
 
 import { ArticleListing } from '@/components/ArticleListing'
-import { CATEGORY_PARAM, articleListingPageCount } from '@/utilities/routes'
+import { CATEGORY_PARAM } from '@/utilities/routes'
 
 export const revalidate = 600
 
@@ -47,19 +47,5 @@ export async function generateMetadata({ params: paramsPromise }: Args): Promise
 export const dynamic = 'force-dynamic'
 
 export async function generateStaticParams() {
-  const payload = await getPayload({ config: configPromise })
-  const { totalDocs } = await payload.count({
-    collection: 'posts',
-    overrideAccess: false,
-  })
-
-  const totalPages = articleListingPageCount(totalDocs)
-
-  const pages: { pageNumber: string }[] = []
-
-  for (let i = 1; i <= totalPages; i++) {
-    pages.push({ pageNumber: String(i) })
-  }
-
-  return pages
+  return []
 }
