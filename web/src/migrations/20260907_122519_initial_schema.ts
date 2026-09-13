@@ -1151,7 +1151,7 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   
   CREATE TABLE "organization" (
   	"id" serial PRIMARY KEY NOT NULL,
-  	"name" varchar DEFAULT 'eSaral' NOT NULL,
+	"name" varchar DEFAULT 'HrizonMedia' NOT NULL,
   	"url" varchar,
   	"logo_id" integer NOT NULL,
   	"updated_at" timestamp(3) with time zone,

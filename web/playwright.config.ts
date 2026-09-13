@@ -38,7 +38,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- -p 3103',
+    command: 'cross-env HRIZONMEDIA_DEMO_ENABLED=true npm run dev -- -p 3103',
+    gracefulShutdown: { signal: 'SIGTERM', timeout: 1_000 },
     reuseExistingServer: false,
     timeout: 180_000,
     url: 'http://127.0.0.1:3103',

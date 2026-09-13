@@ -1,53 +1,27 @@
 import type { Metadata } from 'next'
 
-import { cn } from '@/utilities/ui'
-import { GeistMono } from 'geist/font/mono'
-import { GeistSans } from 'geist/font/sans'
+import '@fontsource-variable/manrope'
+import '@fontsource/ibm-plex-mono/400.css'
+import '@fontsource/ibm-plex-mono/500.css'
+import '@fontsource/ibm-plex-sans/400.css'
+import '@fontsource/ibm-plex-sans/500.css'
+import '@fontsource/ibm-plex-sans/600.css'
 import React from 'react'
 
-import { AdminBar } from '@/components/AdminBar'
 import { Footer } from '@/Footer/Component'
 import { Header } from '@/Header/Component'
-import { Providers } from '@/providers'
-import { InitTheme } from '@/providers/Theme/InitTheme'
-import { getCachedGlobal } from '@/utilities/getGlobals'
-import { mergeOpenGraph } from '@/utilities/mergeOpenGraph'
-import { resolveMediaUrl } from '@/utilities/schema/resolveMediaUrl'
-import { draftMode } from 'next/headers'
 
 import './globals.css'
 import { getServerSideURL } from '@/utilities/getURL'
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const { isEnabled } = await draftMode()
-  const organization = await getCachedGlobal('organization', 1)()
-  const favicon = resolveMediaUrl(organization?.favicon)
-
   return (
-    <html className={cn(GeistSans.variable, GeistMono.variable)} lang="en" suppressHydrationWarning>
-      <head>
-        <InitTheme />
-        {favicon ? (
-          <link href={favicon} rel="icon" />
-        ) : (
-          <>
-            <link href="/favicon.ico" rel="icon" sizes="32x32" />
-            <link href="/favicon.svg" rel="icon" type="image/svg+xml" />
-          </>
-        )}
-      </head>
+    <html data-theme="dark" lang="en">
       <body>
-        <Providers>
-          <AdminBar
-            adminBarProps={{
-              preview: isEnabled,
-            }}
-          />
-
-          <Header />
-          {children}
-          <Footer />
-        </Providers>
+        <a className="skip-link" href="#main-content">Skip to content</a>
+        <Header />
+        {children}
+        <Footer />
       </body>
     </html>
   )
@@ -55,9 +29,26 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 export const metadata: Metadata = {
   metadataBase: new URL(getServerSideURL()),
-  openGraph: mergeOpenGraph(),
+  title: 'HrizonMedia | Secure video. Precisely controlled.',
+  description:
+    'HrizonMedia is the secure video platform for controlled upload, encrypted delivery, and authorised playback.',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/icon.svg', type: 'image/svg+xml', sizes: '32x32' },
+    ],
+    apple: [{ url: '/apple-icon.svg', type: 'image/svg+xml', sizes: '180x180' }],
+  },
+  openGraph: {
+    type: 'website',
+    title: 'HrizonMedia | Secure video. Precisely controlled.',
+    description:
+      'Upload once. Deliver encrypted video. Authorise every playback with HrizonMedia.',
+    siteName: 'HrizonMedia',
+  },
   twitter: {
     card: 'summary_large_image',
-    creator: '@payloadcms',
+    title: 'HrizonMedia | Secure video. Precisely controlled.',
+    description: 'Plays where you allow it. Nowhere else.',
   },
 }

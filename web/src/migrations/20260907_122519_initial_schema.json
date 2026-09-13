@@ -13443,7 +13443,7 @@
           "type": "varchar",
           "primaryKey": false,
           "notNull": true,
-          "default": "'eSaral'"
+          "default": "'HrizonMedia'"
         },
         "url": {
           "name": "url",

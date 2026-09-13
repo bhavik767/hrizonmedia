@@ -17,6 +17,7 @@ const NEXT_PUBLIC_SERVER_URL =
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
+  devIndicators: false,
   output: 'standalone',
   // Temporarily required on Windows until Next.js fixes Turbopack Sass resolution.
   // See: https://github.com/vercel/next.js/issues/86431
