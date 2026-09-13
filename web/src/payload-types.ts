@@ -71,7 +71,9 @@ export interface Config {
     posts: Post;
     media: Media;
     categories: Category;
+    authors: Author;
     users: User;
+    'reusable-blocks': ReusableBlock;
     redirects: Redirect;
     forms: Form;
     'form-submissions': FormSubmission;
@@ -93,7 +95,9 @@ export interface Config {
     posts: PostsSelect<false> | PostsSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
+    authors: AuthorsSelect<false> | AuthorsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
+    'reusable-blocks': ReusableBlocksSelect<false> | ReusableBlocksSelect<true>;
     redirects: RedirectsSelect<false> | RedirectsSelect<true>;
     forms: FormsSelect<false> | FormsSelect<true>;
     'form-submissions': FormSubmissionsSelect<false> | FormSubmissionsSelect<true>;
@@ -112,12 +116,14 @@ export interface Config {
   globals: {
     header: Header;
     footer: Footer;
-    author: Author;
+    organization: Organization;
+    integrations: Integration;
   };
   globalsSelect: {
     header: HeaderSelect<false> | HeaderSelect<true>;
     footer: FooterSelect<false> | FooterSelect<true>;
-    author: AuthorSelect<false> | AuthorSelect<true>;
+    organization: OrganizationSelect<false> | OrganizationSelect<true>;
+    integrations: IntegrationsSelect<false> | IntegrationsSelect<true>;
   };
   locale: null;
   widgets: {
@@ -203,16 +209,101 @@ export interface Page {
       | null;
     media?: (number | null) | Media;
   };
-  layout: (CallToActionBlock | ContentBlock | MediaBlock | ArchiveBlock | FormBlock)[];
+  layout: (
+    | CallToActionBlock
+    | ContentBlock
+    | MediaBlock
+    | ArchiveBlock
+    | FormBlock
+    | CarouselBlock
+    | GlobalCarouselBlock
+    | YouTubeVideoBlock
+  )[];
+  faq?: {
+    /**
+     * Heading shown above the FAQ section. Pre-filled — change or clear it as needed.
+     */
+    heading?: string | null;
+    /**
+     * Written directly for this post/page.
+     */
+    items?:
+      | {
+          question: string;
+          answer: {
+            root: {
+              type: string;
+              children: {
+                type: any;
+                version: number;
+                [k: string]: unknown;
+              }[];
+              direction: ('ltr' | 'rtl') | null;
+              format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+              indent: number;
+              version: number;
+            };
+            [k: string]: unknown;
+          };
+          id?: string | null;
+        }[]
+      | null;
+    /**
+     * Pull in one or more shared FAQs (see Reusable Blocks). Combines with the questions above rather than replacing them — editing the shared FAQ later updates it here too.
+     */
+    importedFAQ?: (number | ReusableBlock)[] | null;
+  };
+  courseSchema?: {
+    /**
+     * Concise course name for schema.org/Course — doesn't have to match the page title exactly (e.g. "JEE Physics Test Series" rather than a full marketing headline).
+     */
+    name: string;
+    description: string;
+    /**
+     * Populates hasCourseInstance.courseMode, if set.
+     */
+    courseMode?: ('online' | 'onsite' | 'blended') | null;
+    /**
+     * E.g. "Class 11-12", "JEE Aspirants". Optional.
+     */
+    educationalLevel?: string | null;
+    /**
+     * Optional. E.g. "Completion of Class 10".
+     */
+    coursePrerequisites?: string | null;
+    hasOffer?: boolean | null;
+    /**
+     * Numeric price only, no currency symbol.
+     */
+    price?: number | null;
+    priceCurrency?: string | null;
+  };
   meta?: {
+    /**
+     * The primary keyword or phrase you want this content to rank for. Drives the SEO analysis below — leave it blank to skip analysis.
+     */
+    focusKeyword?: string | null;
+    /**
+     * Automatically computed on save. Powers the SEO column in the list view.
+     */
+    seoScore?: number | null;
     title?: string | null;
     /**
      * Maximum upload file size: 12MB. Recommended file size for images is <500KB.
      */
     image?: (number | null) | Media;
     description?: string | null;
+    /**
+     * Defaults to this page's own URL (based on its slug). Enter a URL here to override it with a different canonical page instead.
+     */
+    canonical?: string | null;
   };
   publishedAt?: string | null;
+  authors?: (number | Author)[] | null;
+  /**
+   * Additional schema.org types to publish for this page (BreadcrumbList, FAQ, and Video are always on). Course reveals its own fields in the Course tab.
+   */
+  structuredData?: 'course'[] | null;
   /**
    * When enabled, the slug will auto-generate from the title field on save and autosave.
    */
@@ -245,24 +336,68 @@ export interface Post {
     };
     [k: string]: unknown;
   };
+  faq?: {
+    /**
+     * Heading shown above the FAQ section. Pre-filled — change or clear it as needed.
+     */
+    heading?: string | null;
+    /**
+     * Written directly for this post/page.
+     */
+    items?:
+      | {
+          question: string;
+          answer: {
+            root: {
+              type: string;
+              children: {
+                type: any;
+                version: number;
+                [k: string]: unknown;
+              }[];
+              direction: ('ltr' | 'rtl') | null;
+              format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+              indent: number;
+              version: number;
+            };
+            [k: string]: unknown;
+          };
+          id?: string | null;
+        }[]
+      | null;
+    /**
+     * Pull in one or more shared FAQs (see Reusable Blocks). Combines with the questions above rather than replacing them — editing the shared FAQ later updates it here too.
+     */
+    importedFAQ?: (number | ReusableBlock)[] | null;
+  };
   relatedPosts?: (number | Post)[] | null;
   categories?: (number | Category)[] | null;
   meta?: {
+    /**
+     * The primary keyword or phrase you want this content to rank for. Drives the SEO analysis below — leave it blank to skip analysis.
+     */
+    focusKeyword?: string | null;
+    /**
+     * Automatically computed on save. Powers the SEO column in the list view.
+     */
+    seoScore?: number | null;
     title?: string | null;
     /**
      * Maximum upload file size: 12MB. Recommended file size for images is <500KB.
      */
     image?: (number | null) | Media;
     description?: string | null;
+    /**
+     * A concise, factual summary of this post written for AI answer engines and LLM crawlers (e.g. llms.txt) — separate from the human-facing meta description above.
+     */
+    aiSummary?: string | null;
+    /**
+     * Defaults to this post's own URL (based on its slug). Enter a URL here to override it with a different canonical page instead.
+     */
+    canonical?: string | null;
   };
   publishedAt?: string | null;
-  authors?: (number | User)[] | null;
-  populatedAuthors?:
-    | {
-        id?: string | null;
-        name?: string | null;
-      }[]
-    | null;
+  authors?: (number | Author)[] | null;
   /**
    * When enabled, the slug will auto-generate from the title field on save and autosave.
    */
@@ -393,6 +528,101 @@ export interface FolderInterface {
   createdAt: string;
 }
 /**
+ * Shared content referenced by pages/posts via a "Global" block. Editing a document here updates every place that references it — see adrs/adr-011-reusable-global-blocks.md.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "reusable-blocks".
+ */
+export interface ReusableBlock {
+  id: number;
+  /**
+   * Internal label used to find this in the block picker. Not shown on the live site.
+   */
+  name: string;
+  /**
+   * Determines which fields below apply, and which "Global" block picker (e.g. Global Carousel) this shows up in. Add more options here as new reusable block types are introduced.
+   */
+  blockType: 'carousel' | 'faq';
+  /**
+   * Add exactly one block here, matching the type selected above.
+   */
+  content?: (CarouselBlock | FAQBlock)[] | null;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CarouselBlock".
+ */
+export interface CarouselBlock {
+  slides?:
+    | {
+        image: number | Media;
+        heading?: string | null;
+        caption?: string | null;
+        enableLink?: boolean | null;
+        link?: {
+          type?: ('reference' | 'custom') | null;
+          newTab?: boolean | null;
+          reference?:
+            | ({
+                relationTo: 'pages';
+                value: number | Page;
+              } | null)
+            | ({
+                relationTo: 'posts';
+                value: number | Post;
+              } | null);
+          url?: string | null;
+          label: string;
+          /**
+           * Choose how the link should be rendered.
+           */
+          appearance?: ('default' | 'outline') | null;
+        };
+        id?: string | null;
+      }[]
+    | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'carousel';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "FAQBlock".
+ */
+export interface FAQBlock {
+  /**
+   * Optional heading shown above the FAQ list (e.g. "Frequently Asked Questions").
+   */
+  heading?: string | null;
+  items?:
+    | {
+        question: string;
+        answer: {
+          root: {
+            type: string;
+            children: {
+              type: any;
+              version: number;
+              [k: string]: unknown;
+            }[];
+            direction: ('ltr' | 'rtl') | null;
+            format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+            indent: number;
+            version: number;
+          };
+          [k: string]: unknown;
+        };
+        id?: string | null;
+      }[]
+    | null;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'faq';
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "categories".
  */
@@ -418,29 +648,61 @@ export interface Category {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "users".
+ * via the `definition` "authors".
  */
-export interface User {
+export interface Author {
   id: number;
-  name?: string | null;
-  updatedAt: string;
-  createdAt: string;
-  email: string;
-  resetPasswordToken?: string | null;
-  resetPasswordExpiration?: string | null;
-  salt?: string | null;
-  hash?: string | null;
-  loginAttempts?: number | null;
-  lockUntil?: string | null;
-  sessions?:
+  name: string;
+  jobTitle?: string | null;
+  profileImage?: (number | null) | Media;
+  description?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
+  /**
+   * Areas of expertise, e.g. "JEE Physics", "NEET Biology".
+   */
+  expertise?: string[] | null;
+  /**
+   * URL to this author's bio/credentials page (e.g. /authors/jane-doe or a full https:// link).
+   */
+  profileURL?: string | null;
+  /**
+   * Social profiles, personal site, or other external links.
+   */
+  authorLinks?:
     | {
-        id: string;
-        createdAt?: string | null;
-        expiresAt: string;
+        link: {
+          type?: ('reference' | 'custom') | null;
+          newTab?: boolean | null;
+          reference?:
+            | ({
+                relationTo: 'pages';
+                value: number | Page;
+              } | null)
+            | ({
+                relationTo: 'posts';
+                value: number | Post;
+              } | null);
+          url?: string | null;
+          label: string;
+        };
+        id?: string | null;
       }[]
     | null;
-  password?: string | null;
-  collection: 'users';
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -777,6 +1039,70 @@ export interface Form {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "GlobalCarouselBlock".
+ */
+export interface GlobalCarouselBlock {
+  /**
+   * Pick an existing shared carousel. Editing that carousel later updates every page/post that references it — it is not copied here.
+   */
+  reusableBlock: number | ReusableBlock;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'globalCarousel';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "YouTubeVideoBlock".
+ */
+export interface YouTubeVideoBlock {
+  /**
+   * Paste either the 11-character YouTube video ID or a full YouTube URL (watch, youtu.be, or embed link) — the ID is extracted automatically.
+   */
+  videoId: string;
+  /**
+   * Populates VideoObject schema's required "name" field.
+   */
+  title: string;
+  /**
+   * Optional. Populates VideoObject schema's "description" field.
+   */
+  description?: string | null;
+  /**
+   * Required by Google for VideoObject eligibility, along with title/thumbnail — the date this video was originally published on YouTube. Populates VideoObject schema's "uploadDate" field.
+   */
+  uploadDate: string;
+  id?: string | null;
+  blockName?: string | null;
+  blockType: 'youtubeVideo';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "users".
+ */
+export interface User {
+  id: number;
+  name?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'users';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "redirects".
  */
 export interface Redirect {
@@ -982,8 +1308,16 @@ export interface PayloadLockedDocument {
         value: number | Category;
       } | null)
     | ({
+        relationTo: 'authors';
+        value: number | Author;
+      } | null)
+    | ({
         relationTo: 'users';
         value: number | User;
+      } | null)
+    | ({
+        relationTo: 'reusable-blocks';
+        value: number | ReusableBlock;
       } | null)
     | ({
         relationTo: 'redirects';
@@ -1083,15 +1417,48 @@ export interface PagesSelect<T extends boolean = true> {
         mediaBlock?: T | MediaBlockSelect<T>;
         archive?: T | ArchiveBlockSelect<T>;
         formBlock?: T | FormBlockSelect<T>;
+        carousel?: T | CarouselBlockSelect<T>;
+        globalCarousel?: T | GlobalCarouselBlockSelect<T>;
+        youtubeVideo?: T | YouTubeVideoBlockSelect<T>;
+      };
+  faq?:
+    | T
+    | {
+        heading?: T;
+        items?:
+          | T
+          | {
+              question?: T;
+              answer?: T;
+              id?: T;
+            };
+        importedFAQ?: T;
+      };
+  courseSchema?:
+    | T
+    | {
+        name?: T;
+        description?: T;
+        courseMode?: T;
+        educationalLevel?: T;
+        coursePrerequisites?: T;
+        hasOffer?: T;
+        price?: T;
+        priceCurrency?: T;
       };
   meta?:
     | T
     | {
+        focusKeyword?: T;
+        seoScore?: T;
         title?: T;
         image?: T;
         description?: T;
+        canonical?: T;
       };
   publishedAt?: T;
+  authors?: T;
+  structuredData?: T;
   generateSlug?: T;
   slug?: T;
   updatedAt?: T;
@@ -1184,29 +1551,88 @@ export interface FormBlockSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "CarouselBlock_select".
+ */
+export interface CarouselBlockSelect<T extends boolean = true> {
+  slides?:
+    | T
+    | {
+        image?: T;
+        heading?: T;
+        caption?: T;
+        enableLink?: T;
+        link?:
+          | T
+          | {
+              type?: T;
+              newTab?: T;
+              reference?: T;
+              url?: T;
+              label?: T;
+              appearance?: T;
+            };
+        id?: T;
+      };
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "GlobalCarouselBlock_select".
+ */
+export interface GlobalCarouselBlockSelect<T extends boolean = true> {
+  reusableBlock?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "YouTubeVideoBlock_select".
+ */
+export interface YouTubeVideoBlockSelect<T extends boolean = true> {
+  videoId?: T;
+  title?: T;
+  description?: T;
+  uploadDate?: T;
+  id?: T;
+  blockName?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "posts_select".
  */
 export interface PostsSelect<T extends boolean = true> {
   title?: T;
   heroImage?: T;
   content?: T;
+  faq?:
+    | T
+    | {
+        heading?: T;
+        items?:
+          | T
+          | {
+              question?: T;
+              answer?: T;
+              id?: T;
+            };
+        importedFAQ?: T;
+      };
   relatedPosts?: T;
   categories?: T;
   meta?:
     | T
     | {
+        focusKeyword?: T;
+        seoScore?: T;
         title?: T;
         image?: T;
         description?: T;
+        aiSummary?: T;
+        canonical?: T;
       };
   publishedAt?: T;
   authors?: T;
-  populatedAuthors?:
-    | T
-    | {
-        id?: T;
-        name?: T;
-      };
   generateSlug?: T;
   slug?: T;
   updatedAt?: T;
@@ -1330,6 +1756,34 @@ export interface CategoriesSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "authors_select".
+ */
+export interface AuthorsSelect<T extends boolean = true> {
+  name?: T;
+  jobTitle?: T;
+  profileImage?: T;
+  description?: T;
+  expertise?: T;
+  profileURL?: T;
+  authorLinks?:
+    | T
+    | {
+        link?:
+          | T
+          | {
+              type?: T;
+              newTab?: T;
+              reference?: T;
+              url?: T;
+              label?: T;
+            };
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
@@ -1350,6 +1804,39 @@ export interface UsersSelect<T extends boolean = true> {
         createdAt?: T;
         expiresAt?: T;
       };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "reusable-blocks_select".
+ */
+export interface ReusableBlocksSelect<T extends boolean = true> {
+  name?: T;
+  blockType?: T;
+  content?:
+    | T
+    | {
+        carousel?: T | CarouselBlockSelect<T>;
+        faq?: T | FAQBlockSelect<T>;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "FAQBlock_select".
+ */
+export interface FAQBlockSelect<T extends boolean = true> {
+  heading?: T;
+  items?:
+    | T
+    | {
+        question?: T;
+        answer?: T;
+        id?: T;
+      };
+  id?: T;
+  blockName?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1661,33 +2148,7 @@ export interface Header {
  */
 export interface Footer {
   id: number;
-  /**
-   * The categories a reader can browse. Shown as the footer’s main links.
-   */
   navItems?:
-    | {
-        link: {
-          type?: ('reference' | 'custom') | null;
-          newTab?: boolean | null;
-          reference?:
-            | ({
-                relationTo: 'pages';
-                value: number | Page;
-              } | null)
-            | ({
-                relationTo: 'posts';
-                value: number | Post;
-              } | null);
-          url?: string | null;
-          label: string;
-        };
-        id?: string | null;
-      }[]
-    | null;
-  /**
-   * Policy and terms links, set on the legal line.
-   */
-  legalItems?:
     | {
         link: {
           type?: ('reference' | 'custom') | null;
@@ -1711,19 +2172,197 @@ export interface Footer {
   createdAt?: string | null;
 }
 /**
+ * eSaral's organization info, used to populate schema.org structured data (Article publisher, Course provider) and site-level assets (favicon) across the site.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "author".
+ * via the `definition` "organization".
  */
-export interface Author {
+export interface Organization {
   id: number;
   /**
-   * The byline shown on every Article.
+   * Legal/display name used as the schema.org Organization name.
    */
-  name?: string | null;
+  name: string;
   /**
-   * Who is behind hrizonmedia. The same on every Article, so it describes the company rather than a contributor.
+   * Canonical site URL (e.g. https://esaral.com). Falls back to the server URL if left blank.
    */
-  biography?: string | null;
+  url?: string | null;
+  /**
+   * Used as the Organization schema logo (publisher.logo / provider.logo). Google recommends a square or landscape image.
+   */
+  logo: number | Media;
+  /**
+   * Browser tab icon. Accepts .ico, .svg, or .png. Falls back to the static /favicon.ico and /favicon.svg files in the codebase if left blank.
+   */
+  favicon?: (number | null) | Media;
+  /**
+   * Links to official social profiles (Instagram, YouTube, LinkedIn, etc.) — populates schema.org sameAs.
+   */
+  sameAs?:
+    | {
+        url: string;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Short organization description (schema.org description).
+   */
+  description?: string | null;
+  /**
+   * Registered legal name, if different from Name above.
+   */
+  legalName?: string | null;
+  /**
+   * A commonly-used alternate name (e.g. an abbreviation).
+   */
+  alternateName?: string | null;
+  /**
+   * General contact email (schema.org email).
+   */
+  email?: string | null;
+  /**
+   * General contact phone number, with country code (schema.org telephone).
+   */
+  telephone?: string | null;
+  /**
+   * When eSaral was founded (schema.org foundingDate).
+   */
+  foundingDate?: string | null;
+  /**
+   * One or more founders — populates schema.org founder (a single Person when there's exactly one, an array when there's more).
+   */
+  founders?:
+    | {
+        name: string;
+        /**
+         * e.g. "Co-Founder & CEO" — populates this founder's jobTitle in schema.org.
+         */
+        title?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  slogan?: string | null;
+  /**
+   * Populates schema.org address (PostalAddress). Leave blank to omit.
+   */
+  address?: {
+    streetAddress?: string | null;
+    addressLocality?: string | null;
+    addressRegion?: string | null;
+    postalCode?: string | null;
+    addressCountry?: string | null;
+  };
+  /**
+   * Controls the @type emitted for this Organization in JSON-LD (Article publisher / Course provider).
+   */
+  organizationType?: ('EducationalOrganization' | 'Organization') | null;
+  /**
+   * Topics eSaral is known for (e.g. JEE, NEET, Physics, Chemistry, Maths, Biology) — populates schema.org knowsAbout, a GEO/E-E-A-T signal for AI answer engines.
+   */
+  knowsAbout?:
+    | {
+        topic: string;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * Third-party analytics, advertising-pixel and site-verification IDs, used to render tracking scripts and verification tags on the frontend.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "integrations".
+ */
+export interface Integration {
+  id: number;
+  /**
+   * GTM container ID, from Google Tag Manager → Admin → Container Settings. Lets marketing manage additional tags without code changes.
+   */
+  googleTagManager?: {
+    enabled?: boolean | null;
+    containerId?: string | null;
+  };
+  /**
+   * GA4 Measurement ID, from Admin → Data Streams → your web stream.
+   */
+  googleAnalytics?: {
+    enabled?: boolean | null;
+    measurementId?: string | null;
+  };
+  /**
+   * From Meta Events Manager → Data Sources → your pixel. Used to track paid Meta campaign conversions.
+   */
+  metaPixel?: {
+    enabled?: boolean | null;
+    pixelId?: string | null;
+  };
+  /**
+   * Settings → Ownership verification → HTML tag method → paste only the content="..." value, not the whole tag. Critical for catching indexing/ranking regressions during the SEO migration.
+   */
+  googleSearchConsole?: {
+    enabled?: boolean | null;
+    verificationCode?: string | null;
+  };
+  /**
+   * Bing Webmaster Tools → Verify ownership → Option 2: Meta tag → paste only the content="..." value.
+   */
+  microsoftWebmaster?: {
+    enabled?: boolean | null;
+    verificationCode?: string | null;
+  };
+  /**
+   * Conversion ID, from Google Ads → Tools → Conversions.
+   */
+  googleAds?: {
+    enabled?: boolean | null;
+    conversionId?: string | null;
+  };
+  /**
+   * Partner ID, from Campaign Manager → Account Assets → Insight Tag.
+   */
+  linkedInInsightTag?: {
+    enabled?: boolean | null;
+    partnerId?: string | null;
+  };
+  /**
+   * Project ID, from clarity.microsoft.com → Settings → Setup.
+   */
+  microsoftClarity?: {
+    enabled?: boolean | null;
+    projectId?: string | null;
+  };
+  /**
+   * Site ID, from Hotjar → Organization Settings → Sites & Organizations.
+   */
+  hotjar?: {
+    enabled?: boolean | null;
+    siteId?: string | null;
+  };
+  /**
+   * Pixel ID, from TikTok Ads Manager → Assets → Events.
+   */
+  tiktokPixel?: {
+    enabled?: boolean | null;
+    pixelId?: string | null;
+  };
+  /**
+   * Tag ID, from Pinterest Ads Manager → Conversions → Pinterest tag.
+   */
+  pinterestTag?: {
+    enabled?: boolean | null;
+    tagId?: string | null;
+  };
+  /**
+   * For any other site-verification meta tag (Yandex Webmaster, Pinterest domain verification, Naver, etc.) not covered above.
+   */
+  customVerificationTags?:
+    | {
+        provider: string;
+        content: string;
+        id?: string | null;
+      }[]
+    | null;
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -1769,18 +2408,53 @@ export interface FooterSelect<T extends boolean = true> {
             };
         id?: T;
       };
-  legalItems?:
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organization_select".
+ */
+export interface OrganizationSelect<T extends boolean = true> {
+  name?: T;
+  url?: T;
+  logo?: T;
+  favicon?: T;
+  sameAs?:
     | T
     | {
-        link?:
-          | T
-          | {
-              type?: T;
-              newTab?: T;
-              reference?: T;
-              url?: T;
-              label?: T;
-            };
+        url?: T;
+        id?: T;
+      };
+  description?: T;
+  legalName?: T;
+  alternateName?: T;
+  email?: T;
+  telephone?: T;
+  foundingDate?: T;
+  founders?:
+    | T
+    | {
+        name?: T;
+        title?: T;
+        id?: T;
+      };
+  slogan?: T;
+  address?:
+    | T
+    | {
+        streetAddress?: T;
+        addressLocality?: T;
+        addressRegion?: T;
+        postalCode?: T;
+        addressCountry?: T;
+      };
+  organizationType?: T;
+  knowsAbout?:
+    | T
+    | {
+        topic?: T;
         id?: T;
       };
   updatedAt?: T;
@@ -1789,11 +2463,82 @@ export interface FooterSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "author_select".
+ * via the `definition` "integrations_select".
  */
-export interface AuthorSelect<T extends boolean = true> {
-  name?: T;
-  biography?: T;
+export interface IntegrationsSelect<T extends boolean = true> {
+  googleTagManager?:
+    | T
+    | {
+        enabled?: T;
+        containerId?: T;
+      };
+  googleAnalytics?:
+    | T
+    | {
+        enabled?: T;
+        measurementId?: T;
+      };
+  metaPixel?:
+    | T
+    | {
+        enabled?: T;
+        pixelId?: T;
+      };
+  googleSearchConsole?:
+    | T
+    | {
+        enabled?: T;
+        verificationCode?: T;
+      };
+  microsoftWebmaster?:
+    | T
+    | {
+        enabled?: T;
+        verificationCode?: T;
+      };
+  googleAds?:
+    | T
+    | {
+        enabled?: T;
+        conversionId?: T;
+      };
+  linkedInInsightTag?:
+    | T
+    | {
+        enabled?: T;
+        partnerId?: T;
+      };
+  microsoftClarity?:
+    | T
+    | {
+        enabled?: T;
+        projectId?: T;
+      };
+  hotjar?:
+    | T
+    | {
+        enabled?: T;
+        siteId?: T;
+      };
+  tiktokPixel?:
+    | T
+    | {
+        enabled?: T;
+        pixelId?: T;
+      };
+  pinterestTag?:
+    | T
+    | {
+        enabled?: T;
+        tagId?: T;
+      };
+  customVerificationTags?:
+    | T
+    | {
+        provider?: T;
+        content?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;
@@ -1824,6 +2569,10 @@ export interface TaskSchedulePublish {
       | ({
           relationTo: 'posts';
           value: number | Post;
+        } | null)
+      | ({
+          relationTo: 'reusable-blocks';
+          value: number | ReusableBlock;
         } | null);
     global?: string | null;
     user?: (number | null) | User;
@@ -1865,58 +2614,6 @@ export interface CodeBlock {
   id?: string | null;
   blockName?: string | null;
   blockType: 'code';
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "KeyTakeawaysBlock".
- */
-export interface KeyTakeawaysBlock {
-  /**
-   * Optional. Left blank, the box is still labelled Key takeaways.
-   */
-  heading?: string | null;
-  takeaways: {
-    /**
-     * One claim, written so it makes sense out of context.
-     */
-    statement: string;
-    id?: string | null;
-  }[];
-  id?: string | null;
-  blockName?: string | null;
-  blockType: 'keyTakeaways';
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "FaqBlock".
- */
-export interface FaqBlock {
-  /**
-   * Optional. Left blank, the section is still labelled Frequently asked questions.
-   */
-  heading?: string | null;
-  questions: {
-    question: string;
-    answer: {
-      root: {
-        type: string;
-        children: {
-          type: any;
-          version: number;
-          [k: string]: unknown;
-        }[];
-        direction: ('ltr' | 'rtl') | null;
-        format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
-        indent: number;
-        version: number;
-      };
-      [k: string]: unknown;
-    };
-    id?: string | null;
-  }[];
-  id?: string | null;
-  blockName?: string | null;
-  blockType: 'faq';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

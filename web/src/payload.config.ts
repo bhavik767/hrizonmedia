@@ -1,21 +1,22 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
-import { sqliteAdapter } from '@payloadcms/db-sqlite'
 import { s3Storage } from '@payloadcms/storage-s3'
 import sharp from 'sharp'
 import path from 'path'
 import { buildConfig, PayloadRequest } from 'payload'
 import { fileURLToPath } from 'url'
 
+import { Authors } from './collections/Authors'
 import { Categories } from './collections/Categories'
 import { Media } from './collections/Media'
 import { Pages } from './collections/Pages'
 import { Posts } from './collections/Posts'
+import { ReusableBlocks } from './collections/ReusableBlocks'
 import { Users } from './collections/Users'
-import { Author } from './Author/config'
-import { ensureEarlyAccessForm } from './forms/earlyAccess'
 import { Footer } from './Footer/config'
 import { Header } from './Header/config'
+import { Integrations } from './Integrations/config'
 import { migrations } from './migrations'
+import { Organization } from './Organization/config'
 import { plugins } from './plugins'
 import { defaultLexical } from '@/fields/defaultLexical'
 import { getServerSideURL } from './utilities/getURL'
@@ -23,30 +24,11 @@ import { getServerSideURL } from './utilities/getURL'
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
-const databaseURL = process.env.DATABASE_URL
-const usesPostgres =
-  databaseURL?.startsWith('postgres://') || databaseURL?.startsWith('postgresql://')
-
-const db = usesPostgres
-  ? postgresAdapter({
-      prodMigrations: migrations,
-      pool: {
-        connectionString: databaseURL,
-      },
-    })
-  : sqliteAdapter({
-      busyTimeout: 10_000,
-      client: {
-        url: process.env.DATABASE_URI || 'file:./encryptstream.db',
-      },
-      wal: true,
-    })
-
 const bucketConfigured = Boolean(
   process.env.BUCKET &&
-  process.env.ACCESS_KEY_ID &&
-  process.env.SECRET_ACCESS_KEY &&
-  process.env.ENDPOINT,
+    process.env.ACCESS_KEY_ID &&
+    process.env.SECRET_ACCESS_KEY &&
+    process.env.ENDPOINT,
 )
 
 const railwayStorage = s3Storage({
@@ -81,6 +63,9 @@ export default buildConfig({
       // The `BeforeDashboard` component renders the 'welcome' block that you see after logging into your admin panel.
       // Feel free to delete this at any time. Simply remove the line below.
       beforeDashboard: ['@/components/BeforeDashboard'],
+      // Adds icons in front of every sidebar link, bumps up the group-heading font size (see
+      // custom.scss), and defaults every group to collapsed. See src/components/AdminNav.
+      Nav: '@/components/AdminNav',
     },
     importMap: {
       baseDir: path.resolve(dirname),
@@ -111,35 +96,23 @@ export default buildConfig({
   },
   // This config helps us configure global or default features that the other editors can inherit
   editor: defaultLexical,
-  /*
-   * SQLite's default rollback journal takes an exclusive lock for the whole of
-   * a write, and with a busy timeout of zero any reader that arrives during one
-   * fails outright with "database is locked" rather than waiting. Several
-   * processes touch this file at once — the request handler, the worker Next
-   * runs `generateStaticParams` in, and the test process seeding fixtures — so
-   * that default turns ordinary contention into a 500 on whichever page lost
-   * the race.
-   *
-   * WAL lets readers carry on while a write is in flight, and the busy timeout
-   * covers the writer-against-writer case that is left. Neither hides a real
-   * error: a query that is still blocked after ten seconds still fails.
-   */
-  db,
-  collections: [Pages, Posts, Media, Categories, Users],
+  db: postgresAdapter({
+    prodMigrations: migrations,
+    pool: {
+      connectionString: process.env.DATABASE_URL || '',
+    },
+  }),
+  collections: [Pages, Posts, Media, Categories, Authors, Users, ReusableBlocks],
   cors: [getServerSideURL()].filter(Boolean),
-  globals: [Header, Footer, Author],
-  /*
-   * The site's single ask needs a form to submit against, and it appears on
-   * every Article and in the footer. Ensuring it on boot rather than leaving it
-   * to a seed means a freshly reset database still collects addresses — the
-   * capture is the only conversion surface here, so an empty corner where it
-   * should be is a lost reader, not a cosmetic defect.
-   */
-  onInit: async (payload) => {
-    await ensureEarlyAccessForm(payload)
+  // Media is the only collection with folder organization enabled; hide the cross-collection
+  // "Browse by Folder" entry point at the top of the admin nav sidebar while keeping folders
+  // usable from within the Media list itself.
+  folders: {
+    browseByFolder: false,
   },
+  globals: [Header, Footer, Organization, Integrations],
   plugins: [...plugins, railwayStorage],
-  secret: process.env.PAYLOAD_SECRET,
+  secret: process.env.PAYLOAD_SECRET || '',
   sharp,
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),

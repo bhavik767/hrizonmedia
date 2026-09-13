@@ -1,7 +1,7 @@
 {
   "name": "hrizonmedia-web",
   "version": "1.0.0",
-  "description": "hrizonmedia marketing site and blog",
+  "description": "HrizonMedia web application",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -11,22 +11,25 @@
     "dev:prod": "cross-env NODE_OPTIONS=--no-deprecation rm -rf .next && npm run build && npm run start",
     "generate:importmap": "cross-env NODE_OPTIONS=--no-deprecation payload generate:importmap",
     "generate:types": "cross-env NODE_OPTIONS=--no-deprecation payload generate:types",
-    "ii": "cross-env NODE_OPTIONS=--no-deprecation pnpm --ignore-workspace install",
     "lint": "cross-env NODE_OPTIONS=--no-deprecation eslint .",
     "lint:fix": "cross-env NODE_OPTIONS=--no-deprecation eslint . --fix",
+    "migrate": "cross-env NODE_OPTIONS=--no-deprecation payload migrate",
+    "migrate:create": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:create",
+    "migrate:down": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:down",
+    "migrate:fresh": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:fresh",
+    "migrate:refresh": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:refresh",
+    "migrate:reset": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:reset",
+    "migrate:status": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:status",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
-    "reinstall": "cross-env NODE_OPTIONS=--no-deprecation rm -rf node_modules && rm pnpm-lock.yaml && pnpm --ignore-workspace install",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
     "test": "npm run test:int && npm run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts",
     "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
-    "test:db:template": "cross-env NODE_OPTIONS=--no-deprecation node scripts/reset-db.mjs --rebuild",
-    "test:reset": "cross-env NODE_OPTIONS=--no-deprecation node scripts/reset-db.mjs"
+    "validate:env": "node src/config/validate-environment.mjs"
   },
   "dependencies": {
     "@payloadcms/admin-bar": "3.88.0",
     "@payloadcms/db-postgres": "3.88.0",
-    "@payloadcms/db-sqlite": "3.88.0",
     "@payloadcms/live-preview-react": "3.88.0",
     "@payloadcms/next": "3.88.0",
     "@payloadcms/plugin-form-builder": "3.88.0",
@@ -45,9 +48,10 @@
     "clsx": "^2.1.1",
     "cross-env": "^7.0.3",
     "dotenv": "16.4.7",
+    "geist": "^1.3.0",
     "graphql": "^16.8.2",
     "lucide-react": "0.563.0",
-    "next": "16.3.0",
+    "next": "16.3.3",
     "next-sitemap": "^4.2.3",
     "payload": "3.88.0",
     "prism-react-renderer": "^2.3.1",
@@ -70,7 +74,7 @@
     "@vitejs/plugin-react": "4.5.2",
     "autoprefixer": "^10.4.19",
     "eslint": "^9.16.0",
-    "eslint-config-next": "16.3.0",
+    "eslint-config-next": "16.3.3",
     "jsdom": "28.0.0",
     "postcss": "^8.4.38",
     "prettier": "^3.4.2",
@@ -82,13 +86,6 @@
     "vitest": "4.0.18"
   },
   "engines": {
-    "node": ">=20.9.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "sharp",
-      "esbuild",
-      "unrs-resolver"
-    ]
+    "node": "^18.20.2 || >=20.9.0"
   }
 }

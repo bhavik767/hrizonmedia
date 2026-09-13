@@ -4,16 +4,22 @@ import type { Page } from '@/payload-types'
 
 import { ArchiveBlock } from '@/blocks/ArchiveBlock/Component'
 import { CallToActionBlock } from '@/blocks/CallToAction/Component'
+import { CarouselBlock } from '@/blocks/Carousel/Component'
 import { ContentBlock } from '@/blocks/Content/Component'
 import { FormBlock } from '@/blocks/Form/Component'
+import { GlobalCarouselBlock } from '@/blocks/GlobalCarousel/Component'
 import { MediaBlock } from '@/blocks/MediaBlock/Component'
+import { YouTubeVideoBlock } from '@/blocks/YouTubeVideo/Component'
 
 const blockComponents = {
   archive: ArchiveBlock,
+  carousel: CarouselBlock,
   content: ContentBlock,
   cta: CallToActionBlock,
   formBlock: FormBlock,
+  globalCarousel: GlobalCarouselBlock,
   mediaBlock: MediaBlock,
+  youtubeVideo: YouTubeVideoBlock,
 }
 
 export const RenderBlocks: React.FC<{

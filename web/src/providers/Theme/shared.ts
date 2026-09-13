@@ -2,9 +2,16 @@ import type { Theme } from './types'
 
 export const themeLocalStorageKey = 'payload-theme'
 
-/**
- * Per ADR-0003 the ground is dark unless the visitor has said otherwise. The
- * operating system's `prefers-color-scheme` is deliberately not consulted:
- * resolution is stored preference, else this.
- */
-export const defaultTheme: Theme = 'dark'
+export const defaultTheme = 'light'
+
+export const getImplicitPreference = (): Theme | null => {
+  const mediaQuery = '(prefers-color-scheme: dark)'
+  const mql = window.matchMedia(mediaQuery)
+  const hasImplicitPreference = typeof mql.matches === 'boolean'
+
+  if (hasImplicitPreference) {
+    return mql.matches ? 'dark' : 'light'
+  }
+
+  return null
+}

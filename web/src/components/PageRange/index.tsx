@@ -5,14 +5,10 @@ const defaultLabels = {
   singular: 'Doc',
 }
 
-/*
- * Keyed by collection slug, labelled in the reader's words. `posts` is the
- * collection that stores Articles; "Article" is what a reader is shown.
- */
 const defaultCollectionLabels = {
   posts: {
-    plural: 'Articles',
-    singular: 'Article',
+    plural: 'Posts',
+    singular: 'Post',
   },
 }
 

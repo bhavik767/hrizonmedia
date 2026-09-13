@@ -12,12 +12,16 @@ import {
 import { authenticated } from '../../access/authenticated'
 import { authenticatedOrPublished } from '../../access/authenticatedOrPublished'
 import { Banner } from '../../blocks/Banner/config'
+import { YouTubeVideo } from '../../blocks/YouTubeVideo/config'
+import { Carousel } from '../../blocks/Carousel/config'
 import { Code } from '../../blocks/Code/config'
-import { Faq } from '../../blocks/Faq/config'
-import { KeyTakeaways } from '../../blocks/KeyTakeaways/config'
+import { FormBlock } from '../../blocks/Form/config'
+import { GlobalCarousel } from '../../blocks/GlobalCarousel/config'
 import { MediaBlock } from '../../blocks/MediaBlock/config'
 import { generatePreviewPath } from '../../utilities/generatePreviewPath'
-import { populateAuthors } from './hooks/populateAuthors'
+import { faqTab } from '../../fields/faq'
+import { focusKeywordField, seoAnalysisPanelField, seoScoreField } from '../../fields/seoAnalysis'
+import { computeSeoScoreHook } from '../../utilities/seo/computeScoreHook'
 import { revalidateDelete, revalidatePost } from './hooks/revalidatePost'
 
 import {
@@ -31,15 +35,6 @@ import { slugField } from 'payload'
 
 export const Posts: CollectionConfig<'posts'> = {
   slug: 'posts',
-  /*
-   * The slug stays `posts` — renaming it would buy a database migration for a
-   * name nobody sees. "Post" is a code-only word, so the Author is shown the
-   * canonical one instead, in the sidebar and every view built from these.
-   */
-  labels: {
-    plural: 'Articles',
-    singular: 'Article',
-  },
   access: {
     create: authenticated,
     delete: authenticated,
@@ -59,7 +54,8 @@ export const Posts: CollectionConfig<'posts'> = {
     },
   },
   admin: {
-    defaultColumns: ['title', 'slug', 'updatedAt'],
+    group: 'Content',
+    defaultColumns: ['title', 'slug', 'meta.seoScore', 'updatedAt'],
     livePreview: {
       url: ({ data, req }) =>
         generatePreviewPath({
@@ -100,7 +96,17 @@ export const Posts: CollectionConfig<'posts'> = {
                   return [
                     ...rootFeatures,
                     HeadingFeature({ enabledHeadingSizes: ['h1', 'h2', 'h3', 'h4'] }),
-                    BlocksFeature({ blocks: [Banner, Code, MediaBlock, KeyTakeaways, Faq] }),
+                    BlocksFeature({
+                      blocks: [
+                        Banner,
+                        Code,
+                        MediaBlock,
+                        FormBlock,
+                        Carousel,
+                        GlobalCarousel,
+                        YouTubeVideo,
+                      ],
+                    }),
                     FixedToolbarFeature(),
                     InlineToolbarFeature(),
                     HorizontalRuleFeature(),
@@ -113,6 +119,7 @@ export const Posts: CollectionConfig<'posts'> = {
           ],
           label: 'Content',
         },
+        faqTab,
         {
           fields: [
             {
@@ -121,15 +128,13 @@ export const Posts: CollectionConfig<'posts'> = {
               admin: {
                 position: 'sidebar',
               },
-              /*
-               * An Article cannot be related to itself. On create there is no
-               * id yet, and returning `not_in: [undefined]` compiles to
-               * `id not in (null)`, which is never true — so every candidate
-               * is rejected and the create fails validation. Unfiltered is
-               * correct there: a document that does not exist cannot be
-               * chosen.
-               */
-              filterOptions: ({ id }) => (id ? { id: { not_in: [id] } } : true),
+              filterOptions: ({ id }) => {
+                return {
+                  id: {
+                    not_in: [id],
+                  },
+                }
+              },
               hasMany: true,
               relationTo: 'posts',
             },
@@ -149,6 +154,9 @@ export const Posts: CollectionConfig<'posts'> = {
           name: 'meta',
           label: 'SEO',
           fields: [
+            focusKeywordField(),
+            seoAnalysisPanelField('posts'),
+            seoScoreField(),
             OverviewField({
               titlePath: 'meta.title',
               descriptionPath: 'meta.description',
@@ -162,6 +170,24 @@ export const Posts: CollectionConfig<'posts'> = {
             }),
 
             MetaDescriptionField({}),
+            {
+              name: 'aiSummary',
+              type: 'textarea',
+              label: 'AI Summary',
+              admin: {
+                description:
+                  "A concise, factual summary of this post written for AI answer engines and LLM crawlers (e.g. llms.txt) — separate from the human-facing meta description above.",
+              },
+            },
+            {
+              name: 'canonical',
+              type: 'text',
+              label: 'Canonical URL',
+              admin: {
+                description:
+                  "Defaults to this post's own URL (based on its slug). Enter a URL here to override it with a different canonical page instead.",
+              },
+            },
             PreviewField({
               // if the `generateUrl` function is configured
               hasGenerateFn: true,
@@ -201,44 +227,22 @@ export const Posts: CollectionConfig<'posts'> = {
         position: 'sidebar',
       },
       hasMany: true,
-      relationTo: 'users',
-    },
-    // This field is only used to populate the user data via the `populateAuthors` hook
-    // This is because the `user` collection has access control locked to protect user privacy
-    // GraphQL will also not return mutated user data that differs from the underlying schema
-    {
-      name: 'populatedAuthors',
-      type: 'array',
-      access: {
-        update: () => false,
-      },
-      admin: {
-        disabled: true,
-        readOnly: true,
-      },
-      fields: [
-        {
-          name: 'id',
-          type: 'text',
-        },
-        {
-          name: 'name',
-          type: 'text',
-        },
-      ],
+      relationTo: 'authors',
     },
     slugField(),
   ],
   hooks: {
     afterChange: [revalidatePost],
-    afterRead: [populateAuthors],
     afterDelete: [revalidateDelete],
+    beforeChange: [computeSeoScoreHook('posts')],
   },
   versions: {
     drafts: {
-      autosave: {
-        interval: 100, // We set this interval for optimal live preview
-      },
+      // No autosave: saves should only happen when an editor explicitly clicks Save/Publish
+      // (or a scheduled publish fires), not on every keystroke. Trade-off: this project's
+      // frontend is server-rendered (RSC), so the Live Preview panel (LivePreviewListener /
+      // RefreshRouteOnSave) only re-fetches on an actual save event — without autosave, it now
+      // only updates on manual Save/Publish rather than continuously while typing.
       schedulePublish: true,
     },
     maxPerDoc: 50,

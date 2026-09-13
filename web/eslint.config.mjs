@@ -7,8 +7,6 @@ const eslintConfig = defineConfig([
   ...nextTs,
   {
     rules: {
-      // Existing components intentionally synchronize theme state and compose refs.
-      // Keep the pre-upgrade lint behavior while adopting Next 16's flat config.
       'react-hooks/refs': 'off',
       'react-hooks/set-state-in-effect': 'off',
       '@typescript-eslint/ban-ts-comment': 'warn',

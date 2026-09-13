@@ -1,9 +1,9 @@
-import * as migration_20260905_112757_initial_railway_schema from './20260905_112757_initial_railway_schema'
+import * as migration_20260907_122519_initial_schema from './20260907_122519_initial_schema';
 
 export const migrations = [
   {
-    up: migration_20260905_112757_initial_railway_schema.up,
-    down: migration_20260905_112757_initial_railway_schema.down,
-    name: '20260905_112757_initial_railway_schema',
+    up: migration_20260907_122519_initial_schema.up,
+    down: migration_20260907_122519_initial_schema.down,
+    name: '20260907_122519_initial_schema'
   },
-]
+];

@@ -20,8 +20,8 @@ export const home: (args: HomeArgs) => RequiredDataFromCollectionSlug<'pages'> =
           link: {
             type: 'custom',
             appearance: 'default',
-            label: 'All Articles',
-            url: '/articles',
+            label: 'All posts',
+            url: '/posts',
           },
         },
         {
@@ -47,7 +47,7 @@ export const home: (args: HomeArgs) => RequiredDataFromCollectionSlug<'pages'> =
                   format: 0,
                   mode: 'normal',
                   style: '',
-                  text: 'hrizonmedia',
+                  text: 'Payload Website Template',
                   version: 1,
                 },
               ],
@@ -577,8 +577,8 @@ export const home: (args: HomeArgs) => RequiredDataFromCollectionSlug<'pages'> =
             link: {
               type: 'custom',
               appearance: 'default',
-              label: 'All Articles',
-              url: '/articles',
+              label: 'All posts',
+              url: '/posts',
             },
           },
         ],
@@ -668,7 +668,7 @@ export const home: (args: HomeArgs) => RequiredDataFromCollectionSlug<'pages'> =
     meta: {
       description: 'An open-source website built with Payload and Next.js.',
       image: heroImage.id,
-      title: 'hrizonmedia',
+      title: 'Payload Website Template',
     },
     title: 'Home',
   }
