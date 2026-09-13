@@ -226,16 +226,27 @@ html[data-theme='light'] {
 /* HrizonMedia public identity */
 :root,
 [data-theme='dark'] {
-  --background: #08080b;
-  --foreground: #ffffff;
-  --card: #101015;
-  --card-foreground: #ffffff;
-  --primary: #f3c30c;
-  --primary-foreground: #08080b;
-  --muted: #191920;
-  --muted-foreground: #8c8c9a;
-  --border: #26262f;
-  --ring: #f3c30c;
+  --ink: #08080b;
+  --black: #000000;
+  --panel: #101015;
+  --hover: #191920;
+  --hairline: #26262f;
+  --heading: #ffffff;
+  --body-copy: #8c8c9a;
+  --caption: #5c5c68;
+  --signal: #f3c30c;
+  --signal-deep: #8a6e05;
+  --licensed: #3fd07f;
+  --background: var(--ink);
+  --foreground: var(--heading);
+  --card: var(--panel);
+  --card-foreground: var(--heading);
+  --primary: var(--signal);
+  --primary-foreground: var(--ink);
+  --muted: var(--hover);
+  --muted-foreground: var(--body-copy);
+  --border: var(--hairline);
+  --ring: var(--signal);
 }
 
 * {
@@ -243,16 +254,16 @@ html[data-theme='light'] {
 }
 
 html {
-  background: #08080b;
+  background: var(--ink);
   color-scheme: dark;
   opacity: 1;
   scroll-behavior: smooth;
 }
 
 body {
-  background: #08080b;
-  color: #8c8c9a;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  background: var(--ink);
+  color: var(--body-copy);
+  font-family: var(--font-plex-sans), system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.65;
   margin: 0;
@@ -263,14 +274,14 @@ a {
 }
 
 a:focus-visible {
-  outline: 2px solid #f3c30c;
+  outline: 2px solid var(--signal);
   outline-offset: 5px;
 }
 
 .skip-link {
-  background: #f3c30c;
+  background: var(--signal);
   border-radius: 999px;
-  color: #08080b;
+  color: var(--ink);
   font-weight: 600;
   left: 1rem;
   padding: 0.65rem 1rem;
@@ -293,7 +304,7 @@ a:focus-visible {
 }
 
 .site-header {
-  border-bottom: 1px solid #26262f;
+  border-bottom: 1px solid var(--hairline);
 }
 
 .site-header__inner {
@@ -311,7 +322,7 @@ a:focus-visible {
 
 .brand-lockup {
   align-items: center;
-  color: #fff;
+  color: var(--heading);
   display: inline-flex;
   gap: 0.75rem;
 }
@@ -322,23 +333,21 @@ a:focus-visible {
   width: 25px;
 }
 
-.brand-wordmark {
-  font-family: Manrope, system-ui, sans-serif;
-  font-size: 1.28rem;
-  font-weight: 800;
-  letter-spacing: -0.035em;
+.brand-lockup__artwork {
+  height: auto;
+  width: 190px;
 }
 
 .brand-lockup--compact .brand-mark {
   height: 56px;
-  width: 34px;
+  width: 56px;
 }
 
 .primary-action {
   align-items: center;
-  background: #f3c30c;
+  background: var(--signal);
   border-radius: 999px;
-  color: #08080b;
+  color: var(--ink);
   display: inline-flex;
   font-weight: 600;
   gap: 0.55rem;
@@ -349,7 +358,7 @@ a:focus-visible {
 }
 
 .primary-action:hover {
-  background: #ffd633;
+  background: var(--signal-deep);
   transform: translateY(-1px);
 }
 
@@ -395,7 +404,7 @@ a:focus-visible {
 .control-plate__topline,
 .control-plate__footer,
 .demo-note {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
   font-size: 0.6875rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -403,14 +412,14 @@ a:focus-visible {
 
 .eyebrow {
   align-items: center;
-  color: #8c8c9a;
+  color: var(--body-copy);
   display: flex;
   gap: 0.7rem;
   margin: 0 0 1.5rem;
 }
 
 .eyebrow > span {
-  background: #f3c30c;
+  background: var(--signal);
   border-radius: 999px;
   height: 6px;
   width: 6px;
@@ -419,14 +428,14 @@ a:focus-visible {
 h1,
 h2,
 h3 {
-  color: #fff;
-  font-family: Manrope, system-ui, sans-serif;
+  color: var(--heading);
+  font-family: var(--font-manrope), system-ui, sans-serif;
 }
 
 h1 {
-  font-size: clamp(2.85rem, 5.5vw, 5.25rem);
+  font-size: clamp(2.5rem, 4vw, 3rem);
   font-weight: 800;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   line-height: 0.98;
   margin: 0;
   max-width: 12ch;
@@ -437,7 +446,10 @@ h1 span {
 }
 
 .signal-text {
-  color: #f3c30c;
+  background: var(--signal);
+  color: var(--ink);
+  padding: 0 0.12em 0.08em;
+  width: fit-content;
 }
 
 .hero__lede {
@@ -447,13 +459,13 @@ h1 span {
 }
 
 .demo-note {
-  color: #5c5c68;
+  color: var(--caption);
   margin-top: 2rem;
 }
 
 .control-plate {
-  background: #000;
-  border: 1px solid #26262f;
+  background: var(--black);
+  border: 1px solid var(--hairline);
   border-radius: 20px;
   padding: clamp(1.25rem, 3vw, 2rem);
 }
@@ -461,20 +473,20 @@ h1 span {
 .control-plate__topline,
 .control-plate__footer {
   align-items: center;
-  color: #5c5c68;
+  color: var(--caption);
   display: flex;
   justify-content: space-between;
 }
 
 .status {
   align-items: center;
-  color: #8c8c9a;
+  color: var(--body-copy);
   display: inline-flex;
   gap: 0.45rem;
 }
 
 .status i {
-  background: #3fd07f;
+  background: var(--licensed);
   border-radius: 999px;
   height: 6px;
   width: 6px;
@@ -483,8 +495,8 @@ h1 span {
 .playback-frame {
   align-items: center;
   aspect-ratio: 16 / 9;
-  background: #08080b;
-  border: 1px solid #191920;
+  background: var(--ink);
+  border: 1px solid var(--hover);
   border-radius: 16px;
   display: flex;
   justify-content: center;
@@ -497,29 +509,29 @@ h1 span {
 }
 
 .playback-frame circle {
-  fill: #f3c30c;
+  fill: var(--signal);
 }
 
 .playback-frame path {
-  fill: #08080b;
+  fill: var(--ink);
 }
 
 .control-plate__meter {
-  background: #191920;
+  background: var(--hover);
   height: 2px;
   margin-bottom: 1rem;
   overflow: hidden;
 }
 
 .control-plate__meter span {
-  background: #f3c30c;
+  background: var(--signal);
   display: block;
   height: 100%;
   width: 36%;
 }
 
 .safeguards {
-  border-top: 1px solid #26262f;
+  border-top: 1px solid var(--hairline);
   padding-block: clamp(5rem, 9vw, 8rem);
 }
 
@@ -528,9 +540,9 @@ h1 span {
 }
 
 h2 {
-  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-size: clamp(1.75rem, 3vw, 2rem);
   font-weight: 800;
-  letter-spacing: -0.035em;
+  letter-spacing: -0.02em;
   line-height: 1.05;
   margin: 0;
 }
@@ -543,15 +555,15 @@ h2 {
 }
 
 .safeguard-card {
-  background: #101015;
-  border: 1px solid #26262f;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
   border-radius: 16px;
   min-height: 280px;
   padding: 1.75rem;
 }
 
 .card-number {
-  color: #f3c30c;
+  color: var(--body-copy);
 }
 
 .safeguard-card h3 {
@@ -568,7 +580,7 @@ h2 {
 }
 
 .promise {
-  border: 1px solid #26262f;
+  border: 1px solid var(--hairline);
   border-radius: 20px;
   margin-bottom: clamp(5rem, 9vw, 8rem);
   max-width: 1144px;
@@ -592,7 +604,7 @@ h2 {
 }
 
 .site-footer {
-  border-top: 1px solid #26262f;
+  border-top: 1px solid var(--hairline);
   margin-top: auto;
 }
 
@@ -605,17 +617,34 @@ h2 {
 }
 
 .site-footer__tagline {
-  color: #fff;
-  font-family: Manrope, system-ui, sans-serif;
+  color: var(--heading);
+  font-family: var(--font-manrope), system-ui, sans-serif;
   font-size: 1.125rem;
   font-weight: 700;
   margin: 0;
 }
 
 .site-footer__meta {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
   font-size: 0.75rem;
   margin: 0.35rem 0 0;
+}
+
+.demo-page {
+  min-height: 68vh;
+  padding-block: clamp(6rem, 14vw, 11rem);
+}
+
+.demo-page > p:not(.eyebrow) {
+  margin: 2rem 0;
+  max-width: 58ch;
+}
+
+.text-link {
+  color: var(--body-copy);
+  text-decoration-color: var(--signal);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.35em;
 }
 
 @media (max-width: 800px) {
@@ -649,8 +678,9 @@ h2 {
     min-height: 76px;
   }
 
-  .brand-wordmark {
-    font-size: 1.05rem;
+  .brand-lockup__artwork {
+    height: auto;
+    width: 171px;
   }
 
   .brand-mark {

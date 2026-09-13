@@ -1,11 +1,6 @@
 import type { Metadata } from 'next'
 
-import '@fontsource-variable/manrope'
-import '@fontsource/ibm-plex-mono/400.css'
-import '@fontsource/ibm-plex-mono/500.css'
-import '@fontsource/ibm-plex-sans/400.css'
-import '@fontsource/ibm-plex-sans/500.css'
-import '@fontsource/ibm-plex-sans/600.css'
+import localFont from 'next/font/local'
 import React from 'react'
 
 import { Footer } from '@/Footer/Component'
@@ -14,11 +9,56 @@ import { Header } from '@/Header/Component'
 import './globals.css'
 import { getServerSideURL } from '@/utilities/getURL'
 
+const manrope = localFont({
+  src: '../../../node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2',
+  variable: '--font-manrope',
+  weight: '200 800',
+})
+
+const plexSans = localFont({
+  src: [
+    {
+      path: '../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2',
+      weight: '400',
+    },
+    {
+      path: '../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-500-normal.woff2',
+      weight: '500',
+    },
+    {
+      path: '../../../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2',
+      weight: '600',
+    },
+  ],
+  variable: '--font-plex-sans',
+})
+
+const plexMono = localFont({
+  src: [
+    {
+      path: '../../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2',
+      weight: '400',
+    },
+    {
+      path: '../../../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2',
+      weight: '500',
+    },
+  ],
+  variable: '--font-plex-mono',
+})
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html data-theme="dark" lang="en">
+    <html
+      className={`${manrope.variable} ${plexSans.variable} ${plexMono.variable}`}
+      data-scroll-behavior="smooth"
+      data-theme="dark"
+      lang="en"
+    >
       <body>
-        <a className="skip-link" href="#main-content">Skip to content</a>
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
         <Header />
         {children}
         <Footer />
@@ -35,9 +75,9 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/icon.svg', type: 'image/svg+xml', sizes: '32x32' },
+      { url: '/icon-32.png', type: 'image/png', sizes: '32x32' },
     ],
-    apple: [{ url: '/apple-icon.svg', type: 'image/svg+xml', sizes: '180x180' }],
+    apple: [{ url: '/apple-touch-icon.png', type: 'image/png', sizes: '180x180' }],
   },
   openGraph: {
     type: 'website',

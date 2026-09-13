@@ -12,7 +12,7 @@ export async function Footer() {
         </Link>
         <div>
           <p className="site-footer__tagline">Plays where you allow it. Nowhere else.</p>
-          <p className="site-footer__meta">&copy; {new Date().getFullYear()} HrizonMedia</p>
+          <p className="site-footer__meta">&copy; HrizonMedia</p>
         </div>
       </div>
     </footer>
