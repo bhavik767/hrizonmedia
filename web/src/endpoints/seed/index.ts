@@ -1,4 +1,4 @@
-import type { CollectionSlug, GlobalSlug, Payload, PayloadRequest, File } from 'payload'
+import type { CollectionSlug, Payload, PayloadRequest, File } from 'payload'
 
 import { contactForm as contactFormData } from './contact-form'
 import { contact as contactPageData } from './contact-page'
@@ -15,17 +15,11 @@ const collections: CollectionSlug[] = [
   'media',
   'pages',
   'posts',
+  'authors',
   'forms',
   'form-submissions',
   'search',
 ]
-
-/*
- * The globals this seed clears. Typed as a tuple rather than `GlobalSlug[]` so
- * `navItems` is checked against the two navigation globals: widened to every
- * global, the data no longer matches the ones that carry links.
- */
-const globals = ['header', 'footer'] as const satisfies readonly GlobalSlug[]
 
 const categories = ['Technology', 'News', 'Finance', 'Design', 'Software', 'Engineering']
 
@@ -49,10 +43,19 @@ export const seed = async ({
   payload.logger.info(`— Clearing collections and globals...`)
 
   // clear the database
-  await Promise.all(
-    globals.map((global) =>
-      payload.updateGlobal({
-        slug: global,
+  await Promise.all([
+    payload.updateGlobal({
+      slug: 'header',
+      data: {
+        navItems: [],
+      },
+      depth: 0,
+      context: {
+        disableRevalidate: true,
+      },
+    }),
+    payload.updateGlobal({
+      slug: 'footer',
         data: {
           navItems: [],
         },
@@ -60,9 +63,8 @@ export const seed = async ({
         context: {
           disableRevalidate: true,
         },
-      }),
-    ),
-  )
+    }),
+  ])
 
   await Promise.all(
     collections.map((collection) => payload.db.deleteMany({ collection, req, where: {} })),
@@ -74,17 +76,7 @@ export const seed = async ({
       .map((collection) => payload.db.deleteVersions({ collection, req, where: {} })),
   )
 
-  payload.logger.info(`— Seeding demo author and user...`)
-
-  await payload.delete({
-    collection: 'users',
-    depth: 0,
-    where: {
-      email: {
-        equals: 'demo-author@example.com',
-      },
-    },
-  })
+  payload.logger.info(`— Seeding demo author...`)
 
   payload.logger.info(`— Seeding media...`)
 
@@ -105,11 +97,10 @@ export const seed = async ({
 
   const [demoAuthor, image1Doc, image2Doc, image3Doc, imageHomeDoc] = await Promise.all([
     payload.create({
-      collection: 'users',
+      collection: 'authors',
       data: {
         name: 'Demo Author',
-        email: 'demo-author@example.com',
-        password: 'password',
+        jobTitle: 'Staff Writer',
       },
     }),
     payload.create({
@@ -230,8 +221,8 @@ export const seed = async ({
           {
             link: {
               type: 'custom',
-              label: 'Articles',
-              url: '/articles',
+              label: 'Posts',
+              url: '/posts',
             },
           },
           {

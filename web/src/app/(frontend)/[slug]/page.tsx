@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { PayloadRedirects } from '@/components/PayloadRedirects'
 import configPromise from '@payload-config'
 import { getPayload, type RequiredDataFromCollectionSlug } from 'payload'
+import type { Page } from '@/payload-types'
 import { draftMode } from 'next/headers'
 import React, { cache } from 'react'
 import { homeStatic } from '@/endpoints/seed/home-static'
@@ -10,9 +11,15 @@ import { homeStatic } from '@/endpoints/seed/home-static'
 import { RenderBlocks } from '@/blocks/RenderBlocks'
 import { RenderHero } from '@/heros/RenderHero'
 import { generateMeta } from '@/utilities/generateMeta'
+import PageClient from './page.client'
+import { FAQBlock } from '@/blocks/FAQ/Component'
+import { resolveFAQItems } from '@/utilities/schema/faq'
 import { LivePreviewListener } from '@/components/LivePreviewListener'
+import { getCachedGlobal } from '@/utilities/getGlobals'
+import { buildPageSchema } from '@/utilities/schema'
+import { StructuredData } from '@/utilities/schema/StructuredData'
 
-// Content is fetched from Payload only at runtime, where Railway provides the database and secret.
+// Railway provides Payload's database and secret at runtime, not while the image is built.
 export const dynamic = 'force-dynamic'
 
 export async function generateStaticParams() {
@@ -48,8 +55,16 @@ export default async function Page({ params: paramsPromise }: Args) {
 
   const { hero, layout } = page
 
+  const organization = await getCachedGlobal('organization', 1)()
+  // `page` is typed as `RequiredDataFromCollectionSlug<'pages'>` above (a pre-existing
+  // looseness in this template — it's actually a real queried `Page` doc, or the static
+  // `homeStatic` seed, at runtime), so a straight cast is safe here.
+  const schema = buildPageSchema({ page: page as unknown as Page, organization })
+
   return (
     <article className="pt-16 pb-24">
+      <StructuredData schema={schema} />
+      <PageClient />
       {/* Allows redirects for valid pages too */}
       <PayloadRedirects disableNotFound url={url} />
 
@@ -57,6 +72,11 @@ export default async function Page({ params: paramsPromise }: Args) {
 
       <RenderHero {...hero} />
       <RenderBlocks blocks={layout} />
+      <FAQBlock
+        className="mt-12"
+        heading={page.faq?.heading}
+        items={resolveFAQItems(page.faq)}
+      />
     </article>
   )
 }
@@ -69,7 +89,7 @@ export async function generateMetadata({ params: paramsPromise }: Args): Promise
     slug: decodedSlug,
   })
 
-  return generateMeta({ doc: page })
+  return generateMeta({ collection: 'pages', doc: page })
 }
 
 const queryPageBySlug = cache(async ({ slug }: { slug: string }) => {

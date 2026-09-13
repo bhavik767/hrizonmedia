@@ -33,9 +33,9 @@ export const MediaBlock: React.FC<Props> = (props) => {
   if (media && typeof media === 'object') caption = media.caption
 
   return (
-    <figure
+    <div
       className={cn(
-        'my-8',
+        '',
         {
           container: enableGutter,
         },
@@ -43,35 +43,25 @@ export const MediaBlock: React.FC<Props> = (props) => {
       )}
     >
       {(media || staticImage) && (
-        /*
-          The picture sits on the panel colour behind a hairline, so a
-          screenshot with a transparent or near-white background stays legible
-          on either ground rather than washing out in one of them.
-        */
         <Media
-          className="overflow-hidden rounded-card border border-border bg-card"
-          imgClassName={cn('m-0 w-full', imgClassName)}
+          imgClassName={cn('border border-border rounded-[0.8rem]', imgClassName)}
           resource={media}
           src={staticImage}
         />
       )}
       {caption && (
-        /*
-          The caption is a source line: it is what makes a claim in a figure
-          checkable, so it reads as attribution rather than as body copy.
-        */
-        <figcaption
+        <div
           className={cn(
-            'mt-3 text-sm text-caption',
+            'mt-6',
             {
               container: !disableInnerContainer,
             },
             captionClassName,
           )}
         >
-          <RichText data={caption} enableGutter={false} enableProse={false} />
-        </figcaption>
+          <RichText data={caption} enableGutter={false} />
+        </div>
       )}
-    </figure>
+    </div>
   )
 }

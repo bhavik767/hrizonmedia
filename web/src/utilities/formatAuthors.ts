@@ -1,20 +1,20 @@
-import { Post } from '@/payload-types'
+import type { Post } from '@/payload-types'
 
 /**
- * Formats an array of populatedAuthors from Posts into a prettified string.
- * @param authors - The populatedAuthors array from a Post.
- * @returns A prettified string of authors.
+ * Formats the `authors` relationship from a Post into a prettified string.
+ * @param authors - The `authors` array from a Post (each entry a populated Author doc, or an ID if not populated).
+ * @returns A prettified string of author names.
  * @example
  *
  * [Author1, Author2] becomes 'Author1 and Author2'
  * [Author1, Author2, Author3] becomes 'Author1, Author2, and Author3'
  *
  */
-export const formatAuthors = (
-  authors: NonNullable<NonNullable<Post['populatedAuthors']>[number]>[],
-) => {
-  // Ensure we don't have any authors without a name
-  const authorNames = authors.map((author) => author.name).filter(Boolean)
+export const formatAuthors = (authors: NonNullable<Post['authors']>) => {
+  // Only use populated author docs that have a name
+  const authorNames = authors
+    .map((author) => (typeof author === 'object' && author !== null ? author.name : undefined))
+    .filter((name): name is string => Boolean(name))
 
   if (authorNames.length === 0) return ''
   if (authorNames.length === 1) return authorNames[0]

@@ -1,4 +1,6 @@
 // Any setup scripts you might need go here
 
-// Load .env files
-import 'dotenv/config'
+// Keep integration tests independent from developer and production credentials.
+import { config } from 'dotenv'
+
+config({ path: 'test.env' })

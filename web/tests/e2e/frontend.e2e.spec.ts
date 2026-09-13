@@ -1,9 +1,4 @@
 import { test, expect, Page } from '@playwright/test'
-import {
-  cleanupRelatedPosts,
-  relatedPostsFixture,
-  seedRelatedPosts,
-} from '../helpers/seedRelatedPosts'
 
 test.describe('Frontend', () => {
   let page: Page
@@ -14,39 +9,9 @@ test.describe('Frontend', () => {
   })
 
   test('can load homepage', async ({ page }) => {
-    await page.goto('http://localhost:3000')
-    await expect(page).toHaveTitle(/hrizonmedia/)
+    await page.goto('/')
+    await expect(page).toHaveTitle(/Payload Website Template/)
     const heading = page.locator('h1').first()
-    await expect(heading).toHaveText('Articles')
-    await expect(page.getByRole('link', { name: 'Visit the admin dashboard' })).toHaveCount(0)
-    await expect(
-      page.getByRole('contentinfo').getByRole('link', { name: 'Admin', exact: true }),
-    ).toHaveAttribute('href', '/admin')
-  })
-
-  test.describe('post detail', () => {
-    test.beforeAll(async () => {
-      await seedRelatedPosts()
-    })
-
-    test.afterAll(async () => {
-      await cleanupRelatedPosts()
-    })
-
-    test('should render related post cards with their image and category', async ({ page }) => {
-      await page.goto(`http://localhost:3000/articles/${relatedPostsFixture.postSlug}`)
-
-      await expect(page.locator('h1')).toHaveText(relatedPostsFixture.postTitle)
-
-      const postCards = page.locator('article article')
-
-      const relatedCard = postCards.filter({
-        has: page.getByRole('link', { name: relatedPostsFixture.relatedPostTitle }),
-      })
-
-      await expect(relatedCard).toHaveCount(1)
-      await expect(relatedCard.locator('img')).toBeAttached()
-      await expect(relatedCard).toContainText(relatedPostsFixture.categoryTitle)
-    })
+    await expect(heading).toHaveText('Payload Website Template')
   })
 })

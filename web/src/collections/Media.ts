@@ -17,6 +17,9 @@ const dirname = path.dirname(filename)
 export const Media: CollectionConfig = {
   slug: 'media',
   folders: true,
+  admin: {
+    group: 'Content',
+  },
   access: {
     create: authenticated,
     delete: authenticated,
@@ -44,6 +47,25 @@ export const Media: CollectionConfig = {
     staticDir: path.resolve(dirname, '../../public/media'),
     adminThumbnail: 'thumbnail',
     focalPoint: true,
+    // Without an allowList, "paste a URL" in the upload field fetches the file directly in the
+    // browser, which most external hosts block via CORS ("Failed to fetch"). Hosts listed here
+    // are instead fetched server-side, bypassing that restriction. Add more hosts as needed.
+    pasteURL: {
+      allowList: [
+        // TODO: once ADR-006's S3 + CloudFront media storage is provisioned (Media currently
+        // still uses local disk storage above), add that bucket/distribution's hostname here so
+        // editors can paste URLs of eSaral's own already-hosted images.
+        {
+          hostname: 'images.unsplash.com',
+        },
+        {
+          hostname: 'images.pexels.com',
+        },
+        {
+          hostname: 'cdn.pixabay.com',
+        },
+      ],
+    },
     imageSizes: [
       {
         name: 'thumbnail',
