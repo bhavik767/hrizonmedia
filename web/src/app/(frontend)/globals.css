@@ -831,12 +831,58 @@ h2 {
   justify-content: space-between;
 }
 
-.secure-playback video {
+.secure-playback__video {
   aspect-ratio: 16 / 9;
   background: #020504;
   border: 1px solid var(--hairline);
   max-height: 70vh;
+  overflow: hidden;
+  position: relative;
   width: 100%;
+}
+
+.secure-playback__video video {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.secure-playback__watermark {
+  color: #fff;
+  display: grid;
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: clamp(0.625rem, 1.5vw, 0.875rem);
+  gap: 0.15rem;
+  left: 8%;
+  max-width: 84%;
+  opacity: 0.38;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  position: absolute;
+  text-shadow: 0 1px 3px #000;
+  top: 12%;
+  transition: left 800ms ease, top 800ms ease, transform 800ms ease;
+  z-index: 1;
+}
+
+.secure-playback__watermark[data-position='top-right'] {
+  left: 92%;
+  text-align: right;
+  transform: translateX(-100%);
+}
+
+.secure-playback__watermark[data-position='center'] {
+  left: 50%;
+  top: 48%;
+  transform: translate(-50%, -50%);
+}
+
+.secure-playback__watermark[data-position='bottom-left'] {
+  top: 72%;
+}
+
+.secure-playback__watermark time {
+  white-space: nowrap;
 }
 
 .secure-playback__status,
@@ -847,6 +893,18 @@ h2 {
 .secure-playback__disclosure {
   color: var(--muted);
   font-size: 0.875rem;
+}
+
+.secure-playback__disclosure a {
+  color: var(--body-copy);
+  text-decoration-color: var(--signal);
+  text-underline-offset: 0.25em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .secure-playback__watermark {
+    transition: none;
+  }
 }
 
 .asset-status--queued,
