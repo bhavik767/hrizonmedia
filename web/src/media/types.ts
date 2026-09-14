@@ -28,6 +28,7 @@ export interface MediaAssetDetail extends MediaAssetSummary {
 }
 
 export interface UploadMetadata {
+  fileFingerprint: string
   fileName: string
   mimeType: string
   size: number

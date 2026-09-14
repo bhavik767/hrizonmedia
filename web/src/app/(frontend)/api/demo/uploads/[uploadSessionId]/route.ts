@@ -1,21 +1,28 @@
 import { parseUploadSessionId } from '@/media/identifiers'
-import { completeUpload } from '@/media/library'
+import { abortUpload, resumeUploadSession } from '@/media/library'
 import { withAuthenticatedUploader } from '@/media/request'
 
-export async function PUT(
-  request: Request,
-  context: { params: Promise<{ uploadSessionId: string }> },
-): Promise<Response> {
-  return withAuthenticatedUploader(request, async ({ member, payload }) => {
-    const formData = await request.formData()
-    const file = formData.get('file')
-    if (!(file instanceof File))
-      return Response.json({ error: 'Video file is required.' }, { status: 400 })
+type UploadContext = { params: Promise<{ uploadSessionId: string }> }
 
-    const { uploadSessionId } = await context.params
-    const parsedID = parseUploadSessionId(uploadSessionId)
+async function parsedUploadSessionID(context: UploadContext) {
+  const { uploadSessionId } = await context.params
+  return parseUploadSessionId(uploadSessionId)
+}
+
+export async function GET(request: Request, context: UploadContext): Promise<Response> {
+  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+    const parsedID = await parsedUploadSessionID(context)
     if (!parsedID) return Response.json({ error: 'Upload session not found.' }, { status: 404 })
-    const asset = await completeUpload(payload, member, parsedID, file)
-    return Response.json({ asset })
+    const fileFingerprint = new URL(request.url).searchParams.get('fileFingerprint') || ''
+    return Response.json(await resumeUploadSession(payload, member, parsedID, fileFingerprint))
+  })
+}
+
+export async function DELETE(request: Request, context: UploadContext): Promise<Response> {
+  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+    const parsedID = await parsedUploadSessionID(context)
+    if (!parsedID) return Response.json({ error: 'Upload session not found.' }, { status: 404 })
+    await abortUpload(payload, member, parsedID)
+    return new Response(null, { status: 204 })
   })
 }

@@ -5,6 +5,7 @@ export async function POST(request: Request): Promise<Response> {
   return withAuthenticatedUploader(request, async ({ member, payload }) => {
     const body = (await request.json()) as Record<string, unknown>
     const result = await createUploadSession(payload, member, {
+      fileFingerprint: String(body.fileFingerprint || ''),
       fileName: String(body.fileName || ''),
       mimeType: String(body.mimeType || ''),
       size: Number(body.size),
