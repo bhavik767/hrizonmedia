@@ -1,0 +1,26 @@
+export const auditActions = [
+  'invitation_created',
+  'invitation_accepted',
+  'member_disabled',
+  'upload_started',
+  'upload_completed',
+  'upload_aborted',
+  'upload_expired',
+  'processing_queued',
+  'processing_dispatched',
+  'processing_ready',
+  'processing_failed',
+  'processing_retried',
+  'playback_granted',
+  'playback_licence_acquired',
+  'processing_callback_received',
+  'processing_callback_rejected',
+  'asset_deleted',
+  'asset_expired',
+  'access_revoked',
+  'source_deleted',
+  'outputs_deleted',
+  'operations_controls_updated',
+] as const
+
+export type AuditAction = (typeof auditActions)[number]

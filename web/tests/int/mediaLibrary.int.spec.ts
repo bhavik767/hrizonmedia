@@ -9,10 +9,13 @@ import {
   listVisibleAssets,
   resumeUploadSession,
   receiveUploadPart,
+  renewUploadPart,
 } from '@/media/library'
 import { resetFakeMediaStorage } from '@/media/providers/fake'
+import { runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
+import { getOperatorOverview, updateOperationalControls } from '@/pilot/operations'
 import { mkvFixture, mp4Fixture } from '../helpers/mediaFixtures'
 
 let payload: Payload
@@ -50,6 +53,8 @@ async function uploadAllParts(
 }
 
 async function cleanMediaLibrary() {
+  await payload.delete({ collection: 'audit-events', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'media-operations', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'upload-sessions', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })
@@ -135,6 +140,36 @@ describe('Media Asset library persistence', () => {
         metadataFor(fixture).fileFingerprint,
       ),
     ).rejects.toMatchObject({ status: 410 })
+  })
+
+  it('blocks resumed upload activity after an operator enables the kill switch', async () => {
+    const fixture = mp4Fixture()
+    const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
+    const operator = await payload.create({
+      collection: 'pilot-members',
+      data: {
+        email: 'upload-kill-switch-operator@example.test',
+        invitationAcceptedAt: new Date().toISOString(),
+        name: 'Upload kill switch operator',
+        password: 'operator-password',
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    await updateOperationalControls(payload, operator, {
+      killSwitchEnabled: true,
+      providerConcurrency: 2,
+    })
+
+    for (const activity of [
+      () => resumeUploadSession(payload, firstUploader, session.uploadSessionId, metadataFor(fixture).fileFingerprint),
+      () => renewUploadPart(payload, firstUploader, session.uploadSessionId, 1),
+      () => receiveUploadPart(payload, firstUploader, session.uploadSessionId, 1, fixture),
+      () => completeUpload(payload, firstUploader, session.uploadSessionId, []),
+    ]) {
+      await expect(activity()).rejects.toMatchObject({ status: 503 })
+    }
   })
 
   it('resumes with completed parts but rejects a mismatched file', async () => {
@@ -225,5 +260,41 @@ describe('Media Asset library persistence', () => {
 
     await expect(cleanupAbandonedUploads(payload)).resolves.toBe(1)
     await expect(cleanupAbandonedUploads(payload)).resolves.toBe(0)
+  })
+
+  it('records upload and processing transitions for operator investigation', async () => {
+    const fixture = mp4Fixture()
+    const startedAt = new Date('2026-09-15T09:00:00.000Z')
+    const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
+    const parts = await uploadAllParts(session, fixture)
+    await completeUpload(payload, firstUploader, session.uploadSessionId, parts, undefined, {
+      now: startedAt,
+    })
+    await runProcessingCycle(payload, { now: new Date(startedAt.getTime() + 10_000) })
+    const operator = await payload.create({
+      collection: 'pilot-members',
+      data: {
+        email: 'audit-viewer@example.test',
+        invitationAcceptedAt: startedAt.toISOString(),
+        name: 'Audit viewer',
+        password: 'operator-password',
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+
+    const actions = (await getOperatorOverview(payload, operator)).auditEvents.map(
+      ({ action }) => action,
+    )
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'upload_started',
+        'upload_completed',
+        'processing_queued',
+        'processing_dispatched',
+        'processing_ready',
+      ]),
+    )
   })
 })

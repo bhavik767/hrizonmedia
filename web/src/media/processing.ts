@@ -3,9 +3,11 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 
 import { sql } from '@payloadcms/db-postgres'
-import type { Payload, Where } from 'payload'
+import type { Payload, PayloadRequest, Where } from 'payload'
 
 import type { MediaAsset, ProcessingJob } from '@/payload-types'
+import { recordAuditEvent } from '@/audit/events'
+import { getOperationalControls } from '@/pilot/operations'
 
 import type { MediaAssetId, ProcessingJobId, ProviderJobId } from './identifiers'
 import { PermanentTranscodeError, getFakeProviders } from './providers/fake'
@@ -88,11 +90,12 @@ export function newProcessingJobData(input: {
   }
 }
 
-async function setAssetStatus(
+export async function setProcessingAssetStatus(
   payload: Payload,
   job: ProcessingJob,
   status: 'queued' | 'processing' | 'ready' | 'failed',
   now: Date,
+  req?: PayloadRequest,
 ) {
   const playbackData =
     status === 'ready'
@@ -106,10 +109,32 @@ async function setAssetStatus(
     data: { ...playbackData, status, statusChangedAt: now.toISOString() },
     id: relationID(job.asset),
     overrideAccess: true,
+    req,
+  })
+  const action =
+    status === 'processing'
+      ? 'processing_dispatched'
+      : status === 'ready'
+        ? 'processing_ready'
+        : status === 'failed'
+          ? 'processing_failed'
+          : 'processing_retried'
+  await recordAuditEvent(payload, {
+    action,
+    assetID: relationID(job.asset),
+    eventKey: `processing-job:${job.processingJobId}:${action}:${status === 'ready' ? 'final' : job.attempts}`,
+    occurredAt: now,
+    req,
   })
 }
 
-async function failJob(payload: Payload, job: ProcessingJob, now: Date, code: string) {
+export async function failProcessingJob(
+  payload: Payload,
+  job: ProcessingJob,
+  now: Date,
+  code: string,
+  req?: PayloadRequest,
+) {
   await payload.update({
     collection: 'processing-jobs',
     data: {
@@ -122,8 +147,9 @@ async function failJob(payload: Payload, job: ProcessingJob, now: Date, code: st
     },
     id: job.id,
     overrideAccess: true,
+    req,
   })
-  await setAssetStatus(payload, job, 'failed', now)
+  await setProcessingAssetStatus(payload, job, 'failed', now, req)
 }
 
 async function scheduleRetry(
@@ -134,7 +160,7 @@ async function scheduleRetry(
   delay = true,
 ) {
   if (job.attempts >= MAX_ATTEMPTS) {
-    await failJob(payload, job, now, code)
+    await failProcessingJob(payload, job, now, code)
     return
   }
   await payload.update({
@@ -154,7 +180,7 @@ async function scheduleRetry(
     id: job.id,
     overrideAccess: true,
   })
-  await setAssetStatus(payload, job, 'queued', now)
+  await setProcessingAssetStatus(payload, job, 'queued', now)
 }
 
 async function recoverExpiredJobs(payload: Payload, now: Date, where: Where) {
@@ -174,6 +200,7 @@ async function dispatchQueuedJobs(
   now: Date,
   provider: TranscodeProvider,
   workerId: string,
+  providerConcurrency: number,
 ) {
   const queued = await payload.find({
     collection: 'processing-jobs',
@@ -188,23 +215,44 @@ async function dispatchQueuedJobs(
     },
   })
 
+  let dispatched = 0
   for (const candidate of queued.docs) {
+    if (dispatched >= providerConcurrency) return
     const leaseToken = `${workerId}:${randomUUID()}`
     const leasedUntil = new Date(now.getTime() + LEASE_DURATION_MS)
-    const claim = await payload.db.drizzle.execute(sql`
-      UPDATE processing_jobs
-      SET status = 'dispatching',
-          attempts = attempts + 1,
-          lease_token = ${leaseToken},
-          leased_until = ${leasedUntil},
-          updated_at = ${now}
-      WHERE id = ${candidate.id}
-        AND status = 'queued'
-        AND next_attempt_at <= ${now}
-      RETURNING id
-    `)
+    const transactionID = await payload.db.beginTransaction()
+    if (transactionID === null) throw new Error('Provider concurrency requires transactions.')
+    let claim: { rows: Array<{ id?: unknown }> }
+    try {
+      const transaction = payload.db.sessions?.[String(transactionID)]?.db as
+        { execute: (query: unknown) => Promise<unknown> } | undefined
+      if (!transaction) throw new Error('Unable to start the provider concurrency transaction.')
+      await transaction.execute(sql`SELECT pg_advisory_xact_lock(394039)`)
+      claim = (await transaction.execute(sql`
+        UPDATE processing_jobs
+        SET status = 'dispatching',
+            attempts = attempts + 1,
+            lease_token = ${leaseToken},
+            leased_until = ${leasedUntil},
+            updated_at = ${now}
+        WHERE id = ${candidate.id}
+          AND status = 'queued'
+          AND next_attempt_at <= ${now}
+          AND (
+            SELECT count(*)
+            FROM processing_jobs
+            WHERE status IN ('dispatching', 'processing')
+          ) < ${providerConcurrency}
+        RETURNING id
+      `)) as { rows: Array<{ id?: unknown }> }
+      await payload.db.commitTransaction(transactionID)
+    } catch (error) {
+      await payload.db.rollbackTransaction(transactionID)
+      throw error
+    }
     const claimedID = claim.rows[0]?.id
     if (!claimedID) continue
+    dispatched += 1
     const job = await payload.findByID({
       collection: 'processing-jobs',
       depth: 0,
@@ -240,11 +288,11 @@ async function dispatchQueuedJobs(
         id: job.id,
         overrideAccess: true,
       })
-      await setAssetStatus(payload, job, 'processing', now)
+      await setProcessingAssetStatus(payload, job, 'processing', now)
     } catch (error) {
       const attemptedJob = { ...job, attempts: candidate.attempts + 1 }
       if (error instanceof PermanentTranscodeError) {
-        await failJob(payload, attemptedJob, now, 'provider_rejected')
+        await failProcessingJob(payload, attemptedJob, now, 'provider_rejected')
       } else {
         await scheduleRetry(payload, attemptedJob, now, 'provider_unavailable')
       }
@@ -275,10 +323,10 @@ async function pollProcessingJobs(payload: Payload, now: Date, provider: Transco
         id: job.id,
         overrideAccess: true,
       })
-      await setAssetStatus(payload, job, 'ready', now)
+      await setProcessingAssetStatus(payload, job, 'ready', now)
     } catch (error) {
       if (error instanceof PermanentTranscodeError) {
-        await failJob(payload, job, now, 'provider_rejected')
+        await failProcessingJob(payload, job, now, 'provider_rejected')
       } else {
         await scheduleRetry(payload, job, now, 'provider_unavailable')
       }
@@ -292,13 +340,21 @@ export async function runProcessingCycle(
 ): Promise<void> {
   const now = options.now ?? new Date()
   const provider = options.provider ?? getFakeProviders().transcode
+  const controls = await getOperationalControls(payload)
+  if (controls.killSwitchEnabled) return
   await recoverExpiredJobs(payload, now, {
     and: [
       { status: { equals: 'dispatching' } },
       { leasedUntil: { less_than_equal: now.toISOString() } },
     ],
   })
-  await dispatchQueuedJobs(payload, now, provider, options.workerId ?? `worker-${process.pid}`)
+  await dispatchQueuedJobs(
+    payload,
+    now,
+    provider,
+    options.workerId ?? `worker-${process.pid}`,
+    controls.providerConcurrency,
+  )
   await pollProcessingJobs(payload, now, provider)
   await recoverExpiredJobs(payload, now, {
     and: [
@@ -306,5 +362,11 @@ export async function runProcessingCycle(
       { processingDeadlineAt: { less_than_equal: now.toISOString() } },
     ],
   })
-  await dispatchQueuedJobs(payload, now, provider, options.workerId ?? `worker-${process.pid}`)
+  await dispatchQueuedJobs(
+    payload,
+    now,
+    provider,
+    options.workerId ?? `worker-${process.pid}`,
+    controls.providerConcurrency,
+  )
 }

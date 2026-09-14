@@ -22,10 +22,12 @@ describe('Pilot Member invitations', () => {
   })
 
   beforeEach(async () => {
+    await payload.delete({ collection: 'audit-events', overrideAccess: true, where: {} })
     await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
   })
 
   afterAll(async () => {
+    await payload.delete({ collection: 'audit-events', overrideAccess: true, where: {} })
     await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
   })
 

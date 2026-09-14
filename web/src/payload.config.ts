@@ -10,6 +10,7 @@ import { AuditEvents } from './collections/AuditEvents'
 import { Categories } from './collections/Categories'
 import { Media } from './collections/Media'
 import { MediaAssets } from './collections/MediaAssets'
+import { MediaOperations } from './collections/MediaOperations'
 import { Pages } from './collections/Pages'
 import { PilotMembers } from './collections/PilotMembers'
 import { PlaybackGrants } from './collections/PlaybackGrants'
@@ -117,6 +118,7 @@ export default buildConfig({
     Users,
     PilotMembers,
     MediaAssets,
+    MediaOperations,
     UploadSessions,
     ProcessingJobs,
     PlaybackGrants,

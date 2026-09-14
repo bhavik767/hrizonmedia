@@ -3,6 +3,7 @@ import { sql } from '@payloadcms/db-postgres'
 import type { Payload } from 'payload'
 
 import type { PilotMember } from '@/payload-types'
+import { recordAuditEvent } from '@/audit/events'
 
 const INVITATION_LIFETIME_MS = 24 * 60 * 60 * 1000
 
@@ -66,15 +67,14 @@ export async function createPilotInvitation({
     status: 'active' as const,
   }
 
-  if (existing.docs[0]) {
-    await payload.update({
+  const invited = existing.docs[0]
+    ? await payload.update({
       collection: 'pilot-members',
       id: existing.docs[0].id,
       data: invitationData,
       overrideAccess: true,
     })
-  } else {
-    await payload.create({
+    : await payload.create({
       collection: 'pilot-members',
       data: {
         ...invitationData,
@@ -84,7 +84,14 @@ export async function createPilotInvitation({
       },
       overrideAccess: true,
     })
-  }
+
+  await recordAuditEvent(payload, {
+    action: 'invitation_created',
+    actorID: actor.id,
+    eventKey: `pilot-member:${invited.id}:invitation-created:${expiresAt}`,
+    memberID: invited.id,
+    occurredAt: now,
+  })
 
   return { expiresAt, token }
 }
@@ -152,6 +159,13 @@ export async function acceptPilotInvitation({
       req: { payload, transactionID },
     })
     await payload.db.commitTransaction(transactionID)
+    await recordAuditEvent(payload, {
+      action: 'invitation_accepted',
+      actorID: accepted.id,
+      eventKey: `pilot-member:${accepted.id}:invitation-accepted:${acceptedAt}`,
+      memberID: accepted.id,
+      occurredAt: now,
+    })
     return accepted
   } catch (error) {
     await payload.db.rollbackTransaction(transactionID)

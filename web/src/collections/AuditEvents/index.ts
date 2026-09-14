@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { auditActions } from '@/audit/actions'
 
 export const AuditEvents: CollectionConfig = {
   slug: 'audit-events',
@@ -15,21 +16,15 @@ export const AuditEvents: CollectionConfig = {
     {
       name: 'action',
       type: 'select',
-      options: [
-        'asset_deleted',
-        'asset_expired',
-        'access_revoked',
-        'source_deleted',
-        'outputs_deleted',
-      ],
+      options: [...auditActions],
       required: true,
       index: true,
     },
+    { name: 'member', type: 'relationship', relationTo: 'pilot-members', index: true },
     {
       name: 'asset',
       type: 'relationship',
       relationTo: 'media-assets',
-      required: true,
       index: true,
     },
     { name: 'actor', type: 'relationship', relationTo: 'pilot-members', index: true },

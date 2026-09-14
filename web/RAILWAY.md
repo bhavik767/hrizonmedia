@@ -4,9 +4,14 @@ Railway builds `web/Dockerfile` and starts the standalone Next.js/Payload server
 `0.0.0.0:$PORT`. Configure the service health-check path as `/health`.
 
 Production startup requires `DATABASE_URL`, `PAYLOAD_SECRET`, `BUCKET`,
-`ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, and `ENDPOINT`. `DATABASE_URL` must be a
-PostgreSQL URL. `REGION` defaults to `auto`; set `AWS_S3_URL_STYLE=path` or
+`ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `ENDPOINT`, and `TRANSCODER_CALLBACK_SECRET`.
+`DATABASE_URL` must be a PostgreSQL URL. `REGION` defaults to `auto`; set
+`AWS_S3_URL_STYLE=path` or
 `S3_FORCE_PATH_STYLE=true` when the bucket endpoint needs path-style requests.
+
+`TRANSCODER_CALLBACK_SECRET` authenticates signed provider callbacks. Provider
+concurrency defaults to `MEDIA_PROVIDER_CONCURRENCY=2` until an operator changes it in
+the Demo oversight console; the persisted operator setting then takes precedence.
 
 The public Demo navigation and `/demo` route are disabled unless
 `HRIZONMEDIA_DEMO_ENABLED=true`. Keep the variable unset in production until the real

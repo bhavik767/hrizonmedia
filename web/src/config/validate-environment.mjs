@@ -5,6 +5,7 @@ const REQUIRED_PRODUCTION_VARIABLES = [
   'ENDPOINT',
   'PAYLOAD_SECRET',
   'SECRET_ACCESS_KEY',
+  'TRANSCODER_CALLBACK_SECRET',
 ]
 
 export function validateEnvironment(environment = process.env) {
