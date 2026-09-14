@@ -3,7 +3,7 @@ import type { Author } from '@/payload-types'
 import { getServerSideURL } from '../getURL'
 import { resolveMediaUrl } from './resolveMediaUrl'
 
-// Author -> schema.org Person, used as BlogPosting's `author`. This is also eSaral's E-E-A-T
+// Author -> schema.org Person, used as BlogPosting's `author`.
 // signal (requirements.md section 4) doing double duty as structured data.
 export function getPersonSchema(author: Author | null | undefined) {
   if (!author) return null

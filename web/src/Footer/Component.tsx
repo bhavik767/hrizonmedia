@@ -1,30 +1,18 @@
-import { getCachedGlobal } from '@/utilities/getGlobals'
 import Link from 'next/link'
 import React from 'react'
 
-import { ThemeSelector } from '@/providers/Theme/ThemeSelector'
-import { CMSLink } from '@/components/Link'
 import { Logo } from '@/components/Logo/Logo'
 
 export async function Footer() {
-  const footerData = await getCachedGlobal('footer', 1)()
-
-  const navItems = footerData?.navItems || []
-
   return (
-    <footer className="mt-auto border-t border-border bg-black dark:bg-card text-white">
-      <div className="container py-8 gap-8 flex flex-col md:flex-row md:justify-between">
-        <Link className="flex items-center" href="/">
-          <Logo />
+    <footer className="site-footer">
+      <div className="shell site-footer__inner">
+        <Link aria-label="HrizonMedia home" className="footer-mark" href="/">
+          <Logo compact />
         </Link>
-
-        <div className="flex flex-col-reverse items-start md:flex-row gap-4 md:items-center">
-          <ThemeSelector />
-          <nav className="flex flex-col md:flex-row gap-4">
-            {navItems.map(({ link }, i) => {
-              return <CMSLink className="text-white" key={i} {...link} />
-            })}
-          </nav>
+        <div>
+          <p className="site-footer__tagline">Plays where you allow it. Nowhere else.</p>
+          <p className="site-footer__meta">&copy; HrizonMedia</p>
         </div>
       </div>
     </footer>

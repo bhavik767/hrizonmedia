@@ -8,6 +8,8 @@ import { config } from 'dotenv'
 
 config({ path: 'test.env' })
 
+const demoFlag = process.env.HRIZONMEDIA_DEMO_ENABLED === 'false' ? 'false' : 'true'
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -38,7 +40,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev -- -p 3103',
+    command: 'node node_modules/next/dist/bin/next dev -p 3103',
+    env: { HRIZONMEDIA_DEMO_ENABLED: demoFlag, NODE_OPTIONS: '--no-deprecation' },
     reuseExistingServer: false,
     timeout: 180_000,
     url: 'http://127.0.0.1:3103',

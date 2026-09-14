@@ -21,7 +21,7 @@ export const Organization: GlobalConfig = {
   admin: {
     group: 'Site',
     description:
-      "eSaral's organization info, used to populate schema.org structured data (Article publisher, Course provider) and site-level assets (favicon) across the site.",
+      'HrizonMedia organization information used for structured data and site-level assets.',
   },
   access: {
     read: () => true,
@@ -31,7 +31,7 @@ export const Organization: GlobalConfig = {
       name: 'name',
       type: 'text',
       required: true,
-      defaultValue: 'eSaral',
+      defaultValue: 'HrizonMedia',
       admin: {
         description: 'Legal/display name used as the schema.org Organization name.',
       },
@@ -130,7 +130,7 @@ export const Organization: GlobalConfig = {
           name: 'foundingDate',
           type: 'date',
           admin: {
-            description: 'When eSaral was founded (schema.org foundingDate).',
+            description: 'When HrizonMedia was founded (schema.org foundingDate).',
             date: {
               pickerAppearance: 'dayOnly',
             },
@@ -184,7 +184,7 @@ export const Organization: GlobalConfig = {
       admin: {
         initCollapsed: true,
         description:
-          'eSaral is an ed-tech / test-prep company, so its JSON-LD is marked up as an EducationalOrganization (a schema.org subtype of Organization) by default rather than a plain Organization.',
+          'Choose the schema.org organization type that accurately describes HrizonMedia.',
       },
       fields: [
         {
@@ -206,7 +206,7 @@ export const Organization: GlobalConfig = {
           label: 'Subjects / Exams Covered',
           admin: {
             description:
-              'Topics eSaral is known for (e.g. JEE, NEET, Physics, Chemistry, Maths, Biology) — populates schema.org knowsAbout, a GEO/E-E-A-T signal for AI answer engines.',
+              'Topics HrizonMedia is known for — populates schema.org knowsAbout.',
             initCollapsed: true,
           },
           fields: [{ name: 'topic', type: 'text', required: true }],
