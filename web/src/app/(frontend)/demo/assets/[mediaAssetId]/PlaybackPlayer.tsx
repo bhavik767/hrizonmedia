@@ -160,11 +160,11 @@ export function PlaybackPlayer({
       </div>
       <div className="secure-playback__video" ref={videoContainerRef}>
         <video
+          aria-describedby="playback-watermark-notice"
           aria-label="Encrypted Media Asset"
-          controlsList="nodownload noremoteplayback"
+          controlsList="nodownload"
           data-testid="secure-video"
           disablePictureInPicture
-          disableRemotePlayback
           onContextMenu={(event) => event.preventDefault()}
           playsInline
           ref={videoRef}
@@ -189,7 +189,7 @@ export function PlaybackPlayer({
       <p aria-live="polite" className="secure-playback__status">
         {message}
       </p>
-      <p className="secure-playback__disclosure">
+      <p className="secure-playback__disclosure" id="playback-watermark-notice">
         Your full email and the current timestamp move across playback to attribute screen
         recordings. Streaming-only playback uses temporary rights; downloads, offline playback,
         persistent licences, and picture-in-picture are disabled. Read the{' '}
