@@ -12,7 +12,7 @@ export async function GET(
   return withAuthenticatedUploader(request, async ({ member, payload }) => {
     try {
       const { playbackGrantId: rawGrantId, segment } = await context.params
-      if (!/^(init\.mp4|[1-9]\d*\.m4s)$/.test(segment)) {
+      if (!/^(audio|video-(360|480|720|1080))-(init\.mp4|[1-9]\d*\.m4s)$/.test(segment)) {
         throw new PlaybackAuthorizationError('Playback resource not found.', 404)
       }
       await authorizePlaybackResourceRequest({
@@ -24,7 +24,13 @@ export async function GET(
       return new Response(new Uint8Array(), {
         headers: {
           'cache-control': 'private, no-store',
-          'content-type': segment.endsWith('.mp4') ? 'video/mp4' : 'video/iso.segment',
+          'content-type': segment.startsWith('audio-')
+            ? segment.endsWith('.mp4')
+              ? 'audio/mp4'
+              : 'audio/iso.segment'
+            : segment.endsWith('.mp4')
+              ? 'video/mp4'
+              : 'video/iso.segment',
         },
       })
     } catch (error) {
