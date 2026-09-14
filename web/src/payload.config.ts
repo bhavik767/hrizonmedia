@@ -8,10 +8,13 @@ import { fileURLToPath } from 'url'
 import { Authors } from './collections/Authors'
 import { Categories } from './collections/Categories'
 import { Media } from './collections/Media'
+import { MediaAssets } from './collections/MediaAssets'
 import { Pages } from './collections/Pages'
 import { PilotMembers } from './collections/PilotMembers'
 import { Posts } from './collections/Posts'
+import { ProcessingJobs } from './collections/ProcessingJobs'
 import { ReusableBlocks } from './collections/ReusableBlocks'
+import { UploadSessions } from './collections/UploadSessions'
 import { Users } from './collections/Users'
 import { Footer } from './Footer/config'
 import { Header } from './Header/config'
@@ -27,9 +30,9 @@ const dirname = path.dirname(filename)
 
 const bucketConfigured = Boolean(
   process.env.BUCKET &&
-    process.env.ACCESS_KEY_ID &&
-    process.env.SECRET_ACCESS_KEY &&
-    process.env.ENDPOINT,
+  process.env.ACCESS_KEY_ID &&
+  process.env.SECRET_ACCESS_KEY &&
+  process.env.ENDPOINT,
 )
 
 const railwayStorage = s3Storage({
@@ -103,7 +106,19 @@ export default buildConfig({
       connectionString: process.env.DATABASE_URL || '',
     },
   }),
-  collections: [Pages, Posts, Media, Categories, Authors, Users, PilotMembers, ReusableBlocks],
+  collections: [
+    Pages,
+    Posts,
+    Media,
+    Categories,
+    Authors,
+    Users,
+    PilotMembers,
+    MediaAssets,
+    UploadSessions,
+    ProcessingJobs,
+    ReusableBlocks,
+  ],
   cors: [getServerSideURL()].filter(Boolean),
   // Media is the only collection with folder organization enabled; hide the cross-collection
   // "Browse by Folder" entry point at the top of the admin nav sidebar while keeping folders

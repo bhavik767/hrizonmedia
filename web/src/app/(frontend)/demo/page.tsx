@@ -6,6 +6,7 @@ import { ensureDemoEnabled } from '@/pilot/demoAvailability'
 import { getPilotMember } from '@/pilot/session'
 
 import { signOut } from './actions'
+import { MediaLibrary } from './MediaLibrary'
 
 export const metadata: Metadata = {
   title: 'Demo | HrizonMedia',
@@ -39,6 +40,7 @@ export default async function DemoPage() {
           </button>
         </form>
       </div>
+      {member.role === 'uploader' && <MediaLibrary />}
     </main>
   )
 }
