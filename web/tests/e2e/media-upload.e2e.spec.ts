@@ -67,8 +67,8 @@ test.describe('Media Asset tracer bullet', () => {
 
   test('retries a transient part failure without restarting completed parts', async ({ page }) => {
     const partRequests = new Map<string, number>()
-    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/(\d+)/, async (route) => {
-      const partNumber = route.request().url().split('/').at(-1)!
+    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/(\d+)\/content$/, async (route) => {
+      const partNumber = route.request().url().split('/').at(-2)!
       partRequests.set(partNumber, (partRequests.get(partNumber) || 0) + 1)
       if (partNumber === '2' && partRequests.get(partNumber) === 1) {
         await route.fulfill({
@@ -82,7 +82,7 @@ test.describe('Media Asset tracer bullet', () => {
 
     await signIn(page, testInvitee)
     await page.getByLabel('Video file').setInputFiles({
-      buffer: mp4Fixture(),
+      buffer: mp4Fixture(60, 5 * 1024 * 1024 + 1),
       mimeType: 'video/mp4',
       name: 'retry-lesson.mp4',
     })
@@ -100,8 +100,8 @@ test.describe('Media Asset tracer bullet', () => {
   }) => {
     const partRequests = new Map<string, number>()
     let interruptSecondPart = true
-    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/(\d+)/, async (route) => {
-      const partNumber = route.request().url().split('/').at(-1)!
+    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/(\d+)\/content$/, async (route) => {
+      const partNumber = route.request().url().split('/').at(-2)!
       partRequests.set(partNumber, (partRequests.get(partNumber) || 0) + 1)
       if (partNumber === '2' && interruptSecondPart) {
         await route.abort('connectionfailed')
@@ -110,7 +110,11 @@ test.describe('Media Asset tracer bullet', () => {
       await route.continue()
     })
 
-    const file = { buffer: mp4Fixture(), mimeType: 'video/mp4', name: 'resume-lesson.mp4' }
+    const file = {
+      buffer: mp4Fixture(60, 5 * 1024 * 1024 + 1),
+      mimeType: 'video/mp4',
+      name: 'resume-lesson.mp4',
+    }
     await signIn(page, testInvitee)
     await page.getByLabel('Video file').setInputFiles(file)
     await page.getByRole('button', { name: 'Upload asset' }).click()
@@ -128,5 +132,35 @@ test.describe('Media Asset tracer bullet', () => {
       page.getByRole('article', { name: 'resume-lesson.mp4' }).getByText('ready'),
     ).toBeVisible()
     expect(partRequests.get('1')).toBe(1)
+  })
+
+  test('rejects a changed file before combining it with completed parts', async ({ page }) => {
+    let interruptSecondPart = true
+    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/2\/content$/, async (route) => {
+      if (interruptSecondPart) {
+        await route.abort('connectionfailed')
+        return
+      }
+      await route.continue()
+    })
+
+    const original = mp4Fixture(60, 5 * 1024 * 1024 + 1)
+    const changed = Buffer.from(original)
+    changed[1024 * 1024] = 1
+    const file = { buffer: original, mimeType: 'video/mp4', name: 'changed-lesson.mp4' }
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles(file)
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await expect(page.locator('.form-message[role="alert"]')).toContainText(
+      'Reselect this file to resume',
+    )
+
+    interruptSecondPart = false
+    await page.reload()
+    await page.getByLabel('Video file').setInputFiles({ ...file, buffer: changed })
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await expect(page.locator('.form-message[role="alert"]')).toContainText(
+      'does not match the completed upload parts',
+    )
   })
 })

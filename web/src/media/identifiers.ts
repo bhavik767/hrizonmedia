@@ -4,6 +4,7 @@ export type MediaAssetId = `asset_${string}`
 export type UploadSessionId = `upload_${string}`
 export type ProcessingJobId = `processing_${string}`
 export type ProviderJobId = `provider_job_${string}`
+export type ProviderUploadId = `provider_upload_${string}`
 
 export function newMediaAssetId(): MediaAssetId {
   return `asset_${randomUUID()}`

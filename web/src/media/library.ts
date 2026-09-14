@@ -9,9 +9,11 @@ import {
   newProcessingJobId,
   newUploadSessionId,
   type MediaAssetId,
+  type ProviderUploadId,
   type UploadSessionId,
 } from './identifiers'
-import type { CompletedPart, MediaProviders } from './providers/contracts'
+import type { CompletedPart } from './multipart'
+import type { MediaProviders, StorageProvider } from './providers/contracts'
 import { getFakeProviders, InvalidMediaError, MultipartUploadError } from './providers/fake'
 import type { MediaAssetDetail, MediaAssetStatus, MediaAssetSummary, UploadMetadata } from './types'
 
@@ -44,19 +46,18 @@ function summary(asset: MediaAsset): MediaAssetSummary {
   }
 }
 
-function validateMetadata(input: UploadMetadata): void {
+function validateMetadata(input: UploadMetadata): UploadMetadata {
   const extension = input.fileName.toLowerCase().split('.').at(-1)
-  const supported =
-    (input.mimeType === 'video/mp4' && extension === 'mp4') ||
-    (input.mimeType === 'video/x-matroska' && extension === 'mkv')
-
-  if (!supported) throw new MediaLibraryError('Choose an MP4 or MKV video.', 400)
+  if (extension !== 'mp4' && extension !== 'mkv') {
+    throw new MediaLibraryError('Choose an MP4 or MKV video.', 400)
+  }
   if (!Number.isSafeInteger(input.size) || input.size <= 0 || input.size > MAX_ASSET_BYTES) {
     throw new MediaLibraryError('The video must be no larger than 2 GB.', 400)
   }
   if (!input.fileFingerprint.trim() || input.fileFingerprint.length > 500) {
     throw new MediaLibraryError('The selected file could not be identified safely.', 400)
   }
+  return { ...input, mimeType: extension === 'mp4' ? 'video/mp4' : 'video/x-matroska' }
 }
 
 function sessionResponse(session: UploadSession, asset: MediaAsset, parts: CompletedPart[] = []) {
@@ -66,27 +67,33 @@ function sessionResponse(session: UploadSession, asset: MediaAsset, parts: Compl
     completedParts: parts,
     expiresAt: session.expiresAt,
     partSize: session.partSize,
-    partUploadURL: `/api/demo/uploads/${session.uploadSessionId}/parts/{partNumber}`,
+    partTargetURL: `/api/demo/uploads/${session.uploadSessionId}/parts/{partNumber}`,
     uploadSessionId: session.uploadSessionId as UploadSessionId,
   }
 }
 
-async function markExpired(
+function providerUploadID(session: UploadSession): ProviderUploadId {
+  return session.providerUploadId as ProviderUploadId
+}
+
+async function terminateUpload(
   payload: Payload,
   session: UploadSession,
   providers: MediaProviders,
+  sessionStatus: 'aborted' | 'expired',
+  assetStatus: 'failed' | 'expired',
 ): Promise<void> {
-  await providers.storage.abortMultipart(session.providerUploadId)
+  await providers.storage.abortMultipart(providerUploadID(session))
   await Promise.all([
     payload.update({
       collection: 'upload-sessions',
-      data: { status: 'expired' },
+      data: { status: sessionStatus },
       id: session.id,
       overrideAccess: true,
     }),
     payload.update({
       collection: 'media-assets',
-      data: { status: 'expired', statusChangedAt: new Date().toISOString() },
+      data: { status: assetStatus, statusChangedAt: new Date().toISOString() },
       id: relationID(session.asset),
       overrideAccess: true,
     }),
@@ -103,7 +110,9 @@ async function requirePendingSession(
   if (session.status === 'completed') throw new MediaLibraryError('Upload already completed.', 409)
   if (session.status === 'aborted') throw new MediaLibraryError('Upload session was aborted.', 410)
   if (session.status === 'expired' || new Date(session.expiresAt).getTime() <= Date.now()) {
-    if (session.status === 'pending') await markExpired(payload, session, providers)
+    if (session.status === 'pending') {
+      await terminateUpload(payload, session, providers, 'expired', 'expired')
+    }
     throw new MediaLibraryError('Upload session has expired. Start a new upload.', 410)
   }
   return session
@@ -115,23 +124,23 @@ export async function createUploadSession(
   input: UploadMetadata,
   providers: MediaProviders = getFakeProviders(),
 ) {
-  validateMetadata(input)
+  const metadata = validateMetadata(input)
   await cleanupAbandonedUploads(payload, new Date(), providers)
   const now = new Date()
   const mediaAssetId = newMediaAssetId()
   const uploadSessionId = newUploadSessionId()
-  const initiated = await providers.storage.initiateMultipart({ metadata: input, uploadSessionId })
+  const initiated = await providers.storage.initiateMultipart({ metadata, uploadSessionId })
 
   let asset: MediaAsset | null = null
   try {
     asset = await payload.create({
       collection: 'media-assets',
       data: {
-        fileName: input.fileName,
+        fileName: metadata.fileName,
         mediaAssetId,
-        mimeType: input.mimeType,
+        mimeType: metadata.mimeType,
         owner: owner.id,
-        size: input.size,
+        size: metadata.size,
         status: 'uploading',
         statusChangedAt: now.toISOString(),
       },
@@ -143,13 +152,13 @@ export async function createUploadSession(
       data: {
         asset: asset.id,
         expiresAt: new Date(now.getTime() + UPLOAD_SESSION_LIFETIME_MS).toISOString(),
-        fileFingerprint: input.fileFingerprint,
-        fileName: input.fileName,
-        mimeType: input.mimeType,
+        fileFingerprint: metadata.fileFingerprint,
+        fileName: metadata.fileName,
+        mimeType: metadata.mimeType,
         owner: owner.id,
         partSize: initiated.partSize,
         providerUploadId: initiated.providerUploadId,
-        size: input.size,
+        size: metadata.size,
         status: 'pending',
         uploadSessionId,
       },
@@ -205,7 +214,7 @@ export async function resumeUploadSession(
     return sessionResponse(
       session,
       asset,
-      await providers.storage.listParts(session.providerUploadId),
+      await providers.storage.listParts(providerUploadID(session)),
     )
   } catch (error) {
     if (error instanceof MultipartUploadError) {
@@ -215,7 +224,30 @@ export async function resumeUploadSession(
   }
 }
 
-export async function uploadPart(
+function validatePartNumber(session: UploadSession, partNumber: number): void {
+  const maximumParts = Math.ceil(MAX_ASSET_BYTES / session.partSize)
+  if (!Number.isSafeInteger(partNumber) || partNumber < 1 || partNumber > maximumParts) {
+    throw new MediaLibraryError('Invalid upload part number.', 400)
+  }
+}
+
+export async function renewUploadPart(
+  payload: Payload,
+  owner: PilotMember,
+  uploadSessionId: UploadSessionId,
+  partNumber: number,
+  providers: MediaProviders = getFakeProviders(),
+) {
+  const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
+  validatePartNumber(session, partNumber)
+  return providers.storage.createPartUploadTarget({
+    partNumber,
+    providerUploadId: providerUploadID(session),
+    uploadSessionId,
+  })
+}
+
+export async function receiveUploadPart(
   payload: Payload,
   owner: PilotMember,
   uploadSessionId: UploadSessionId,
@@ -224,14 +256,25 @@ export async function uploadPart(
   providers: MediaProviders = getFakeProviders(),
 ): Promise<CompletedPart> {
   const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
+  validatePartNumber(session, partNumber)
   if (bytes.byteLength > session.partSize) {
     throw new MediaLibraryError(`Upload parts may not exceed ${session.partSize} bytes.`, 400)
   }
+  const receiver = providers.storage as StorageProvider & {
+    receivePart?: (input: {
+      bytes: Uint8Array
+      partNumber: number
+      providerUploadId: ProviderUploadId
+    }) => Promise<CompletedPart>
+  }
+  if (!receiver.receivePart) {
+    throw new MediaLibraryError('This upload target does not accept proxied parts.', 404)
+  }
   try {
-    return await providers.storage.uploadPart({
+    return await receiver.receivePart({
       bytes,
       partNumber,
-      providerUploadId: session.providerUploadId,
+      providerUploadId: providerUploadID(session),
     })
   } catch (error) {
     if (error instanceof MultipartUploadError) throw new MediaLibraryError(error.message, 400)
@@ -245,21 +288,7 @@ async function rejectCompletedUpload(
   providers: MediaProviders,
   message: string,
 ): Promise<never> {
-  await providers.storage.abortMultipart(session.providerUploadId)
-  await Promise.all([
-    payload.update({
-      collection: 'upload-sessions',
-      data: { status: 'aborted' },
-      id: session.id,
-      overrideAccess: true,
-    }),
-    payload.update({
-      collection: 'media-assets',
-      data: { status: 'failed', statusChangedAt: new Date().toISOString() },
-      id: relationID(session.asset),
-      overrideAccess: true,
-    }),
-  ])
+  await terminateUpload(payload, session, providers, 'aborted', 'failed')
   throw new MediaLibraryError(message, 400)
 }
 
@@ -275,7 +304,7 @@ export async function completeUpload(
   try {
     stored = await providers.storage.completeMultipart({
       parts,
-      providerUploadId: session.providerUploadId,
+      providerUploadId: providerUploadID(session),
     })
   } catch (error) {
     if (error instanceof MultipartUploadError) throw new MediaLibraryError(error.message, 400)
@@ -308,7 +337,11 @@ export async function completeUpload(
       'The video must be no larger than 2 GB.',
     )
   }
-  if (probe.durationSeconds > MAX_DURATION_SECONDS) {
+  if (
+    !Number.isFinite(probe.durationSeconds) ||
+    probe.durationSeconds <= 0 ||
+    probe.durationSeconds > MAX_DURATION_SECONDS
+  ) {
     return rejectCompletedUpload(
       payload,
       session,
@@ -378,21 +411,7 @@ export async function abortUpload(
     session.status === 'expired'
   )
     return
-  await providers.storage.abortMultipart(session.providerUploadId)
-  await Promise.all([
-    payload.update({
-      collection: 'upload-sessions',
-      data: { status: 'aborted' },
-      id: session.id,
-      overrideAccess: true,
-    }),
-    payload.update({
-      collection: 'media-assets',
-      data: { status: 'failed', statusChangedAt: new Date().toISOString() },
-      id: relationID(session.asset),
-      overrideAccess: true,
-    }),
-  ])
+  await terminateUpload(payload, session, providers, 'aborted', 'failed')
 }
 
 export async function cleanupAbandonedUploads(
@@ -400,20 +419,26 @@ export async function cleanupAbandonedUploads(
   now = new Date(),
   providers: MediaProviders = getFakeProviders(),
 ): Promise<number> {
-  const expired = await payload.find({
-    collection: 'upload-sessions',
-    depth: 0,
-    limit: 100,
-    overrideAccess: true,
-    where: {
-      and: [
-        { status: { equals: 'pending' } },
-        { expiresAt: { less_than_equal: now.toISOString() } },
-      ],
-    },
-  })
-  for (const session of expired.docs) await markExpired(payload, session, providers)
-  return expired.docs.length
+  let cleaned = 0
+  while (true) {
+    const expired = await payload.find({
+      collection: 'upload-sessions',
+      depth: 0,
+      limit: 100,
+      overrideAccess: true,
+      where: {
+        and: [
+          { status: { equals: 'pending' } },
+          { expiresAt: { less_than_equal: now.toISOString() } },
+        ],
+      },
+    })
+    if (expired.docs.length === 0) return cleaned
+    for (const session of expired.docs) {
+      await terminateUpload(payload, session, providers, 'expired', 'expired')
+      cleaned += 1
+    }
+  }
 }
 
 async function advanceFakePipeline(payload: Payload, ownerID: number): Promise<void> {
@@ -452,6 +477,7 @@ export async function listOwnedAssets(
   payload: Payload,
   owner: PilotMember,
 ): Promise<MediaAssetSummary[]> {
+  await cleanupAbandonedUploads(payload)
   await advanceFakePipeline(payload, owner.id)
   const result = await payload.find({
     collection: 'media-assets',

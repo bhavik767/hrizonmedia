@@ -1,4 +1,4 @@
-import type { CompletedPart } from '@/media/providers/contracts'
+import type { CompletedPart } from '@/media/multipart'
 import { parseUploadSessionId } from '@/media/identifiers'
 import { completeUpload } from '@/media/library'
 import { withAuthenticatedUploader } from '@/media/request'

@@ -12,7 +12,7 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   UPDATE "upload_sessions" SET
     "file_fingerprint" = 'legacy:' || "upload_session_id",
     "provider_upload_id" = 'legacy:' || "upload_session_id",
-    "part_size" = 128;
+    "part_size" = 5242880;
   ALTER TABLE "upload_sessions" ALTER COLUMN "file_fingerprint" SET NOT NULL;
   ALTER TABLE "upload_sessions" ALTER COLUMN "provider_upload_id" SET NOT NULL;
   ALTER TABLE "upload_sessions" ALTER COLUMN "part_size" SET NOT NULL;

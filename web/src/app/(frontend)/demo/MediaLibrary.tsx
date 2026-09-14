@@ -3,15 +3,10 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
+import type { CompletedPart, PartUploadTarget } from '@/media/multipart'
 import type { MediaAssetSummary } from '@/media/types'
 
 type DisplayedAsset = Omit<MediaAssetSummary, 'mediaAssetId'> & { mediaAssetId: string }
-
-interface CompletedPart {
-  etag: string
-  partNumber: number
-  size: number
-}
 
 interface UploadSessionResponse {
   asset: DisplayedAsset
@@ -19,12 +14,21 @@ interface UploadSessionResponse {
   completedParts: CompletedPart[]
   expiresAt: string
   partSize: number
-  partUploadURL: string
+  partTargetURL: string
   uploadSessionId: string
 }
 
-const PENDING_UPLOAD_KEY = 'hrizonmedia.pending-upload.v1'
+const PENDING_UPLOAD_PREFIX = 'hrizonmedia.pending-upload.v1:'
 const MAX_PART_ATTEMPTS = 3
+
+class MediaRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message)
+  }
+}
 
 function readableBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -33,7 +37,9 @@ function readableBytes(bytes: number): string {
 
 async function responseJSON<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { error?: string }
-  if (!response.ok) throw new Error(body.error || 'The media request failed.')
+  if (!response.ok) {
+    throw new MediaRequestError(body.error || 'The media request failed.', response.status)
+  }
   return body
 }
 
@@ -43,44 +49,50 @@ async function fileFingerprint(file: File): Promise<string> {
     file.size <= sampleSize * 2
       ? await file.arrayBuffer()
       : await new Blob([file.slice(0, sampleSize), file.slice(-sampleSize)]).arrayBuffer()
-  const digest = await window.crypto.subtle.digest('SHA-256', sample)
-  const hash = [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('')
-  return `${file.name}:${file.size}:${file.type}:${hash}`
+  const hash = await sha256(new Blob([sample]))
+  return `${file.name}:${file.size}:${hash}`
 }
 
-function readPendingUpload(): (UploadSessionResponse & { fileFingerprint?: string }) | null {
+async function sha256(bytes: Blob): Promise<string> {
+  const digest = await window.crypto.subtle.digest('SHA-256', await bytes.arrayBuffer())
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function pendingUploadKey(fingerprint: string): string {
+  return `${PENDING_UPLOAD_PREFIX}${fingerprint}`
+}
+
+function readPendingUpload(fingerprint: string): UploadSessionResponse | null {
   try {
-    const stored = window.localStorage.getItem(PENDING_UPLOAD_KEY)
+    const stored = window.localStorage.getItem(pendingUploadKey(fingerprint))
     if (!stored) return null
-    const parsed = JSON.parse(stored) as UploadSessionResponse & { fileFingerprint?: string }
-    return parsed
+    return JSON.parse(stored) as UploadSessionResponse
   } catch {
-    window.localStorage.removeItem(PENDING_UPLOAD_KEY)
+    window.localStorage.removeItem(pendingUploadKey(fingerprint))
     return null
   }
 }
 
 function persistPendingUpload(session: UploadSessionResponse, fingerprint: string): void {
-  window.localStorage.setItem(
-    PENDING_UPLOAD_KEY,
-    JSON.stringify({ ...session, fileFingerprint: fingerprint }),
-  )
+  window.localStorage.setItem(pendingUploadKey(fingerprint), JSON.stringify(session))
 }
 
-async function uploadPartWithRetry(url: string, bytes: Blob): Promise<CompletedPart> {
+async function uploadPartWithRetry(targetURL: string, bytes: Blob): Promise<CompletedPart> {
   let lastError: Error | null = null
   for (let attempt = 1; attempt <= MAX_PART_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetch(url, {
+      const target = await responseJSON<PartUploadTarget>(
+        await fetch(targetURL, { method: 'POST' }),
+      )
+      const response = await fetch(target.uploadURL, {
         body: bytes,
-        headers: { 'content-type': 'application/octet-stream' },
+        headers: target.headers,
         method: 'PUT',
       })
       if (response.ok || response.status < 500) return responseJSON<CompletedPart>(response)
       lastError = new Error('A storage part failed temporarily.')
     } catch (error) {
+      if (error instanceof MediaRequestError && error.status < 500) throw error
       lastError = error instanceof Error ? error : new Error('A storage part failed temporarily.')
     }
     if (attempt < MAX_PART_ATTEMPTS) {
@@ -132,19 +144,14 @@ export function MediaLibrary() {
     let session: UploadSessionResponse | null = null
 
     try {
-      const pending = readPendingUpload()
+      const pending = readPendingUpload(fingerprint)
       if (pending) {
-        if (pending.fileFingerprint !== fingerprint) {
-          throw new Error(
-            'The selected file does not match the resumable upload. Reselect the original file.',
-          )
-        }
         const resumeResponse = await fetch(
           `/api/demo/uploads/${pending.uploadSessionId}?fileFingerprint=${encodeURIComponent(fingerprint)}`,
           { cache: 'no-store' },
         )
         if (resumeResponse.status === 409 || resumeResponse.status === 410) {
-          window.localStorage.removeItem(PENDING_UPLOAD_KEY)
+          window.localStorage.removeItem(pendingUploadKey(fingerprint))
         }
         session = await responseJSON<UploadSessionResponse>(resumeResponse)
       } else {
@@ -185,10 +192,17 @@ export function MediaLibrary() {
       const totalParts = Math.ceil(file.size / session.partSize)
       setProgress(Math.round((completed.size / totalParts) * 100))
       for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
-        if (completed.has(partNumber)) continue
         const start = (partNumber - 1) * session.partSize
-        const url = session.partUploadURL.replace('{partNumber}', String(partNumber))
-        const part = await uploadPartWithRetry(url, file.slice(start, start + session.partSize))
+        const bytes = file.slice(start, start + session.partSize)
+        const existing = completed.get(partNumber)
+        if (existing) {
+          if ((await sha256(bytes)) !== existing.checksumSHA256) {
+            throw new Error('The selected file does not match the completed upload parts.')
+          }
+          continue
+        }
+        const targetURL = session.partTargetURL.replace('{partNumber}', String(partNumber))
+        const part = await uploadPartWithRetry(targetURL, bytes)
         completed.set(partNumber, part)
         session.completedParts = [...completed.values()].sort(
           (left, right) => left.partNumber - right.partNumber,
@@ -203,7 +217,7 @@ export function MediaLibrary() {
         method: 'POST',
       })
       const completedUpload = await responseJSON<{ asset: MediaAssetSummary }>(completeResponse)
-      window.localStorage.removeItem(PENDING_UPLOAD_KEY)
+      window.localStorage.removeItem(pendingUploadKey(fingerprint))
       setAssets((current) =>
         current.map((item) =>
           item.mediaAssetId === session!.asset.mediaAssetId ? completedUpload.asset : item,

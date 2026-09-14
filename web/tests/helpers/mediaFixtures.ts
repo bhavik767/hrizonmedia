@@ -5,12 +5,15 @@ function box(type: string, payload: Buffer): Buffer {
   return Buffer.concat([header, payload])
 }
 
-export function mp4Fixture(durationSeconds = 60): Buffer {
+export function mp4Fixture(durationSeconds = 60, minimumBytes = 0): Buffer {
   const ftyp = box('ftyp', Buffer.from('69736f6d0000020069736f6d', 'hex'))
   const movieHeader = Buffer.alloc(100)
   movieHeader.writeUInt32BE(1_000, 12)
   movieHeader.writeUInt32BE(Math.round(durationSeconds * 1_000), 16)
-  return Buffer.concat([ftyp, box('moov', box('mvhd', movieHeader))])
+  const media = Buffer.concat([ftyp, box('moov', box('mvhd', movieHeader))])
+  return minimumBytes > media.length
+    ? Buffer.concat([media, Buffer.alloc(minimumBytes - media.length)])
+    : media
 }
 
 export function mkvFixture(durationSeconds = 60): Buffer {

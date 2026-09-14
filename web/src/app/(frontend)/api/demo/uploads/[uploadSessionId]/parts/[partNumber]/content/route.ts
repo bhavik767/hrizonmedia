@@ -1,8 +1,8 @@
 import { parseUploadSessionId } from '@/media/identifiers'
-import { renewUploadPart } from '@/media/library'
+import { receiveUploadPart } from '@/media/library'
 import { withAuthenticatedUploader } from '@/media/request'
 
-export async function POST(
+export async function PUT(
   request: Request,
   context: { params: Promise<{ partNumber: string; uploadSessionId: string }> },
 ): Promise<Response> {
@@ -14,6 +14,13 @@ export async function POST(
     if (!Number.isSafeInteger(parsedPartNumber) || parsedPartNumber < 1) {
       return Response.json({ error: 'Invalid upload part number.' }, { status: 400 })
     }
-    return Response.json(await renewUploadPart(payload, member, parsedID, parsedPartNumber))
+    const part = await receiveUploadPart(
+      payload,
+      member,
+      parsedID,
+      parsedPartNumber,
+      new Uint8Array(await request.arrayBuffer()),
+    )
+    return Response.json(part)
   })
 }

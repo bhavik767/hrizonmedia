@@ -13,7 +13,7 @@ import { mkvFixture, mp4Fixture } from '../helpers/mediaFixtures'
 describe('deterministic media providers', () => {
   it('reconstructs multipart uploads and probes the completed object server-side', async () => {
     resetFakeMediaStorage()
-    const bytes = mp4Fixture(90)
+    const bytes = mp4Fixture(90, 5 * 1024 * 1024 + 1)
     const uploadSessionId = newUploadSessionId()
     const initiated = await fakeStorageProvider.initiateMultipart({
       metadata: {
@@ -24,12 +24,12 @@ describe('deterministic media providers', () => {
       },
       uploadSessionId,
     })
-    const first = await fakeStorageProvider.uploadPart({
+    const first = await fakeStorageProvider.receivePart({
       bytes: bytes.subarray(0, initiated.partSize),
       partNumber: 1,
       providerUploadId: initiated.providerUploadId,
     })
-    const second = await fakeStorageProvider.uploadPart({
+    const second = await fakeStorageProvider.receivePart({
       bytes: bytes.subarray(initiated.partSize),
       partNumber: 2,
       providerUploadId: initiated.providerUploadId,
@@ -58,7 +58,7 @@ describe('deterministic media providers', () => {
       },
       uploadSessionId: newUploadSessionId(),
     })
-    const part = await fakeStorageProvider.uploadPart({
+    const part = await fakeStorageProvider.receivePart({
       bytes,
       partNumber: 1,
       providerUploadId: initiated.providerUploadId,
@@ -94,7 +94,7 @@ describe('deterministic media providers', () => {
       offset += initiated.partSize, partNumber += 1
     ) {
       parts.push(
-        await fakeStorageProvider.uploadPart({
+        await fakeStorageProvider.receivePart({
           bytes: bytes.subarray(offset, offset + initiated.partSize),
           partNumber,
           providerUploadId: initiated.providerUploadId,
@@ -136,7 +136,7 @@ describe('deterministic media providers', () => {
       },
       uploadSessionId: newUploadSessionId(),
     })
-    const part = await fakeStorageProvider.uploadPart({
+    const part = await fakeStorageProvider.receivePart({
       bytes: new TextEncoder().encode('not a video'),
       partNumber: 1,
       providerUploadId: initiated.providerUploadId,

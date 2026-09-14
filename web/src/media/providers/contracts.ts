@@ -1,17 +1,12 @@
 import 'server-only'
 
-import type { MediaAssetId, ProviderJobId, UploadSessionId } from '../identifiers'
+import type { MediaAssetId, ProviderJobId, ProviderUploadId, UploadSessionId } from '../identifiers'
+import type { CompletedPart, PartUploadTarget } from '../multipart'
 import type { UploadMetadata } from '../types'
-
-export interface CompletedPart {
-  etag: string
-  partNumber: number
-  size: number
-}
 
 export interface MultipartUpload {
   partSize: number
-  providerUploadId: string
+  providerUploadId: ProviderUploadId
 }
 
 export interface StoredUpload {
@@ -25,22 +20,22 @@ export interface MediaProbe {
 }
 
 export interface StorageProvider {
-  abortMultipart(providerUploadId: string): Promise<void>
+  abortMultipart(providerUploadId: ProviderUploadId): Promise<void>
   completeMultipart(input: {
     parts: CompletedPart[]
-    providerUploadId: string
+    providerUploadId: ProviderUploadId
   }): Promise<StoredUpload>
+  createPartUploadTarget(input: {
+    partNumber: number
+    providerUploadId: ProviderUploadId
+    uploadSessionId: UploadSessionId
+  }): Promise<PartUploadTarget>
   initiateMultipart(input: {
     metadata: UploadMetadata
     uploadSessionId: UploadSessionId
   }): Promise<MultipartUpload>
-  listParts(providerUploadId: string): Promise<CompletedPart[]>
+  listParts(providerUploadId: ProviderUploadId): Promise<CompletedPart[]>
   probe(objectKey: string): Promise<MediaProbe>
-  uploadPart(input: {
-    bytes: Uint8Array
-    partNumber: number
-    providerUploadId: string
-  }): Promise<CompletedPart>
 }
 
 export interface TranscodeProvider {

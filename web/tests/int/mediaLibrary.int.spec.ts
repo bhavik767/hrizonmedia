@@ -8,12 +8,12 @@ import {
   getOwnedAsset,
   listOwnedAssets,
   resumeUploadSession,
-  uploadPart,
+  receiveUploadPart,
 } from '@/media/library'
 import { resetFakeMediaStorage } from '@/media/providers/fake'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
-import { mp4Fixture } from '../helpers/mediaFixtures'
+import { mkvFixture, mp4Fixture } from '../helpers/mediaFixtures'
 
 let payload: Payload
 let firstUploader: PilotMember
@@ -37,7 +37,7 @@ async function uploadAllParts(
     offset += session.partSize, partNumber += 1
   ) {
     parts.push(
-      await uploadPart(
+      await receiveUploadPart(
         payload,
         firstUploader,
         session.uploadSessionId,
@@ -140,7 +140,7 @@ describe('Media Asset library persistence', () => {
   it('resumes with completed parts but rejects a mismatched file', async () => {
     const fixture = mp4Fixture()
     const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
-    await uploadPart(
+    await receiveUploadPart(
       payload,
       firstUploader,
       session.uploadSessionId,
@@ -181,6 +181,19 @@ describe('Media Asset library persistence', () => {
     await expect(
       getOwnedAsset(payload, firstUploader, session.asset.mediaAssetId),
     ).resolves.toMatchObject({ size: fixture.length })
+  })
+
+  it('accepts an MKV when the browser omits advisory MIME metadata', async () => {
+    const fixture = mkvFixture()
+    const session = await createUploadSession(payload, firstUploader, {
+      ...metadataFor(fixture, 'lesson.mkv'),
+      mimeType: '',
+    })
+    const parts = await uploadAllParts(session, fixture)
+
+    await expect(
+      completeUpload(payload, firstUploader, session.uploadSessionId, parts),
+    ).resolves.toMatchObject({ fileName: 'lesson.mkv', status: 'queued' })
   })
 
   it('rejects advisory metadata over 2 GB before starting storage', async () => {

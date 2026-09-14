@@ -2,11 +2,12 @@ import 'server-only'
 
 import { createHash, randomUUID } from 'node:crypto'
 
-import type { ProviderJobId } from '../identifiers'
+import type { ProviderJobId, ProviderUploadId } from '../identifiers'
+import type { CompletedPart } from '../multipart'
 import type { UploadMetadata } from '../types'
-import type { CompletedPart, StorageProvider, TranscodeProvider } from './contracts'
+import type { StorageProvider, TranscodeProvider } from './contracts'
 
-const FAKE_PART_SIZE = 128
+const FAKE_PART_SIZE = 5 * 1024 * 1024
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
 const MKV_SIGNATURE = Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3])
 const MVHD_SIGNATURE = new TextEncoder().encode('mvhd')
@@ -20,7 +21,7 @@ interface FakeMultipartUpload {
 
 interface FakeMediaState {
   objects: Map<string, Uint8Array>
-  uploads: Map<string, FakeMultipartUpload>
+  uploads: Map<ProviderUploadId, FakeMultipartUpload>
 }
 
 const fakeMediaStateKey = Symbol.for('hrizonmedia.fake-media-state')
@@ -39,7 +40,8 @@ function etag(bytes: Uint8Array): string {
 }
 
 function partSummary(partNumber: number, bytes: Uint8Array): CompletedPart {
-  return { etag: etag(bytes), partNumber, size: bytes.byteLength }
+  const checksumSHA256 = etag(bytes)
+  return { checksumSHA256, etag: checksumSHA256, partNumber, size: bytes.byteLength }
 }
 
 function readUInt64BE(bytes: Uint8Array, offset: number): number {
@@ -130,13 +132,19 @@ function concatParts(parts: Uint8Array[]): Uint8Array {
   return result
 }
 
-function getUpload(providerUploadId: string): FakeMultipartUpload {
+function getUpload(providerUploadId: ProviderUploadId): FakeMultipartUpload {
   const upload = state.uploads.get(providerUploadId)
   if (!upload) throw new MultipartUploadError('Multipart upload not found.')
   return upload
 }
 
-export const fakeStorageProvider: StorageProvider = {
+export const fakeStorageProvider: StorageProvider & {
+  receivePart(input: {
+    bytes: Uint8Array
+    partNumber: number
+    providerUploadId: ProviderUploadId
+  }): Promise<CompletedPart>
+} = {
   async abortMultipart(providerUploadId) {
     const upload = state.uploads.get(providerUploadId)
     if (!upload) return
@@ -154,7 +162,12 @@ export const fakeStorageProvider: StorageProvider = {
         throw new MultipartUploadError('Uploaded parts must be consecutive.')
       }
       const stored = upload.parts.get(part.partNumber)
-      if (!stored || part.etag !== etag(stored) || part.size !== stored.byteLength) {
+      if (
+        !stored ||
+        part.etag !== etag(stored) ||
+        part.checksumSHA256 !== etag(stored) ||
+        part.size !== stored.byteLength
+      ) {
         throw new MultipartUploadError(`Uploaded part ${part.partNumber} does not match storage.`)
       }
       return stored
@@ -169,8 +182,16 @@ export const fakeStorageProvider: StorageProvider = {
     return { objectKey }
   },
 
+  async createPartUploadTarget({ partNumber, providerUploadId, uploadSessionId }) {
+    getUpload(providerUploadId)
+    return {
+      headers: { 'content-type': 'application/octet-stream' },
+      uploadURL: `/api/demo/uploads/${uploadSessionId}/parts/${partNumber}/content`,
+    }
+  },
+
   async initiateMultipart({ metadata, uploadSessionId }) {
-    const providerUploadId = `fake_upload_${randomUUID()}`
+    const providerUploadId = `provider_upload_${randomUUID()}` as ProviderUploadId
     state.uploads.set(providerUploadId, {
       metadata,
       objectKey: null,
@@ -200,7 +221,7 @@ export const fakeStorageProvider: StorageProvider = {
     throw new InvalidMediaError('The completed upload is not a valid MP4 or MKV video.')
   },
 
-  async uploadPart({ bytes, partNumber, providerUploadId }) {
+  async receivePart({ bytes, partNumber, providerUploadId }) {
     if (!Number.isSafeInteger(partNumber) || partNumber < 1) {
       throw new MultipartUploadError('Part number must be a positive integer.')
     }
