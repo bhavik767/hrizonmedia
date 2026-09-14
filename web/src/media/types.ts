@@ -34,14 +34,8 @@ export interface MediaAssetDetail extends MediaAssetSummary {
 }
 
 export interface UploadMetadata {
+  fileFingerprint: string
   fileName: string
   mimeType: string
   size: number
-}
-
-export interface UploadedFile {
-  arrayBuffer(): Promise<ArrayBuffer>
-  name: string
-  size: number
-  type: string
 }

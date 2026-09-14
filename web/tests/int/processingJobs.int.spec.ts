@@ -1,5 +1,3 @@
-import { File as NodeFile } from 'node:buffer'
-
 import { getPayload, type Payload } from 'payload'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -8,17 +6,21 @@ import {
   completeUpload,
   createUploadSession,
   getOwnedAsset,
+  receiveUploadPart,
   retryOwnedAssetProcessing,
 } from '@/media/library'
 import {
   PermanentTranscodeError,
   TransientTranscodeError,
   fakeTranscodeProvider,
+  getFakeProviders,
+  resetFakeMediaStorage,
 } from '@/media/providers/fake'
 import type { TranscodeProvider } from '@/media/providers/contracts'
 import { newProcessingJobData, runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
+import { mp4Fixture } from '../helpers/mediaFixtures'
 
 let payload: Payload
 let uploader: PilotMember
@@ -27,11 +29,17 @@ const at = (value: string) => new Date(value)
 const start = at('2026-09-14T12:00:00.000Z')
 
 function fixture(source = '1920x1080:2') {
-  return new NodeFile(
-    [Buffer.from('000000186674797069736f6d0000020069736f6d', 'hex'), `HRIZON:${source}`],
-    'fixture.mp4',
-    { type: 'video/mp4' },
-  )
+  const [dimensions, durationText] = source.split(':')
+  const bytes = Buffer.concat([
+    mp4Fixture(Number(durationText)),
+    Buffer.from(`HRIZON:${dimensions}`),
+  ])
+  return {
+    bytes,
+    name: 'fixture.mp4',
+    size: bytes.length,
+    type: 'video/mp4' as const,
+  }
 }
 
 async function clean() {
@@ -42,12 +50,30 @@ async function clean() {
 }
 
 async function upload(file = fixture(), provider: TranscodeProvider = fakeTranscodeProvider) {
-  const session = await createUploadSession(payload, uploader, {
-    fileName: file.name,
-    mimeType: file.type,
-    size: file.size,
+  const providers = { ...getFakeProviders(), transcode: provider }
+  const session = await createUploadSession(
+    payload,
+    uploader,
+    {
+      fileFingerprint: `${file.name}:${file.size}:test`,
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+    },
+    providers,
+  )
+  const part = await receiveUploadPart(
+    payload,
+    uploader,
+    session.uploadSessionId,
+    1,
+    file.bytes,
+    providers,
+  )
+  await completeUpload(payload, uploader, session.uploadSessionId, [part], providers, {
+    now: start,
+    provider,
   })
-  await completeUpload(payload, uploader, session.uploadSessionId, file, { now: start, provider })
   return session
 }
 
@@ -58,6 +84,7 @@ describe('reliable Processing Jobs', () => {
 
   beforeEach(async () => {
     await clean()
+    resetFakeMediaStorage()
     uploader = await payload.create({
       collection: 'pilot-members',
       data: {
@@ -159,11 +186,26 @@ describe('reliable Processing Jobs', () => {
 
   it('rolls back upload completion when its Processing Job cannot be created', async () => {
     const file = fixture()
-    const session = await createUploadSession(payload, uploader, {
-      fileName: file.name,
-      mimeType: file.type,
-      size: file.size,
-    })
+    const providers = getFakeProviders()
+    const session = await createUploadSession(
+      payload,
+      uploader,
+      {
+        fileFingerprint: `${file.name}:${file.size}:test`,
+        fileName: file.name,
+        mimeType: file.type,
+        size: file.size,
+      },
+      providers,
+    )
+    const part = await receiveUploadPart(
+      payload,
+      uploader,
+      session.uploadSessionId,
+      1,
+      file.bytes,
+      providers,
+    )
     const assets = await payload.find({
       collection: 'media-assets',
       overrideAccess: true,
@@ -183,7 +225,7 @@ describe('reliable Processing Jobs', () => {
     })
 
     await expect(
-      completeUpload(payload, uploader, session.uploadSessionId, file, { now: start }),
+      completeUpload(payload, uploader, session.uploadSessionId, [part], providers, { now: start }),
     ).rejects.toBeTruthy()
 
     const sessions = await payload.find({

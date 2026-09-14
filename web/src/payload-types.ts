@@ -1173,6 +1173,8 @@ export interface MediaAsset {
   fileName: string;
   mimeType: string;
   size: number;
+  durationSeconds?: number | null;
+  verifiedAt?: string | null;
   status: 'uploading' | 'queued' | 'processing' | 'ready' | 'failed' | 'expired' | 'deleted';
   statusChangedAt: string;
   updatedAt: string;
@@ -1190,8 +1192,11 @@ export interface UploadSession {
   fileName: string;
   mimeType: string;
   size: number;
+  fileFingerprint: string;
+  providerUploadId: string;
+  partSize: number;
   objectKey?: string | null;
-  status: 'pending' | 'completed';
+  status: 'pending' | 'completed' | 'aborted' | 'expired';
   expiresAt: string;
   updatedAt: string;
   createdAt: string;
@@ -2013,6 +2018,8 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   fileName?: T;
   mimeType?: T;
   size?: T;
+  durationSeconds?: T;
+  verifiedAt?: T;
   status?: T;
   statusChangedAt?: T;
   updatedAt?: T;
@@ -2029,6 +2036,9 @@ export interface UploadSessionsSelect<T extends boolean = true> {
   fileName?: T;
   mimeType?: T;
   size?: T;
+  fileFingerprint?: T;
+  providerUploadId?: T;
+  partSize?: T;
   objectKey?: T;
   status?: T;
   expiresAt?: T;

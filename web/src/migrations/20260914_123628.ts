@@ -3,6 +3,15 @@ import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 export async function up({ db }: MigrateUpArgs): Promise<void> {
   await db.execute(sql`
    ALTER TYPE "public"."enum_processing_jobs_status" ADD VALUE 'dispatching' BEFORE 'processing';
+  ALTER TYPE "public"."enum_payload_jobs_log_task_slug" ADD VALUE 'process-media-jobs' BEFORE 'schedulePublish';
+  ALTER TYPE "public"."enum_payload_jobs_task_slug" ADD VALUE 'process-media-jobs' BEFORE 'schedulePublish';
+  CREATE TABLE "payload_jobs_stats" (
+    "id" serial PRIMARY KEY NOT NULL,
+    "stats" jsonb,
+    "updated_at" timestamp(3) with time zone,
+    "created_at" timestamp(3) with time zone
+  );
+
   ALTER TABLE "processing_jobs" ALTER COLUMN "provider_job_id" DROP NOT NULL;
   ALTER TABLE "processing_jobs" ADD COLUMN "dispatch_by" timestamp(3) with time zone;
   ALTER TABLE "processing_jobs" ADD COLUMN "next_attempt_at" timestamp(3) with time zone;
@@ -47,6 +56,7 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
   ALTER TABLE "processing_jobs" ALTER COLUMN "source_height" SET NOT NULL;
   ALTER TABLE "processing_jobs" ALTER COLUMN "source_duration_seconds" SET NOT NULL;
   ALTER TABLE "processing_jobs" ALTER COLUMN "renditions" SET NOT NULL;
+  ALTER TABLE "payload_jobs" ADD COLUMN "meta" jsonb;
   CREATE INDEX "processing_jobs_dispatch_by_idx" ON "processing_jobs" USING btree ("dispatch_by");
   CREATE INDEX "processing_jobs_next_attempt_at_idx" ON "processing_jobs" USING btree ("next_attempt_at");
   CREATE INDEX "processing_jobs_lease_token_idx" ON "processing_jobs" USING btree ("lease_token");
@@ -56,14 +66,26 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
 
 export async function down({ db }: MigrateDownArgs): Promise<void> {
   await db.execute(sql`
-   UPDATE "processing_jobs" SET "status" = 'queued' WHERE "status" = 'dispatching';
+  ALTER TABLE "payload_jobs_stats" DISABLE ROW LEVEL SECURITY;
+  DROP TABLE "payload_jobs_stats" CASCADE;
+  DELETE FROM "payload_jobs_log" WHERE "task_slug" = 'process-media-jobs';
+  DELETE FROM "payload_jobs" WHERE "task_slug" = 'process-media-jobs';
+  UPDATE "processing_jobs" SET "status" = 'queued' WHERE "status" = 'dispatching';
   UPDATE "processing_jobs"
   SET "provider_job_id" = 'provider_job_legacy_' || "id"
   WHERE "provider_job_id" IS NULL;
-   ALTER TABLE "processing_jobs" ALTER COLUMN "status" SET DATA TYPE text;
+  ALTER TABLE "processing_jobs" ALTER COLUMN "status" SET DATA TYPE text;
   DROP TYPE "public"."enum_processing_jobs_status";
   CREATE TYPE "public"."enum_processing_jobs_status" AS ENUM('queued', 'processing', 'ready', 'failed');
   ALTER TABLE "processing_jobs" ALTER COLUMN "status" SET DATA TYPE "public"."enum_processing_jobs_status" USING "status"::"public"."enum_processing_jobs_status";
+  ALTER TABLE "payload_jobs_log" ALTER COLUMN "task_slug" SET DATA TYPE text;
+  DROP TYPE "public"."enum_payload_jobs_log_task_slug";
+  CREATE TYPE "public"."enum_payload_jobs_log_task_slug" AS ENUM('inline', 'schedulePublish');
+  ALTER TABLE "payload_jobs_log" ALTER COLUMN "task_slug" SET DATA TYPE "public"."enum_payload_jobs_log_task_slug" USING "task_slug"::"public"."enum_payload_jobs_log_task_slug";
+  ALTER TABLE "payload_jobs" ALTER COLUMN "task_slug" SET DATA TYPE text;
+  DROP TYPE "public"."enum_payload_jobs_task_slug";
+  CREATE TYPE "public"."enum_payload_jobs_task_slug" AS ENUM('inline', 'schedulePublish');
+  ALTER TABLE "payload_jobs" ALTER COLUMN "task_slug" SET DATA TYPE "public"."enum_payload_jobs_task_slug" USING "task_slug"::"public"."enum_payload_jobs_task_slug";
   DROP INDEX "processing_jobs_dispatch_by_idx";
   DROP INDEX "processing_jobs_next_attempt_at_idx";
   DROP INDEX "processing_jobs_lease_token_idx";
@@ -86,5 +108,6 @@ export async function down({ db }: MigrateDownArgs): Promise<void> {
   ALTER TABLE "processing_jobs" DROP COLUMN "source_width";
   ALTER TABLE "processing_jobs" DROP COLUMN "source_height";
   ALTER TABLE "processing_jobs" DROP COLUMN "source_duration_seconds";
-  ALTER TABLE "processing_jobs" DROP COLUMN "renditions";`)
+  ALTER TABLE "processing_jobs" DROP COLUMN "renditions";
+  ALTER TABLE "payload_jobs" DROP COLUMN "meta";`)
 }

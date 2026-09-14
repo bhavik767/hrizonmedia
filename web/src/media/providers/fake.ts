@@ -1,58 +1,284 @@
 import 'server-only'
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
-import type { ProviderJobId } from '../identifiers'
-import type { SourceMedia, StorageProvider, TranscodeProvider } from './contracts'
+import type { ProviderJobId, ProviderUploadId } from '../identifiers'
+import type { CompletedPart } from '../multipart'
+import type { UploadMetadata } from '../types'
+import type { Rendition, SourceMedia, StorageProvider, TranscodeProvider } from './contracts'
 
+const FAKE_PART_SIZE = 5 * 1024 * 1024
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
 const MKV_SIGNATURE = Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3])
+const MVHD_SIGNATURE = new TextEncoder().encode('mvhd')
+
+interface FakeMultipartUpload {
+  metadata: UploadMetadata
+  objectKey: string | null
+  parts: Map<number, Uint8Array>
+  uploadSessionId: string
+}
+
+interface FakeMediaState {
+  objects: Map<string, Uint8Array>
+  uploads: Map<ProviderUploadId, FakeMultipartUpload>
+}
+
+const fakeMediaStateKey = Symbol.for('hrizonmedia.fake-media-state')
+const sharedGlobal = globalThis as typeof globalThis & { [fakeMediaStateKey]?: FakeMediaState }
+const state = (sharedGlobal[fakeMediaStateKey] ??= { objects: new Map(), uploads: new Map() })
+
+export class InvalidMediaError extends Error {}
+export class MultipartUploadError extends Error {}
+export class PermanentTranscodeError extends Error {}
+export class TransientTranscodeError extends Error {}
+
+function sourceDimensions(bytes: Uint8Array): Pick<SourceMedia, 'height' | 'width'> {
+  const marker = new TextDecoder().decode(bytes).match(/HRIZON:(\d+)x(\d+)/)
+  return marker
+    ? { height: Number(marker[2]), width: Number(marker[1]) }
+    : { height: 1080, width: 1920 }
+}
 
 function hasBytesAt(bytes: Uint8Array, signature: Uint8Array, offset: number): boolean {
   return signature.every((byte, index) => bytes[offset + index] === byte)
 }
 
-export class InvalidMediaError extends Error {}
-export class TransientTranscodeError extends Error {}
-export class PermanentTranscodeError extends Error {}
-
-function fakeSource(bytes: Uint8Array): SourceMedia {
-  const marker = new TextDecoder().decode(bytes).match(/HRIZON:(\d+)x(\d+):(\d+)/)
-  if (!marker) return { durationSeconds: 5, height: 1080, width: 1920 }
-  return {
-    durationSeconds: Number(marker[3]),
-    height: Number(marker[2]),
-    width: Number(marker[1]),
-  }
+function etag(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex')
 }
 
-export const fakeStorageProvider: StorageProvider = {
-  async store({ bytes, metadata, uploadSessionId }) {
-    const isMP4 = metadata.mimeType === 'video/mp4' && hasBytesAt(bytes, MP4_SIGNATURE, 4)
-    const isMKV = metadata.mimeType === 'video/x-matroska' && hasBytesAt(bytes, MKV_SIGNATURE, 0)
+function partSummary(partNumber: number, bytes: Uint8Array): CompletedPart {
+  const checksumSHA256 = etag(bytes)
+  return { checksumSHA256, etag: checksumSHA256, partNumber, size: bytes.byteLength }
+}
 
-    if (!isMP4 && !isMKV) {
-      throw new InvalidMediaError('The selected file is not a valid MP4 or MKV video.')
+function readUInt64BE(bytes: Uint8Array, offset: number): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const value = view.getBigUint64(offset)
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new InvalidMediaError('Invalid duration.')
+  return Number(value)
+}
+
+function probeMP4(bytes: Uint8Array): number | null {
+  if (!hasBytesAt(bytes, MP4_SIGNATURE, 4)) return null
+  for (let offset = 4; offset + 24 <= bytes.byteLength; offset += 1) {
+    if (!hasBytesAt(bytes, MVHD_SIGNATURE, offset)) continue
+    const content = offset + 4
+    const version = bytes[content]
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    if (version === 0 && content + 20 <= bytes.byteLength) {
+      const timescale = view.getUint32(content + 12)
+      const duration = view.getUint32(content + 16)
+      if (timescale > 0 && duration > 0) return duration / timescale
     }
+    if (version === 1 && content + 32 <= bytes.byteLength) {
+      const timescale = view.getUint32(content + 20)
+      const duration = readUInt64BE(bytes, content + 24)
+      if (timescale > 0 && duration > 0) return duration / timescale
+    }
+  }
+  throw new InvalidMediaError('The completed MP4 has no valid duration metadata.')
+}
 
+function readVint(bytes: Uint8Array, offset: number): { length: number; value: number } | null {
+  const first = bytes[offset]
+  if (!first) return null
+  let marker = 0x80
+  let length = 1
+  while (length <= 8 && (first & marker) === 0) {
+    marker >>= 1
+    length += 1
+  }
+  if (length > 8 || offset + length > bytes.byteLength) return null
+  let value = first & (marker - 1)
+  for (let index = 1; index < length; index += 1) value = value * 256 + bytes[offset + index]!
+  return { length, value }
+}
+
+function findElement(bytes: Uint8Array, id: Uint8Array): Uint8Array | null {
+  for (let offset = 0; offset + id.length < bytes.byteLength; offset += 1) {
+    if (!hasBytesAt(bytes, id, offset)) continue
+    const size = readVint(bytes, offset + id.length)
+    if (!size) continue
+    const start = offset + id.length + size.length
+    if (start + size.value <= bytes.byteLength) return bytes.subarray(start, start + size.value)
+  }
+  return null
+}
+
+function probeMKV(bytes: Uint8Array): number | null {
+  if (!hasBytesAt(bytes, MKV_SIGNATURE, 0)) return null
+  const durationBytes = findElement(bytes, Uint8Array.from([0x44, 0x89]))
+  if (!durationBytes || ![4, 8].includes(durationBytes.byteLength)) {
+    throw new InvalidMediaError('The completed MKV has no valid duration metadata.')
+  }
+  const scaleBytes = findElement(bytes, Uint8Array.from([0x2a, 0xd7, 0xb1]))
+  let timecodeScale = 1_000_000
+  if (scaleBytes) {
+    timecodeScale = 0
+    for (const byte of scaleBytes) timecodeScale = timecodeScale * 256 + byte
+  }
+  const view = new DataView(
+    durationBytes.buffer,
+    durationBytes.byteOffset,
+    durationBytes.byteLength,
+  )
+  const duration = durationBytes.byteLength === 4 ? view.getFloat32(0) : view.getFloat64(0)
+  if (!Number.isFinite(duration) || duration <= 0 || timecodeScale <= 0) {
+    throw new InvalidMediaError('The completed MKV has invalid duration metadata.')
+  }
+  return (duration * timecodeScale) / 1_000_000_000
+}
+
+function concatParts(parts: Uint8Array[]): Uint8Array {
+  const result = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0))
+  let offset = 0
+  for (const part of parts) {
+    result.set(part, offset)
+    offset += part.byteLength
+  }
+  return result
+}
+
+function getUpload(providerUploadId: ProviderUploadId): FakeMultipartUpload {
+  const upload = state.uploads.get(providerUploadId)
+  if (!upload) throw new MultipartUploadError('Multipart upload not found.')
+  return upload
+}
+
+export const fakeStorageProvider: StorageProvider & {
+  receivePart(input: {
+    bytes: Uint8Array
+    partNumber: number
+    providerUploadId: ProviderUploadId
+  }): Promise<CompletedPart>
+} = {
+  async abortMultipart(providerUploadId) {
+    const upload = state.uploads.get(providerUploadId)
+    if (!upload) return
+    if (upload.objectKey) state.objects.delete(upload.objectKey)
+    state.uploads.delete(providerUploadId)
+  },
+
+  async completeMultipart({ parts, providerUploadId }) {
+    const upload = getUpload(providerUploadId)
+    if (upload.objectKey) return { objectKey: upload.objectKey }
+    if (parts.length === 0)
+      throw new MultipartUploadError('At least one uploaded part is required.')
+    const bytes = parts.map((part, index) => {
+      if (part.partNumber !== index + 1) {
+        throw new MultipartUploadError('Uploaded parts must be consecutive.')
+      }
+      const stored = upload.parts.get(part.partNumber)
+      if (
+        !stored ||
+        part.etag !== etag(stored) ||
+        part.checksumSHA256 !== etag(stored) ||
+        part.size !== stored.byteLength
+      ) {
+        throw new MultipartUploadError(`Uploaded part ${part.partNumber} does not match storage.`)
+      }
+      return stored
+    })
+    if (upload.parts.size !== parts.length) {
+      throw new MultipartUploadError('The completed upload omitted one or more stored parts.')
+    }
+    const object = concatParts(bytes)
+    const objectKey = `fake-private/${upload.uploadSessionId}/${encodeURIComponent(upload.metadata.fileName)}`
+    state.objects.set(objectKey, object)
+    upload.objectKey = objectKey
+    return { objectKey }
+  },
+
+  async createPartUploadTarget({ partNumber, providerUploadId, uploadSessionId }) {
+    getUpload(providerUploadId)
     return {
-      objectKey: `fake-private/${uploadSessionId}/${encodeURIComponent(metadata.fileName)}`,
-      source: fakeSource(bytes),
+      headers: { 'content-type': 'application/octet-stream' },
+      uploadURL: `/api/demo/uploads/${uploadSessionId}/parts/${partNumber}/content`,
     }
+  },
+
+  async initiateMultipart({ metadata, uploadSessionId }) {
+    const providerUploadId = `provider_upload_${randomUUID()}` as ProviderUploadId
+    state.uploads.set(providerUploadId, {
+      metadata,
+      objectKey: null,
+      parts: new Map(),
+      uploadSessionId,
+    })
+    return { partSize: FAKE_PART_SIZE, providerUploadId }
+  },
+
+  async listParts(providerUploadId) {
+    return [...getUpload(providerUploadId).parts.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([partNumber, bytes]) => partSummary(partNumber, bytes))
+  },
+
+  async probe(objectKey) {
+    const bytes = state.objects.get(objectKey)
+    if (!bytes) throw new InvalidMediaError('The completed upload could not be read.')
+    const mp4Duration = probeMP4(bytes)
+    if (mp4Duration !== null) {
+      return {
+        durationSeconds: mp4Duration,
+        mimeType: 'video/mp4',
+        size: bytes.byteLength,
+        ...sourceDimensions(bytes),
+      }
+    }
+    const mkvDuration = probeMKV(bytes)
+    if (mkvDuration !== null) {
+      return {
+        durationSeconds: mkvDuration,
+        mimeType: 'video/x-matroska',
+        size: bytes.byteLength,
+        ...sourceDimensions(bytes),
+      }
+    }
+    throw new InvalidMediaError('The completed upload is not a valid MP4 or MKV video.')
+  },
+
+  async receivePart({ bytes, partNumber, providerUploadId }) {
+    if (!Number.isSafeInteger(partNumber) || partNumber < 1) {
+      throw new MultipartUploadError('Part number must be a positive integer.')
+    }
+    if (bytes.byteLength === 0 || bytes.byteLength > FAKE_PART_SIZE) {
+      throw new MultipartUploadError(`Each part must contain at most ${FAKE_PART_SIZE} bytes.`)
+    }
+    const upload = getUpload(providerUploadId)
+    if (upload.objectKey) throw new MultipartUploadError('Multipart upload is already complete.')
+    const copied = Uint8Array.from(bytes)
+    upload.parts.set(partNumber, copied)
+    return partSummary(partNumber, copied)
   },
 }
 
 export const fakeTranscodeProvider: TranscodeProvider = {
   async queue({ idempotencyKey, mediaAssetId, objectKey, renditions }) {
+    const renditionKey = (renditions as Rendition[])
+      .map((rendition) => `${rendition.width}x${rendition.height}`)
+      .join(',')
     const digest = createHash('sha256')
-      .update(`${idempotencyKey}\0${mediaAssetId}\0${objectKey}\0${JSON.stringify(renditions)}`)
+      .update(`${idempotencyKey}\0${mediaAssetId}\0${objectKey}\0${renditionKey}`)
       .digest('hex')
     return `provider_job_${digest.slice(0, 32)}` as ProviderJobId
   },
+
   async status({ now, source, startedAt }) {
-    const processingTime = source.durationSeconds * 1_400
-    return now.getTime() - startedAt.getTime() >= processingTime ? 'ready' : 'processing'
+    const elapsed = now.getTime() - startedAt.getTime()
+    const simulatedDuration =
+      source.durationSeconds >= 600
+        ? source.durationSeconds * 1_400
+        : Math.min(source.durationSeconds * 1_400, 7_000)
+    return elapsed >= simulatedDuration ? 'ready' : 'processing'
   },
+}
+
+export function resetFakeMediaStorage(): void {
+  state.objects.clear()
+  state.uploads.clear()
 }
 
 export function getFakeProviders(environment: NodeJS.ProcessEnv = process.env) {

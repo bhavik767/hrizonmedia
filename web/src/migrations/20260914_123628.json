@@ -7688,6 +7688,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "duration_seconds": {
+          "name": "duration_seconds",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp(3) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "enum_media_assets_status",
@@ -7845,6 +7857,24 @@
           "primaryKey": false,
           "notNull": true
         },
+        "file_fingerprint": {
+          "name": "file_fingerprint",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_upload_id": {
+          "name": "provider_upload_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "part_size": {
+          "name": "part_size",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
         "object_key": {
           "name": "object_key",
           "type": "varchar",
@@ -7921,6 +7951,21 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "upload_sessions_provider_upload_id_idx": {
+          "name": "upload_sessions_provider_upload_id_idx",
+          "columns": [
+            {
+              "expression": "provider_upload_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -12479,6 +12524,12 @@
           "notNull": false,
           "default": false
         },
+        "meta": {
+          "name": "meta",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp(3) with time zone",
@@ -15203,6 +15254,43 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
+    },
+    "public.payload_jobs_stats": {
+      "name": "payload_jobs_stats",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "stats": {
+          "name": "stats",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp(3) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp(3) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -15510,7 +15598,9 @@
       "schema": "public",
       "values": [
         "pending",
-        "completed"
+        "completed",
+        "aborted",
+        "expired"
       ]
     },
     "public.enum_processing_jobs_status": {
@@ -15609,6 +15699,7 @@
       "schema": "public",
       "values": [
         "inline",
+        "process-media-jobs",
         "schedulePublish"
       ]
     },
@@ -15625,6 +15716,7 @@
       "schema": "public",
       "values": [
         "inline",
+        "process-media-jobs",
         "schedulePublish"
       ]
     },
@@ -15670,6 +15762,6 @@
     "tables": {},
     "columns": {}
   },
-  "id": "03097db6-e1ea-4f6a-a329-4314952724c1",
+  "id": "7d507d11-39ba-49d3-b88a-dce7294c2bd2",
   "prevId": "00000000-0000-0000-0000-000000000000"
 }

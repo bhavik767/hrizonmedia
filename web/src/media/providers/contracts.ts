@@ -1,11 +1,16 @@
 import 'server-only'
 
-import type { MediaAssetId, ProviderJobId, UploadSessionId } from '../identifiers'
+import type { MediaAssetId, ProviderJobId, ProviderUploadId, UploadSessionId } from '../identifiers'
+import type { CompletedPart, PartUploadTarget } from '../multipart'
 import type { UploadMetadata } from '../types'
+
+export interface MultipartUpload {
+  partSize: number
+  providerUploadId: ProviderUploadId
+}
 
 export interface StoredUpload {
   objectKey: string
-  source: SourceMedia
 }
 
 export interface SourceMedia {
@@ -21,12 +26,31 @@ export interface Rendition {
   width: number
 }
 
+export interface MediaProbe {
+  durationSeconds: number
+  height: number
+  mimeType: 'video/mp4' | 'video/x-matroska'
+  size: number
+  width: number
+}
+
 export interface StorageProvider {
-  store(input: {
-    bytes: Uint8Array
+  abortMultipart(providerUploadId: ProviderUploadId): Promise<void>
+  completeMultipart(input: {
+    parts: CompletedPart[]
+    providerUploadId: ProviderUploadId
+  }): Promise<StoredUpload>
+  createPartUploadTarget(input: {
+    partNumber: number
+    providerUploadId: ProviderUploadId
+    uploadSessionId: UploadSessionId
+  }): Promise<PartUploadTarget>
+  initiateMultipart(input: {
     metadata: UploadMetadata
     uploadSessionId: UploadSessionId
-  }): Promise<StoredUpload>
+  }): Promise<MultipartUpload>
+  listParts(providerUploadId: ProviderUploadId): Promise<CompletedPart[]>
+  probe(objectKey: string): Promise<MediaProbe>
 }
 
 export interface TranscodeProvider {
@@ -43,4 +67,9 @@ export interface TranscodeProvider {
     source: SourceMedia
     startedAt: Date
   }): Promise<'processing' | 'ready'>
+}
+
+export interface MediaProviders {
+  storage: StorageProvider
+  transcode: TranscodeProvider
 }

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { getPayload } from 'payload'
 
-import config from '../../src/payload.config.js'
+import config from '@/payload.config'
 
 import {
   cleanupPilotMembers,
@@ -9,6 +9,7 @@ import {
   testInvitee,
   testSecondUploader,
 } from '../helpers/seedPilotMembers'
+import { mp4Fixture } from '../helpers/mediaFixtures'
 
 async function signIn(page: Page, member: { email: string; password: string }) {
   await page.goto('/demo/sign-in')
@@ -35,7 +36,7 @@ test.describe('Media Asset tracer bullet', () => {
     await expect(page.getByText('Your library is empty.')).toBeVisible()
 
     await page.getByLabel('Video file').setInputFiles({
-      buffer: Buffer.from('000000186674797069736f6d0000020069736f6d', 'hex'),
+      buffer: mp4Fixture(),
       mimeType: 'video/mp4',
       name: 'private-lesson.mp4',
     })
@@ -43,13 +44,16 @@ test.describe('Media Asset tracer bullet', () => {
 
     const asset = page.getByRole('article', { name: 'private-lesson.mp4' })
     await expect(asset.getByText('uploading', { exact: true })).toBeVisible()
-    await expect(asset.getByText('queued', { exact: true })).toBeVisible()
+    await expect(asset.getByText('queued', { exact: true })).toBeVisible({ timeout: 45_000 })
     await expect(asset.getByText('processing', { exact: true })).toBeVisible()
     await expect(asset.getByText('ready', { exact: true })).toBeVisible()
 
     await asset.getByRole('link', { name: 'Inspect asset' }).click()
-    await expect(page.getByRole('heading', { name: 'private-lesson.mp4' })).toBeVisible()
-    await expect(page.getByText('Media Asset ID')).toBeVisible()
+    await expect(page).toHaveURL(/\/demo\/assets\//, { timeout: 45_000 })
+    await expect(page.getByRole('heading', { name: 'private-lesson.mp4' })).toBeVisible({
+      timeout: 45_000,
+    })
+    await expect(page.getByText('Media Asset ID')).toBeVisible({ timeout: 45_000 })
     await expect(page.getByText('Upload Session ID')).toBeVisible()
     await expect(page.getByText('Processing Job ID')).toBeVisible()
     await expect(page.getByText('Provider Job ID')).toBeVisible()
@@ -64,12 +68,111 @@ test.describe('Media Asset tracer bullet', () => {
     expect(denied.status()).toBe(404)
   })
 
+  test('retries a transient part failure without restarting completed parts', async ({ page }) => {
+    const partRequests = new Map<string, number>()
+    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/(\d+)\/content$/, async (route) => {
+      const partNumber = route.request().url().split('/').at(-2)!
+      partRequests.set(partNumber, (partRequests.get(partNumber) || 0) + 1)
+      if (partNumber === '2' && partRequests.get(partNumber) === 1) {
+        await route.fulfill({
+          body: JSON.stringify({ error: 'Temporary storage failure.' }),
+          status: 503,
+        })
+        return
+      }
+      await route.continue()
+    })
+
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles({
+      buffer: mp4Fixture(60, 5 * 1024 * 1024 + 1),
+      mimeType: 'video/mp4',
+      name: 'retry-lesson.mp4',
+    })
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+
+    await expect(
+      page.getByRole('article', { name: 'retry-lesson.mp4' }).getByText('ready'),
+    ).toBeVisible()
+    expect(partRequests.get('1')).toBe(1)
+    expect(partRequests.get('2')).toBe(2)
+  })
+
+  test('resumes completed parts after reload when the same file is reselected', async ({
+    page,
+  }) => {
+    const partRequests = new Map<string, number>()
+    let interruptSecondPart = true
+    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/(\d+)\/content$/, async (route) => {
+      const partNumber = route.request().url().split('/').at(-2)!
+      partRequests.set(partNumber, (partRequests.get(partNumber) || 0) + 1)
+      if (partNumber === '2' && interruptSecondPart) {
+        await route.abort('connectionfailed')
+        return
+      }
+      await route.continue()
+    })
+
+    const file = {
+      buffer: mp4Fixture(60, 5 * 1024 * 1024 + 1),
+      mimeType: 'video/mp4',
+      name: 'resume-lesson.mp4',
+    }
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles(file)
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await expect(page.locator('.form-message[role="alert"]')).toContainText(
+      'Reselect this file to resume',
+    )
+    expect(partRequests.get('1')).toBe(1)
+
+    interruptSecondPart = false
+    await page.reload()
+    await page.getByLabel('Video file').setInputFiles(file)
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+
+    await expect(
+      page.getByRole('article', { name: 'resume-lesson.mp4' }).getByText('ready'),
+    ).toBeVisible()
+    expect(partRequests.get('1')).toBe(1)
+  })
+
+  test('rejects a changed file before combining it with completed parts', async ({ page }) => {
+    let interruptSecondPart = true
+    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/2\/content$/, async (route) => {
+      if (interruptSecondPart) {
+        await route.abort('connectionfailed')
+        return
+      }
+      await route.continue()
+    })
+
+    const original = mp4Fixture(60, 5 * 1024 * 1024 + 1)
+    const changed = Buffer.from(original)
+    changed[1024 * 1024] = 1
+    const file = { buffer: original, mimeType: 'video/mp4', name: 'changed-lesson.mp4' }
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles(file)
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await expect(page.locator('.form-message[role="alert"]')).toContainText(
+      'Reselect this file to resume',
+    )
+
+    interruptSecondPart = false
+    await page.reload()
+    await page.getByLabel('Video file').setInputFiles({ ...file, buffer: changed })
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await expect(page.locator('.form-message[role="alert"]')).toContainText(
+      'does not match the completed upload parts',
+    )
+  })
+
   test('shows a sanitized failure and lets the uploader retry while the source exists', async ({
     page,
   }) => {
     await signIn(page, testInvitee)
     await page.getByLabel('Video file').setInputFiles({
-      buffer: Buffer.from('000000186674797069736f6d0000020069736f6d', 'hex'),
+      buffer: mp4Fixture(),
       mimeType: 'video/mp4',
       name: 'retryable-lesson.mp4',
     })

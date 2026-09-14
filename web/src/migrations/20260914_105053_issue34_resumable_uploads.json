@@ -7688,6 +7688,18 @@
           "primaryKey": false,
           "notNull": true
         },
+        "duration_seconds": {
+          "name": "duration_seconds",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp(3) with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "enum_media_assets_status",
@@ -7845,6 +7857,24 @@
           "primaryKey": false,
           "notNull": true
         },
+        "file_fingerprint": {
+          "name": "file_fingerprint",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_upload_id": {
+          "name": "provider_upload_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "part_size": {
+          "name": "part_size",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
         "object_key": {
           "name": "object_key",
           "type": "varchar",
@@ -7921,6 +7951,21 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "upload_sessions_provider_upload_id_idx": {
+          "name": "upload_sessions_provider_upload_id_idx",
+          "columns": [
+            {
+              "expression": "provider_upload_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -8010,7 +8055,7 @@
           "name": "provider_job_id",
           "type": "varchar",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "asset_id": {
           "name": "asset_id",
@@ -8034,109 +8079,6 @@
         "queued_at": {
           "name": "queued_at",
           "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "dispatch_by": {
-          "name": "dispatch_by",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "next_attempt_at": {
-          "name": "next_attempt_at",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "lease_token": {
-          "name": "lease_token",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "leased_until": {
-          "name": "leased_until",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dispatched_at": {
-          "name": "dispatched_at",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "processing_deadline_at": {
-          "name": "processing_deadline_at",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ready_at": {
-          "name": "ready_at",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "failed_at": {
-          "name": "failed_at",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "failure_code": {
-          "name": "failure_code",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "failure_message": {
-          "name": "failure_message",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "object_key": {
-          "name": "object_key",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_width": {
-          "name": "source_width",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_height": {
-          "name": "source_height",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_duration_seconds": {
-          "name": "source_duration_seconds",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "renditions": {
-          "name": "renditions",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": true
         },
@@ -8206,81 +8148,6 @@
           "columns": [
             {
               "expression": "owner_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "processing_jobs_dispatch_by_idx": {
-          "name": "processing_jobs_dispatch_by_idx",
-          "columns": [
-            {
-              "expression": "dispatch_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "processing_jobs_next_attempt_at_idx": {
-          "name": "processing_jobs_next_attempt_at_idx",
-          "columns": [
-            {
-              "expression": "next_attempt_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "processing_jobs_lease_token_idx": {
-          "name": "processing_jobs_lease_token_idx",
-          "columns": [
-            {
-              "expression": "lease_token",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "processing_jobs_leased_until_idx": {
-          "name": "processing_jobs_leased_until_idx",
-          "columns": [
-            {
-              "expression": "leased_until",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "processing_jobs_processing_deadline_at_idx": {
-          "name": "processing_jobs_processing_deadline_at_idx",
-          "columns": [
-            {
-              "expression": "processing_deadline_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -12479,12 +12346,6 @@
           "notNull": false,
           "default": false
         },
-        "meta": {
-          "name": "meta",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp(3) with time zone",
@@ -15209,43 +15070,6 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
-    },
-    "public.payload_jobs_stats": {
-      "name": "payload_jobs_stats",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "stats": {
-          "name": "stats",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp(3) with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -15553,7 +15377,9 @@
       "schema": "public",
       "values": [
         "pending",
-        "completed"
+        "completed",
+        "aborted",
+        "expired"
       ]
     },
     "public.enum_processing_jobs_status": {
@@ -15561,7 +15387,6 @@
       "schema": "public",
       "values": [
         "queued",
-        "dispatching",
         "processing",
         "ready",
         "failed"
@@ -15652,7 +15477,6 @@
       "schema": "public",
       "values": [
         "inline",
-        "process-media-jobs",
         "schedulePublish"
       ]
     },
@@ -15669,7 +15493,6 @@
       "schema": "public",
       "values": [
         "inline",
-        "process-media-jobs",
         "schedulePublish"
       ]
     },
@@ -15715,6 +15538,6 @@
     "tables": {},
     "columns": {}
   },
-  "id": "69b63f80-1fa2-45b9-bbd7-f5e5f53ccc54",
+  "id": "c88ff6a6-27a1-45f8-87a8-027d51c8875d",
   "prevId": "00000000-0000-0000-0000-000000000000"
 }

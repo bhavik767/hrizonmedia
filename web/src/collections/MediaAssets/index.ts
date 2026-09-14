@@ -22,6 +22,8 @@ export const MediaAssets: CollectionConfig = {
     { name: 'fileName', type: 'text', required: true },
     { name: 'mimeType', type: 'text', required: true },
     { name: 'size', type: 'number', required: true },
+    { name: 'durationSeconds', type: 'number' },
+    { name: 'verifiedAt', type: 'date' },
     {
       name: 'status',
       type: 'select',
