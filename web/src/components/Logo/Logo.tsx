@@ -1,29 +1,27 @@
-import clsx from 'clsx'
+import Image from 'next/image'
 import React from 'react'
 
 interface Props {
   className?: string
-  loading?: 'lazy' | 'eager'
-  priority?: 'auto' | 'high' | 'low'
+  compact?: boolean
 }
 
 export const Logo = (props: Props) => {
-  const { loading: loadingFromProps, priority: priorityFromProps, className } = props
-
-  const loading = loadingFromProps || 'lazy'
-  const priority = priorityFromProps || 'low'
+  const { className, compact = false } = props
 
   return (
-    /* eslint-disable @next/next/no-img-element */
-    <img
-      alt="Payload Logo"
-      width={193}
-      height={34}
-      loading={loading}
-      fetchPriority={priority}
-      decoding="async"
-      className={clsx('max-w-[9.375rem] w-full h-[34px]', className)}
-      src="https://raw.githubusercontent.com/payloadcms/payload/3.x/packages/ui/src/assets/payload-logo-light.svg"
-    />
+    <span
+      className={['brand-lockup', compact ? 'brand-lockup--compact' : '', className]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <Image
+        alt=""
+        className={compact ? 'brand-mark' : 'brand-lockup__artwork'}
+        height={compact ? 56 : 30}
+        src={compact ? '/favicon.svg' : '/brand-lockup.svg'}
+        width={compact ? 56 : 190}
+      />
+    </span>
   )
 }

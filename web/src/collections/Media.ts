@@ -54,7 +54,7 @@ export const Media: CollectionConfig = {
       allowList: [
         // TODO: once ADR-006's S3 + CloudFront media storage is provisioned (Media currently
         // still uses local disk storage above), add that bucket/distribution's hostname here so
-        // editors can paste URLs of eSaral's own already-hosted images.
+        // Editors can paste URLs for already-hosted HrizonMedia images.
         {
           hostname: 'images.unsplash.com',
         },

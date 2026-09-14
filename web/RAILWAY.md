@@ -8,6 +8,10 @@ Production startup requires `DATABASE_URL`, `PAYLOAD_SECRET`, `BUCKET`,
 PostgreSQL URL. `REGION` defaults to `auto`; set `AWS_S3_URL_STYLE=path` or
 `S3_FORCE_PATH_STYLE=true` when the bucket endpoint needs path-style requests.
 
+The public Demo navigation and `/demo` route are disabled unless
+`HRIZONMEDIA_DEMO_ENABLED=true`. Keep the variable unset in production until the real
+provider adapters pass their security, performance, and DRM verification.
+
 Payload runs the committed migrations from `src/migrations` in production. CMS media
 uses the private S3-compatible bucket and signed downloads; local development keeps
 using `public/media` when the bucket variables are absent.

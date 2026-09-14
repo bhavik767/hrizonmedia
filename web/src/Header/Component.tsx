@@ -1,9 +1,25 @@
-import { HeaderClient } from './Component.client'
-import { getCachedGlobal } from '@/utilities/getGlobals'
+import { Logo } from '@/components/Logo/Logo'
+import Link from 'next/link'
 import React from 'react'
 
 export async function Header() {
-  const headerData = await getCachedGlobal('header', 1)()
+  const demoEnabled = process.env.HRIZONMEDIA_DEMO_ENABLED === 'true'
 
-  return <HeaderClient data={headerData} />
+  return (
+    <header className="site-header">
+      <div className="shell site-header__inner">
+        <Link aria-label="HrizonMedia home" className="home-link" href="/">
+          <Logo />
+        </Link>
+        {demoEnabled && (
+          <Link aria-label="Open the HrizonMedia Demo" className="primary-action" href="/demo">
+            Demo
+            <svg aria-hidden="true" className="action-arrow" viewBox="0 0 16 16">
+              <path d="M3 13 13 3M6 3h7v7" />
+            </svg>
+          </Link>
+        )}
+      </div>
+    </header>
+  )
 }
