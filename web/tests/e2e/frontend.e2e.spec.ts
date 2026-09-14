@@ -115,13 +115,13 @@ test.describe('HrizonMedia landing page', () => {
     ).toBeGreaterThan(0)
   })
 
-  test('opens the enabled Demo destination', async ({ page }) => {
+  test('opens the enabled Demo sign-in destination', async ({ page }) => {
     test.skip(demoDisabled, 'This case exercises the enabled Demo flag')
     await page.goto('/')
 
     await page.getByRole('link', { name: 'Open the HrizonMedia Demo' }).click()
-    await expect(page).toHaveURL('/demo')
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('HrizonMedia Demo')
+    await expect(page).toHaveURL('/demo/sign-in?returnTo=%2Fdemo')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign in to the Demo')
   })
 
   test('keeps Demo navigation and access disabled when the production flag is off', async ({

@@ -90,6 +90,36 @@ describe('Pilot Member invitations', () => {
     ).rejects.toThrow('invalid or has already been used')
   })
 
+  it('allows only one concurrent submission to consume a setup link', async () => {
+    const actor = await createOperator()
+    const invitation = await createPilotInvitation({
+      actor,
+      email: 'concurrent@example.com',
+      name: 'Concurrent Member',
+      now: new Date('2026-09-14T10:00:00.000Z'),
+      payload,
+      role: 'uploader',
+    })
+
+    const attempts = await Promise.allSettled([
+      acceptPilotInvitation({
+        now: new Date('2026-09-14T11:00:00.000Z'),
+        password: 'first-password',
+        payload,
+        token: invitation.token,
+      }),
+      acceptPilotInvitation({
+        now: new Date('2026-09-14T11:00:00.000Z'),
+        password: 'second-password',
+        payload,
+        token: invitation.token,
+      }),
+    ])
+
+    expect(attempts.filter(({ status }) => status === 'fulfilled')).toHaveLength(1)
+    expect(attempts.filter(({ status }) => status === 'rejected')).toHaveLength(1)
+  })
+
   it('rejects expired setup links', async () => {
     const actor = await createOperator()
     const invitation = await createPilotInvitation({

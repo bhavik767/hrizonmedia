@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { connection } from 'next/server'
-import { notFound, redirect } from 'next/navigation'
+import { redirect } from 'next/navigation'
 
+import { ensureDemoEnabled } from '@/pilot/demoAvailability'
 import { getPilotMember } from '@/pilot/session'
 
 import { signOut } from './actions'
@@ -13,9 +13,7 @@ export const metadata: Metadata = {
 }
 
 export default async function DemoPage() {
-  await connection()
-
-  if (process.env.HRIZONMEDIA_DEMO_ENABLED !== 'true') notFound()
+  await ensureDemoEnabled()
 
   const member = await getPilotMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')

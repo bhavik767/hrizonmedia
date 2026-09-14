@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
-import { connection } from 'next/server'
+
+import { ensureDemoEnabled } from '@/pilot/demoAvailability'
 
 import { setPilotPassword } from '../actions'
 
@@ -11,8 +11,7 @@ export default async function PilotSetupPage({
 }: {
   searchParams: Promise<{ error?: string; token?: string }>
 }) {
-  await connection()
-  if (process.env.HRIZONMEDIA_DEMO_ENABLED !== 'true') notFound()
+  await ensureDemoEnabled()
   const { error, token } = await searchParams
 
   return (

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { sql } from '@payloadcms/db-postgres'
 import type { Payload } from 'payload'
 
 import type { PilotMember } from '@/payload-types'
@@ -8,10 +9,7 @@ const INVITATION_LIFETIME_MS = 24 * 60 * 60 * 1000
 type PilotRole = PilotMember['role']
 
 export class InvitationError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
+  constructor(message: string) {
     super(message)
   }
 }
@@ -36,23 +34,24 @@ export async function createPilotInvitation({
   role: PilotRole
 }) {
   if (actor.status !== 'active' || actor.role !== 'operator') {
-    throw new InvitationError('Only an active operator can invite Pilot Members.', 403)
+    throw new InvitationError('Only an active operator can invite Pilot Members.')
   }
 
   const normalizedEmail = email.trim().toLowerCase()
   if (!normalizedEmail || !name.trim() || !['operator', 'uploader'].includes(role)) {
-    throw new InvitationError('Name, email, and a valid role are required.', 400)
+    throw new InvitationError('Name, email, and a valid role are required.')
   }
 
   const existing = await payload.find({
     collection: 'pilot-members',
     limit: 1,
     overrideAccess: true,
+    showHiddenFields: true,
     where: { email: { equals: normalizedEmail } },
   })
 
   if (existing.docs[0]?.invitationAcceptedAt) {
-    throw new InvitationError('A Pilot Member with this email already exists.', 409)
+    throw new InvitationError('A Pilot Member with this email already exists.')
   }
 
   const token = randomBytes(32).toString('base64url')
@@ -102,39 +101,60 @@ export async function acceptPilotInvitation({
   token: string
 }): Promise<PilotMember> {
   if (password.length < 8) {
-    throw new InvitationError('Choose a password with at least 8 characters.', 400)
+    throw new InvitationError('Choose a password with at least 8 characters.')
   }
 
-  const result = await payload.find({
-    collection: 'pilot-members',
-    limit: 1,
-    overrideAccess: true,
-    showHiddenFields: true,
-    where: { invitationTokenHash: { equals: hashInvitationToken(token) } },
-  })
-  const member = result.docs[0]
+  const tokenHash = hashInvitationToken(token)
+  const acceptedAt = now.toISOString()
+  const transactionID = await payload.db.beginTransaction()
+  if (!transactionID) throw new Error('Pilot invitation setup requires database transactions.')
 
-  if (!member || member.invitationAcceptedAt || !member.invitationExpiresAt) {
-    throw new InvitationError('This setup link is invalid or has already been used.', 400)
+  try {
+    const transaction = payload.db.sessions?.[String(transactionID)]?.db as
+      { execute: (query: unknown) => Promise<unknown> } | undefined
+    if (!transaction) throw new Error('Unable to start the invitation transaction.')
+
+    const result = (await transaction.execute(sql`
+      SELECT id, invitation_accepted_at, invitation_expires_at, status
+      FROM pilot_members
+      WHERE invitation_token_hash = ${tokenHash}
+      FOR UPDATE
+    `)) as unknown as {
+      rows: Array<{
+        id: number
+        invitation_accepted_at: Date | null
+        invitation_expires_at: Date | null
+        status: PilotMember['status']
+      }>
+    }
+    const member = result.rows[0]
+
+    if (!member || member.invitation_accepted_at || !member.invitation_expires_at) {
+      throw new InvitationError('This setup link is invalid or has already been used.')
+    }
+    if (new Date(member.invitation_expires_at) <= now) {
+      throw new InvitationError('This setup link has expired. Ask an operator for a new one.')
+    }
+    if (member.status !== 'active') {
+      throw new InvitationError('This Pilot Member has been disabled.')
+    }
+
+    const accepted = await payload.update({
+      collection: 'pilot-members',
+      id: member.id,
+      data: {
+        invitationAcceptedAt: acceptedAt,
+        invitationExpiresAt: null,
+        invitationTokenHash: null,
+        password,
+      },
+      overrideAccess: true,
+      req: { payload, transactionID },
+    })
+    await payload.db.commitTransaction(transactionID)
+    return accepted
+  } catch (error) {
+    await payload.db.rollbackTransaction(transactionID)
+    throw error
   }
-
-  if (new Date(member.invitationExpiresAt) <= now) {
-    throw new InvitationError('This setup link has expired. Ask an operator for a new one.', 410)
-  }
-
-  if (member.status !== 'active') {
-    throw new InvitationError('This Pilot Member has been disabled.', 403)
-  }
-
-  return payload.update({
-    collection: 'pilot-members',
-    id: member.id,
-    data: {
-      invitationAcceptedAt: now.toISOString(),
-      invitationExpiresAt: null,
-      invitationTokenHash: null,
-      password,
-    },
-    overrideAccess: true,
-  })
 }

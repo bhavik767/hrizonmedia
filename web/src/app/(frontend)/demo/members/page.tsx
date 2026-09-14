@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
-import { notFound, redirect } from 'next/navigation'
-import { connection } from 'next/server'
+import { redirect } from 'next/navigation'
 
+import { ensureDemoEnabled } from '@/pilot/demoAvailability'
 import { getPilotMember } from '@/pilot/session'
 
 import { InviteMemberForm } from './InviteMemberForm'
@@ -9,8 +9,7 @@ import { InviteMemberForm } from './InviteMemberForm'
 export const metadata: Metadata = { title: 'Invite Pilot Members | HrizonMedia Demo' }
 
 export default async function PilotMembersPage() {
-  await connection()
-  if (process.env.HRIZONMEDIA_DEMO_ENABLED !== 'true') notFound()
+  await ensureDemoEnabled()
 
   const member = await getPilotMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo%2Fmembers')

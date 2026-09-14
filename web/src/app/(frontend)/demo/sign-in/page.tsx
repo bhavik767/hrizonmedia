@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
-import { connection } from 'next/server'
+
+import { ensureDemoEnabled } from '@/pilot/demoAvailability'
 
 import { signIn } from '../actions'
 
@@ -13,9 +13,7 @@ export default async function PilotSignInPage({
 }: {
   searchParams: Promise<{ error?: string; returnTo?: string; setup?: string; signedOut?: string }>
 }) {
-  await connection()
-
-  if (process.env.HRIZONMEDIA_DEMO_ENABLED !== 'true') notFound()
+  await ensureDemoEnabled()
   const params = await searchParams
 
   return (

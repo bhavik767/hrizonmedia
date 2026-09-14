@@ -57,6 +57,14 @@ test.describe('Pilot Member access', () => {
     await expect(page).toHaveURL('/demo', { timeout: 60_000 })
     await expect(page.getByText(`Signed in as ${testInvitee.name}`)).toBeVisible()
 
+    const cmsWrite = await page.request.post('/api/pages', {
+      data: { slug: 'pilot-must-not-create-this', title: 'Forbidden Pilot CMS write' },
+    })
+    expect(cmsWrite.status()).toBe(403)
+
+    const cmsUsers = await page.request.get('/api/users')
+    expect(cmsUsers.status()).toBe(403)
+
     await page.goto('/admin')
     await expect(page).toHaveURL('/admin/unauthorized')
   })
