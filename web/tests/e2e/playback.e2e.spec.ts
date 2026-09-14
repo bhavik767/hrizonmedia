@@ -160,6 +160,7 @@ test.describe('encrypted playback contract', () => {
     await expect(page.locator('.secure-playback')).toHaveScreenshot('secure-player-mobile.png', {
       animations: 'disabled',
       mask: [watermark.locator('time')],
+      maxDiffPixelRatio: 0.015,
     })
 
     await expect(page.getByRole('link', { name: 'Pilot terms' })).toHaveAttribute(

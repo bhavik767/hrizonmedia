@@ -40,7 +40,7 @@ export default async function DemoPage() {
           </button>
         </form>
       </div>
-      {member.role === 'uploader' && <MediaLibrary />}
+      <MediaLibrary canUpload={member.role === 'uploader'} />
     </main>
   )
 }

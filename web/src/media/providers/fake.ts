@@ -206,6 +206,10 @@ export const fakeStorageProvider: StorageProvider & {
     }
   },
 
+  async deleteObject(objectKey) {
+    state.objects.delete(objectKey)
+  },
+
   async initiateMultipart({ metadata, uploadSessionId }) {
     const providerUploadId = `provider_upload_${randomUUID()}` as ProviderUploadId
     state.uploads.set(providerUploadId, {
@@ -263,6 +267,8 @@ export const fakeStorageProvider: StorageProvider & {
 }
 
 export const fakeTranscodeProvider: TranscodeProvider = {
+  async deleteOutputs() {},
+
   async queue({ idempotencyKey, mediaAssetId, objectKey, renditions }) {
     const renditionKey = (renditions as Rendition[])
       .map((rendition) => `${rendition.width}x${rendition.height}`)
@@ -290,6 +296,8 @@ export const fakeDeliveryProvider: DeliveryProvider = {
       manifestURL: `/api/demo/playback/${playbackGrantId}/manifest.mpd?asset=${mediaAssetId}&token=${encodeURIComponent(token)}`,
     }
   },
+
+  async revokeAsset() {},
 }
 
 export const fakeDrmProvider: DrmProvider = {

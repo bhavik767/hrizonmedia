@@ -3,7 +3,7 @@ import {
   mediaErrorResponse,
   withAuthenticatedUploader,
 } from '@/media/request'
-import { getOwnedAsset } from '@/media/library'
+import { getVisibleAsset } from '@/media/library'
 import type { Rendition } from '@/media/providers/contracts'
 
 const videoBandwidth: Record<Rendition['height'], number> = {
@@ -36,7 +36,7 @@ export async function GET(
         rawPlaybackGrantId: (await context.params).playbackGrantId,
         request,
       })
-      const asset = await getOwnedAsset(payload, member, mediaAssetId)
+      const asset = await getVisibleAsset(payload, member, mediaAssetId)
       if (!asset.renditions?.length) {
         throw new Error('Ready Media Asset has no renditions.')
       }

@@ -79,6 +79,7 @@ export interface Config {
     'upload-sessions': UploadSession;
     'processing-jobs': ProcessingJob;
     'playback-grants': PlaybackGrant;
+    'audit-events': AuditEvent;
     'reusable-blocks': ReusableBlock;
     redirects: Redirect;
     forms: Form;
@@ -108,6 +109,7 @@ export interface Config {
     'upload-sessions': UploadSessionsSelect<false> | UploadSessionsSelect<true>;
     'processing-jobs': ProcessingJobsSelect<false> | ProcessingJobsSelect<true>;
     'playback-grants': PlaybackGrantsSelect<false> | PlaybackGrantsSelect<true>;
+    'audit-events': AuditEventsSelect<false> | AuditEventsSelect<true>;
     'reusable-blocks': ReusableBlocksSelect<false> | ReusableBlocksSelect<true>;
     redirects: RedirectsSelect<false> | RedirectsSelect<true>;
     forms: FormsSelect<false> | FormsSelect<true>;
@@ -1179,6 +1181,11 @@ export interface MediaAsset {
   verifiedAt?: string | null;
   drmContentId?: string | null;
   expiresAt?: string | null;
+  deletedAt?: string | null;
+  deletedBy?: (number | null) | PilotMember;
+  accessRevokedAt?: string | null;
+  sourceDeletedAt?: string | null;
+  outputsDeletedAt?: string | null;
   status: 'uploading' | 'queued' | 'processing' | 'ready' | 'failed' | 'expired' | 'deleted';
   statusChangedAt: string;
   updatedAt: string;
@@ -1256,6 +1263,29 @@ export interface PlaybackGrant {
   owner: number | PilotMember;
   expiresAt: string;
   deliveryExpiresAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-events".
+ */
+export interface AuditEvent {
+  id: number;
+  eventKey: string;
+  action: 'asset_deleted' | 'asset_expired' | 'access_revoked' | 'source_deleted' | 'outputs_deleted';
+  asset: number | MediaAsset;
+  actor?: (number | null) | PilotMember;
+  occurredAt: string;
+  details?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1501,6 +1531,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'playback-grants';
         value: number | PlaybackGrant;
+      } | null)
+    | ({
+        relationTo: 'audit-events';
+        value: number | AuditEvent;
       } | null)
     | ({
         relationTo: 'reusable-blocks';
@@ -2044,6 +2078,11 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   verifiedAt?: T;
   drmContentId?: T;
   expiresAt?: T;
+  deletedAt?: T;
+  deletedBy?: T;
+  accessRevokedAt?: T;
+  sourceDeletedAt?: T;
+  outputsDeletedAt?: T;
   status?: T;
   statusChangedAt?: T;
   updatedAt?: T;
@@ -2110,6 +2149,20 @@ export interface PlaybackGrantsSelect<T extends boolean = true> {
   owner?: T;
   expiresAt?: T;
   deliveryExpiresAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-events_select".
+ */
+export interface AuditEventsSelect<T extends boolean = true> {
+  eventKey?: T;
+  action?: T;
+  asset?: T;
+  actor?: T;
+  occurredAt?: T;
+  details?: T;
   updatedAt?: T;
   createdAt?: T;
 }

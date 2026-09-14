@@ -6,20 +6,34 @@ import type { PilotMember } from '@/payload-types'
 import { parseMediaAssetId, parsePlaybackGrantId, type DeliveryToken } from './identifiers'
 import { authorizePlaybackResource, PlaybackAuthorizationError } from './playback'
 
-export async function authenticatedUploader(request: Request): Promise<{
+type AuthenticatedMember = {
   member: PilotMember
   payload: Awaited<ReturnType<typeof getPayload>>
-}> {
+}
+
+async function authenticatedMember(
+  request: Request,
+  requiredRole?: PilotMember['role'],
+): Promise<AuthenticatedMember> {
   const payload = await getPayload({ config })
-  const { user } = await payload.auth({ headers: request.headers })
+  const { user: member } = await payload.auth({ headers: request.headers })
   if (
-    user?.collection !== 'pilot-members' ||
-    user.status !== 'active' ||
-    user.role !== 'uploader'
+    member?.collection !== 'pilot-members' ||
+    member.status !== 'active' ||
+    (requiredRole && member.role !== requiredRole)
   ) {
-    throw new Response('Uploader authentication required.', { status: 401 })
+    const subject = requiredRole === 'uploader' ? 'Uploader' : 'Pilot Member'
+    throw new Response(`${subject} authentication required.`, { status: 401 })
   }
-  return { member: user, payload }
+  return { member, payload }
+}
+
+export function authenticatedUploader(request: Request): Promise<AuthenticatedMember> {
+  return authenticatedMember(request, 'uploader')
+}
+
+export function authenticatedPilotMember(request: Request): Promise<AuthenticatedMember> {
+  return authenticatedMember(request)
 }
 
 export function mediaErrorResponse(error: unknown): Response {
@@ -31,15 +45,30 @@ export function mediaErrorResponse(error: unknown): Response {
   return Response.json({ error: 'Unable to complete the media request.' }, { status: 500 })
 }
 
-export async function withAuthenticatedUploader(
+async function withAuthenticatedMember(
   request: Request,
-  handler: (context: Awaited<ReturnType<typeof authenticatedUploader>>) => Promise<Response>,
+  authenticate: (request: Request) => Promise<AuthenticatedMember>,
+  handler: (context: AuthenticatedMember) => Promise<Response>,
 ): Promise<Response> {
   try {
-    return await handler(await authenticatedUploader(request))
+    return await handler(await authenticate(request))
   } catch (error) {
     return mediaErrorResponse(error)
   }
+}
+
+export function withAuthenticatedUploader(
+  request: Request,
+  handler: (context: AuthenticatedMember) => Promise<Response>,
+): Promise<Response> {
+  return withAuthenticatedMember(request, authenticatedUploader, handler)
+}
+
+export async function withAuthenticatedPilotMember(
+  request: Request,
+  handler: (context: AuthenticatedMember) => Promise<Response>,
+): Promise<Response> {
+  return withAuthenticatedMember(request, authenticatedPilotMember, handler)
 }
 
 export async function authorizePlaybackResourceRequest(input: {

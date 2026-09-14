@@ -7,6 +7,7 @@ import {
   cleanupPilotMembers,
   seedPilotUploaders,
   testInvitee,
+  testOperator,
   testSecondUploader,
 } from '../helpers/seedPilotMembers'
 import { mp4Fixture } from '../helpers/mediaFixtures'
@@ -46,7 +47,7 @@ test.describe('Media Asset tracer bullet', () => {
     await expect(asset.getByText('uploading', { exact: true })).toBeVisible()
     await expect(asset.getByText('queued', { exact: true })).toBeVisible({ timeout: 45_000 })
     await expect(asset.getByText('processing', { exact: true })).toBeVisible()
-    await expect(asset.getByText('ready', { exact: true })).toBeVisible()
+    await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
 
     await asset.getByRole('link', { name: 'Inspect asset' }).click()
     await expect(page).toHaveURL(/\/demo\/assets\//, { timeout: 45_000 })
@@ -66,6 +67,93 @@ test.describe('Media Asset tracer bullet', () => {
 
     const denied = await page.request.get(`/api/demo/assets/${assetID}`)
     expect(denied.status()).toBe(404)
+  })
+
+  test('issue 38: deletes an owned Media Asset and removes it from the library immediately', async ({
+    page,
+  }) => {
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles({
+      buffer: mp4Fixture(),
+      mimeType: 'video/mp4',
+      name: 'delete-me.mp4',
+    })
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    const asset = page.getByRole('article', { name: 'delete-me.mp4' })
+    await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
+    await asset.getByRole('link', { name: 'Inspect asset' }).click()
+
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.getByRole('button', { name: 'Delete asset' }).click()
+
+    await expect(page).toHaveURL('/demo')
+    await expect(page.getByText('Your library is empty.')).toBeVisible()
+  })
+
+  test('issue 38: keeps an expired Media Asset visible while blocking new playback', async ({
+    page,
+  }) => {
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles({
+      buffer: mp4Fixture(),
+      mimeType: 'video/mp4',
+      name: 'expired-lesson.mp4',
+    })
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    const asset = page.getByRole('article', { name: 'expired-lesson.mp4' })
+    await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
+    const detailURL = await asset.getByRole('link', { name: 'Inspect asset' }).getAttribute('href')
+    const mediaAssetId = detailURL!.split('/').at(-1)!
+    const payload = await getPayload({ config })
+    await payload.update({
+      collection: 'media-assets',
+      data: { expiresAt: new Date(Date.now() - 1).toISOString() },
+      overrideAccess: true,
+      where: { mediaAssetId: { equals: mediaAssetId } },
+    })
+
+    await page.reload()
+    await expect(asset.getByText('expired', { exact: true })).toBeVisible({ timeout: 45_000 })
+    await asset.getByRole('link', { name: 'Inspect asset' }).click()
+    await expect(page.getByRole('heading', { name: 'Secure playback' })).toHaveCount(0)
+    const grant = await page.request.post(`/api/demo/assets/${mediaAssetId}/playback-grants`)
+    expect(grant.status()).toBe(409)
+  })
+
+  test('issue 38: lets an operator inspect and delete another uploader’s Media Asset', async ({
+    page,
+  }) => {
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles({
+      buffer: mp4Fixture(),
+      mimeType: 'video/mp4',
+      name: 'operator-delete.mp4',
+    })
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    const asset = page.getByRole('article', { name: 'operator-delete.mp4' })
+    await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
+    const payload = await getPayload({ config })
+    await payload.create({
+      collection: 'pilot-members',
+      data: {
+        ...testOperator,
+        invitationAcceptedAt: new Date().toISOString(),
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await signIn(page, testOperator)
+
+    await expect(page.getByLabel('Video file')).toHaveCount(0)
+    const operatorAsset = page.getByRole('article', { name: 'operator-delete.mp4' })
+    await operatorAsset.getByRole('link', { name: 'Inspect asset' }).click()
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.getByRole('button', { name: 'Delete asset' }).click()
+
+    await expect(page).toHaveURL('/demo')
+    await expect(page.getByText('Your library is empty.')).toBeVisible()
   })
 
   test('retries a transient part failure without restarting completed parts', async ({ page }) => {

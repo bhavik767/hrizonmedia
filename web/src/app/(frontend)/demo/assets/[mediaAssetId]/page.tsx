@@ -4,13 +4,15 @@ import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { parseMediaAssetId } from '@/media/identifiers'
-import { getOwnedAsset, MediaLibraryError } from '@/media/library'
+import { runMediaLifecycle } from '@/media/lifecycle'
+import { getVisibleAsset, MediaLibraryError } from '@/media/library'
 import type { MediaAssetDetail } from '@/media/types'
 import config from '@/payload.config'
 import { ensureDemoEnabled } from '@/pilot/demoAvailability'
 import { getPilotMember } from '@/pilot/session'
 
 import { signOut } from '../../actions'
+import { DeleteAssetButton } from './DeleteAssetButton'
 import { RetryProcessingButton } from './RetryProcessingButton'
 import { PlaybackPlayer } from './PlaybackPlayer'
 
@@ -20,13 +22,14 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
   await ensureDemoEnabled()
   const member = await getPilotMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
-  if (member.role !== 'uploader') notFound()
   const mediaAssetId = parseMediaAssetId((await params).mediaAssetId)
   if (!mediaAssetId) notFound()
 
   let asset: MediaAssetDetail
   try {
-    asset = await getOwnedAsset(await getPayload({ config }), member, mediaAssetId)
+    const payload = await getPayload({ config })
+    await runMediaLifecycle(payload)
+    asset = await getVisibleAsset(payload, member, mediaAssetId)
   } catch (error) {
     if (error instanceof MediaLibraryError && error.status === 404) notFound()
     throw error
@@ -67,7 +70,7 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
           </div>
         )}
       </dl>
-      {asset.status === 'ready' && (
+      {member.role === 'uploader' && asset.status === 'ready' && (
         <PlaybackPlayer mediaAssetId={asset.mediaAssetId} viewerEmail={member.email} />
       )}
       {asset.status === 'failed' && asset.failureMessage && (
@@ -82,6 +85,7 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
         </section>
       )}
       <div className="demo-actions">
+        <DeleteAssetButton mediaAssetId={asset.mediaAssetId} />
         <Link className="text-link" href="/demo">
           Back to library
         </Link>

@@ -6,6 +6,7 @@ import { buildConfig, PayloadRequest } from 'payload'
 import { fileURLToPath } from 'url'
 
 import { Authors } from './collections/Authors'
+import { AuditEvents } from './collections/AuditEvents'
 import { Categories } from './collections/Categories'
 import { Media } from './collections/Media'
 import { MediaAssets } from './collections/MediaAssets'
@@ -119,6 +120,7 @@ export default buildConfig({
     UploadSessions,
     ProcessingJobs,
     PlaybackGrants,
+    AuditEvents,
     ReusableBlocks,
   ],
   cors: [getServerSideURL()].filter(Boolean),
@@ -156,8 +158,10 @@ export default buildConfig({
     tasks: [
       {
         handler: async ({ req }) => {
+          const { runMediaLifecycle } = await import('./media/lifecycle')
           const { runProcessingCycle } = await import('./media/processing')
           await runProcessingCycle(req.payload)
+          await runMediaLifecycle(req.payload)
           return { output: {} }
         },
         inputSchema: [],
