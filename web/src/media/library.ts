@@ -1,4 +1,4 @@
-import type { Payload } from 'payload'
+import { createLocalReq, type Payload } from 'payload'
 
 import type { MediaAsset, PilotMember, UploadSession } from '@/payload-types'
 
@@ -161,32 +161,45 @@ export async function completeUpload(
   const queuedAt = processingOptions.now ?? new Date()
   const processingJobId = newProcessingJobId()
 
-  await payload.update({
-    collection: 'upload-sessions',
-    data: { objectKey: stored.objectKey, status: 'completed' },
-    id: session.id,
-    overrideAccess: true,
-  })
-  await payload.create({
-    collection: 'processing-jobs',
-    data: {
-      ...newProcessingJobData({
-        asset,
-        objectKey: stored.objectKey,
-        ownerID: owner.id,
-        processingJobId,
-        queuedAt,
-        source: stored.source,
-      }),
-    },
-    overrideAccess: true,
-  })
-  const queuedAsset = await payload.update({
-    collection: 'media-assets',
-    data: { status: 'queued', statusChangedAt: queuedAt.toISOString() },
-    id: asset.id,
-    overrideAccess: true,
-  })
+  const transactionID = await payload.db.beginTransaction()
+  if (transactionID === null) throw new Error('Processing Jobs require database transactions.')
+  const req = await createLocalReq({ req: { transactionID } }, payload)
+  let queuedAsset: MediaAsset
+  try {
+    await payload.update({
+      collection: 'upload-sessions',
+      data: { objectKey: stored.objectKey, status: 'completed' },
+      id: session.id,
+      overrideAccess: true,
+      req,
+    })
+    await payload.create({
+      collection: 'processing-jobs',
+      data: {
+        ...newProcessingJobData({
+          asset,
+          objectKey: stored.objectKey,
+          ownerID: owner.id,
+          processingJobId,
+          queuedAt,
+          source: stored.source,
+        }),
+      },
+      overrideAccess: true,
+      req,
+    })
+    queuedAsset = await payload.update({
+      collection: 'media-assets',
+      data: { status: 'queued', statusChangedAt: queuedAt.toISOString() },
+      id: asset.id,
+      overrideAccess: true,
+      req,
+    })
+    await payload.db.commitTransaction(transactionID)
+  } catch (error) {
+    await payload.db.rollbackTransaction(transactionID)
+    throw error
+  }
 
   await runProcessingCycle(payload, {
     ...processingOptions,

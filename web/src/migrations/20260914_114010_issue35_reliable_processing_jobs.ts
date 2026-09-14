@@ -1,6 +1,6 @@
 import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 
-export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
+export async function up({ db }: MigrateUpArgs): Promise<void> {
   await db.execute(sql`
    ALTER TYPE "public"."enum_processing_jobs_status" ADD VALUE 'dispatching' BEFORE 'processing';
   ALTER TABLE "processing_jobs" ALTER COLUMN "provider_job_id" DROP NOT NULL;
@@ -54,7 +54,7 @@ export async function up({ db, payload, req }: MigrateUpArgs): Promise<void> {
   CREATE INDEX "processing_jobs_processing_deadline_at_idx" ON "processing_jobs" USING btree ("processing_deadline_at");`)
 }
 
-export async function down({ db, payload, req }: MigrateDownArgs): Promise<void> {
+export async function down({ db }: MigrateDownArgs): Promise<void> {
   await db.execute(sql`
    UPDATE "processing_jobs" SET "status" = 'queued' WHERE "status" = 'dispatching';
   UPDATE "processing_jobs"

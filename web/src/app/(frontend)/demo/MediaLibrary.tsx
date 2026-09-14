@@ -2,10 +2,12 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
+import { flushSync } from 'react-dom'
 
 import type { MediaAssetSummary } from '@/media/types'
 
 type DisplayedAsset = Omit<MediaAssetSummary, 'mediaAssetId'> & { mediaAssetId: string }
+const MIN_VISIBLE_STATUS_MS = 2_000
 
 function readableBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -44,10 +46,11 @@ export function MediaLibrary() {
   }, [refresh])
 
   useEffect(() => {
+    if (uploading) return
     if (!assets.some(({ status }) => status === 'queued' || status === 'processing')) return
     const timer = window.setInterval(() => void refresh().catch(() => undefined), 250)
     return () => window.clearInterval(timer)
-  }, [assets, refresh])
+  }, [assets, refresh, uploading])
 
   async function upload(formData: FormData) {
     const file = formData.get('file')
@@ -56,19 +59,21 @@ export function MediaLibrary() {
     setError('')
     setUploading(true)
     const temporaryID = `local_${Date.now()}`
-    setAssets((current) => [
-      {
-        createdAt: new Date().toISOString(),
-        fileName: file.name,
-        mediaAssetId: temporaryID,
-        size: file.size,
-        status: 'uploading',
-      },
-      ...current,
-    ])
+    flushSync(() => {
+      setAssets((current) => [
+        {
+          createdAt: new Date().toISOString(),
+          fileName: file.name,
+          mediaAssetId: temporaryID,
+          size: file.size,
+          status: 'uploading',
+        },
+        ...current,
+      ])
+    })
 
     try {
-      await new Promise((resolve) => window.setTimeout(resolve, 500))
+      await new Promise((resolve) => window.setTimeout(resolve, MIN_VISIBLE_STATUS_MS))
       const sessionResponse = await fetch('/api/demo/uploads', {
         body: JSON.stringify({ fileName: file.name, mimeType: file.type, size: file.size }),
         headers: { 'content-type': 'application/json' },
@@ -87,11 +92,14 @@ export function MediaLibrary() {
       uploadBody.set('file', file)
       const uploadResponse = await fetch(session.uploadURL, { body: uploadBody, method: 'PUT' })
       const completed = await responseJSON<{ asset: MediaAssetSummary }>(uploadResponse)
-      setAssets((current) =>
-        current.map((item) =>
-          item.mediaAssetId === session.asset.mediaAssetId ? completed.asset : item,
-        ),
-      )
+      flushSync(() => {
+        setAssets((current) =>
+          current.map((item) =>
+            item.mediaAssetId === session.asset.mediaAssetId ? completed.asset : item,
+          ),
+        )
+      })
+      await new Promise((resolve) => window.setTimeout(resolve, MIN_VISIBLE_STATUS_MS))
     } catch (caught) {
       setAssets((current) => current.filter(({ mediaAssetId }) => mediaAssetId !== temporaryID))
       setError(caught instanceof Error ? caught.message : 'Unable to upload this video.')

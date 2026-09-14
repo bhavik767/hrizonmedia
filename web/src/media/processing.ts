@@ -3,16 +3,12 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 
 import { sql } from '@payloadcms/db-postgres'
-import type { Payload } from 'payload'
+import type { Payload, Where } from 'payload'
 
 import type { MediaAsset, ProcessingJob } from '@/payload-types'
 
 import type { MediaAssetId, ProcessingJobId, ProviderJobId } from './identifiers'
-import {
-  PermanentTranscodeError,
-  TransientTranscodeError,
-  fakeTranscodeProvider,
-} from './providers/fake'
+import { PermanentTranscodeError, getFakeProviders } from './providers/fake'
 import type { Rendition, SourceMedia, TranscodeProvider } from './providers/contracts'
 
 const DISPATCH_DEADLINE_MS = 30_000
@@ -55,12 +51,16 @@ export function adaptiveRenditions(source: SourceMedia): Rendition[] {
   ])
   return [...widths]
     .filter(([height]) => height <= source.height)
-    .map(([height, standardWidth]) => ({
-      audioCodec: 'aac' as const,
-      height: height as Rendition['height'],
-      videoCodec: 'h264' as const,
-      width: Math.min(standardWidth, source.width),
-    }))
+    .map(([height, standardWidth]) => {
+      const scale = Math.min(height / source.height, standardWidth / source.width, 1)
+      const scaledWidth = Math.round((source.width * scale) / 2) * 2
+      return {
+        audioCodec: 'aac' as const,
+        height: height as Rendition['height'],
+        videoCodec: 'h264' as const,
+        width: scaledWidth,
+      }
+    })
 }
 
 export function newProcessingJobData(input: {
@@ -150,35 +150,13 @@ async function scheduleRetry(
   await setAssetStatus(payload, job, 'queued', now)
 }
 
-async function recoverExpiredDispatches(payload: Payload, now: Date) {
+async function recoverExpiredJobs(payload: Payload, now: Date, where: Where) {
   const expired = await payload.find({
     collection: 'processing-jobs',
     depth: 0,
     limit: 100,
     overrideAccess: true,
-    where: {
-      and: [
-        { status: { equals: 'dispatching' } },
-        { leasedUntil: { less_than_equal: now.toISOString() } },
-      ],
-    },
-  })
-  for (const job of expired.docs)
-    await scheduleRetry(payload, job, now, 'processing_timeout', false)
-}
-
-async function recoverTimedOutProcessing(payload: Payload, now: Date) {
-  const expired = await payload.find({
-    collection: 'processing-jobs',
-    depth: 0,
-    limit: 100,
-    overrideAccess: true,
-    where: {
-      and: [
-        { status: { equals: 'processing' } },
-        { processingDeadlineAt: { less_than_equal: now.toISOString() } },
-      ],
-    },
+    where,
   })
   for (const job of expired.docs)
     await scheduleRetry(payload, job, now, 'processing_timeout', false)
@@ -260,8 +238,6 @@ async function dispatchQueuedJobs(
       const attemptedJob = { ...job, attempts: candidate.attempts + 1 }
       if (error instanceof PermanentTranscodeError) {
         await failJob(payload, attemptedJob, now, 'provider_rejected')
-      } else if (error instanceof TransientTranscodeError) {
-        await scheduleRetry(payload, attemptedJob, now, 'provider_unavailable')
       } else {
         await scheduleRetry(payload, attemptedJob, now, 'provider_unavailable')
       }
@@ -308,10 +284,20 @@ export async function runProcessingCycle(
   options: ProcessingOptions = {},
 ): Promise<void> {
   const now = options.now ?? new Date()
-  const provider = options.provider ?? fakeTranscodeProvider
-  await recoverExpiredDispatches(payload, now)
+  const provider = options.provider ?? getFakeProviders().transcode
+  await recoverExpiredJobs(payload, now, {
+    and: [
+      { status: { equals: 'dispatching' } },
+      { leasedUntil: { less_than_equal: now.toISOString() } },
+    ],
+  })
   await dispatchQueuedJobs(payload, now, provider, options.workerId ?? `worker-${process.pid}`)
   await pollProcessingJobs(payload, now, provider)
-  await recoverTimedOutProcessing(payload, now)
+  await recoverExpiredJobs(payload, now, {
+    and: [
+      { status: { equals: 'processing' } },
+      { processingDeadlineAt: { less_than_equal: now.toISOString() } },
+    ],
+  })
   await dispatchQueuedJobs(payload, now, provider, options.workerId ?? `worker-${process.pid}`)
 }

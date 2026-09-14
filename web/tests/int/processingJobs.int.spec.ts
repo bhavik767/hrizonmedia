@@ -3,6 +3,7 @@ import { File as NodeFile } from 'node:buffer'
 import { getPayload, type Payload } from 'payload'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { newProcessingJobId } from '@/media/identifiers'
 import {
   completeUpload,
   createUploadSession,
@@ -15,7 +16,7 @@ import {
   fakeTranscodeProvider,
 } from '@/media/providers/fake'
 import type { TranscodeProvider } from '@/media/providers/contracts'
-import { runProcessingCycle } from '@/media/processing'
+import { newProcessingJobData, runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
 
@@ -94,6 +95,103 @@ describe('reliable Processing Jobs', () => {
     expect(detail.status).toBe('processing')
     expect(detail.renditions?.map(({ height }) => height)).toEqual([360, 480, 720])
     expect(at(detail.dispatchedAt!).getTime() - start.getTime()).toBeLessThanOrEqual(30_000)
+  })
+
+  it('preserves aspect ratio for narrow sources without upscaling', async () => {
+    const provider = { ...fakeTranscodeProvider, queue: vi.fn(fakeTranscodeProvider.queue) }
+    await upload(fixture('640x1080:2'), provider)
+
+    expect(provider.queue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        renditions: [
+          expect.objectContaining({ height: 360, width: 214 }),
+          expect.objectContaining({ height: 480, width: 284 }),
+          expect.objectContaining({ height: 720, width: 426 }),
+          expect.objectContaining({ height: 1080, width: 640 }),
+        ],
+      }),
+    )
+  })
+
+  it('runs recovery autonomously through the scheduled Payload worker', async () => {
+    await upload()
+    const jobs = await payload.find({
+      collection: 'processing-jobs',
+      overrideAccess: true,
+      where: {},
+    })
+    await payload.update({
+      collection: 'processing-jobs',
+      data: {
+        attempts: 0,
+        nextAttemptAt: new Date(Date.now() - 1_000).toISOString(),
+        providerJobId: null,
+        status: 'queued',
+      },
+      id: jobs.docs[0]!.id,
+      overrideAccess: true,
+    })
+    await payload.jobs.queue({ input: {}, queue: 'media-processing', task: 'process-media-jobs' })
+
+    await payload.jobs.run({ limit: 1, queue: 'media-processing' })
+
+    await expect(
+      payload.findByID({
+        collection: 'processing-jobs',
+        id: jobs.docs[0]!.id,
+        overrideAccess: true,
+      }),
+    ).resolves.toMatchObject({ attempts: 1, status: 'processing' })
+    expect(payload.config.jobs.autoRun).toEqual(
+      expect.arrayContaining([expect.objectContaining({ cron: '*/10 * * * * *' })]),
+    )
+  })
+
+  it('refuses the default fake processing provider in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', 'production')
+    try {
+      await expect(runProcessingCycle(payload)).rejects.toThrow('prohibited in production')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('rolls back upload completion when its Processing Job cannot be created', async () => {
+    const file = fixture()
+    const session = await createUploadSession(payload, uploader, {
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+    })
+    const assets = await payload.find({
+      collection: 'media-assets',
+      overrideAccess: true,
+      where: {},
+    })
+    await payload.create({
+      collection: 'processing-jobs',
+      data: newProcessingJobData({
+        asset: assets.docs[0]!,
+        objectKey: 'existing/source.mp4',
+        ownerID: uploader.id,
+        processingJobId: newProcessingJobId(),
+        queuedAt: start,
+        source: { durationSeconds: 2, height: 1080, width: 1920 },
+      }),
+      overrideAccess: true,
+    })
+
+    await expect(
+      completeUpload(payload, uploader, session.uploadSessionId, file, { now: start }),
+    ).rejects.toBeTruthy()
+
+    const sessions = await payload.find({
+      collection: 'upload-sessions',
+      overrideAccess: true,
+      where: {},
+    })
+    expect(sessions.docs[0]).toMatchObject({ objectKey: null, status: 'pending' })
   })
 
   it('leases a queued job to only one concurrent worker', async () => {

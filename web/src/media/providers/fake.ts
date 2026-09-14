@@ -18,7 +18,7 @@ export class PermanentTranscodeError extends Error {}
 
 function fakeSource(bytes: Uint8Array): SourceMedia {
   const marker = new TextDecoder().decode(bytes).match(/HRIZON:(\d+)x(\d+):(\d+)/)
-  if (!marker) return { durationSeconds: 2, height: 1080, width: 1920 }
+  if (!marker) return { durationSeconds: 5, height: 1080, width: 1920 }
   return {
     durationSeconds: Number(marker[3]),
     height: Number(marker[2]),
