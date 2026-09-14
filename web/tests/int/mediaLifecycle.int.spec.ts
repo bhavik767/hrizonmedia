@@ -317,6 +317,60 @@ describe('Media Asset lifecycle', () => {
     expect(deleteOutputs).toHaveBeenCalledOnce()
   })
 
+  it('reconciles a lifecycle Audit Event after a transient database failure', async () => {
+    const asset = await createReadyAsset(owner)
+    const create = payload.create.bind(payload)
+    const createSpy = vi.spyOn(payload, 'create').mockImplementation(async (args) => {
+      if (
+        args.collection === 'audit-events' &&
+        'action' in args.data &&
+        args.data.action === 'asset_deleted'
+      ) {
+        createSpy.mockImplementation(create)
+        throw new Error('audit database unavailable')
+      }
+      return create(args as never)
+    })
+
+    await expect(
+      deleteMediaAsset(payload, owner, asset.mediaAssetId, { now }),
+    ).resolves.toBeUndefined()
+    await runMediaLifecycle(payload, { now })
+    createSpy.mockRestore()
+
+    await expect(
+      payload.find({
+        collection: 'audit-events',
+        depth: 0,
+        overrideAccess: true,
+        where: { eventKey: { equals: `media-asset:${asset.id}:asset_deleted` } },
+      }),
+    ).resolves.toMatchObject({
+      docs: [expect.objectContaining({ actor: owner.id, occurredAt: now.toISOString() })],
+      totalDocs: 1,
+    })
+  })
+
+  it('records one Audit Event when concurrent deletion requests race', async () => {
+    const asset = await createReadyAsset(owner)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    await Promise.all([
+      deleteMediaAsset(payload, owner, asset.mediaAssetId, { now }),
+      deleteMediaAsset(payload, owner, asset.mediaAssetId, { now }),
+    ])
+
+    expect(consoleError).not.toHaveBeenCalled()
+    consoleError.mockRestore()
+    await expect(
+      payload.find({
+        collection: 'audit-events',
+        overrideAccess: true,
+        where: { eventKey: { equals: `media-asset:${asset.id}:asset_deleted` } },
+      }),
+    ).resolves.toMatchObject({ totalDocs: 1 })
+  })
+
   it('keeps expired metadata visible to its owner and lets operators inspect every asset', async () => {
     const ownedAsset = await createReadyAsset(owner)
     const expiredAsset = await createReadyAsset(owner)

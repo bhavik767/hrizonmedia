@@ -34,17 +34,76 @@ async function recordLifecycleEvent(
     where: { eventKey: { equals: eventKey } },
   })
   if (existing.docs.length > 0) return
-  await payload.create({
-    collection: 'audit-events',
-    data: {
-      action,
-      actor: actorID,
-      asset: assetID,
-      eventKey,
-      occurredAt: now.toISOString(),
-    },
+  try {
+    await payload.create({
+      collection: 'audit-events',
+      data: {
+        action,
+        actor: actorID,
+        asset: assetID,
+        eventKey,
+        occurredAt: now.toISOString(),
+      },
+      overrideAccess: true,
+    })
+  } catch (error) {
+    const concurrent = await payload.find({
+      collection: 'audit-events',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { eventKey: { equals: eventKey } },
+    })
+    if (concurrent.docs.length === 0) throw error
+  }
+}
+
+async function reconcileLifecycleEvents(payload: Payload, assetID?: number): Promise<void> {
+  const assets = await payload.find({
+    collection: 'media-assets',
+    depth: 0,
     overrideAccess: true,
+    pagination: false,
+    where: assetID ? { id: { equals: assetID } } : {},
   })
+  for (const asset of assets.docs) {
+    const events: Array<{ action: LifecycleAction; actorID?: number; occurredAt: string }> = []
+    if (asset.status === 'deleted' && asset.deletedAt) {
+      events.push({
+        action: 'asset_deleted',
+        actorID: asset.deletedBy ? relationID(asset.deletedBy) : undefined,
+        occurredAt: asset.deletedAt,
+      })
+    }
+    if (asset.status === 'expired') {
+      events.push({
+        action: 'asset_expired',
+        occurredAt: asset.statusChangedAt,
+      })
+    }
+    if (asset.accessRevokedAt) {
+      events.push({ action: 'access_revoked', occurredAt: asset.accessRevokedAt })
+    }
+    if (asset.sourceDeletedAt) {
+      events.push({ action: 'source_deleted', occurredAt: asset.sourceDeletedAt })
+    }
+    if (asset.outputsDeletedAt) {
+      events.push({ action: 'outputs_deleted', occurredAt: asset.outputsDeletedAt })
+    }
+    for (const event of events) {
+      try {
+        await recordLifecycleEvent(
+          payload,
+          asset.id,
+          event.action,
+          new Date(event.occurredAt),
+          event.actorID,
+        )
+      } catch (error) {
+        console.error('Media Asset audit event will be reconciled.', error)
+      }
+    }
+  }
 }
 
 function canManageAsset(member: PilotMember, asset: MediaAsset): boolean {
@@ -86,20 +145,19 @@ export async function deleteMediaAsset(
           collection: 'media-assets',
           data: {
             deletedAt: now.toISOString(),
+            deletedBy: member.id,
             status: 'deleted',
             statusChangedAt: now.toISOString(),
           },
           id: asset.id,
           overrideAccess: true,
         })
-  if (asset.status !== 'deleted') {
-    await recordLifecycleEvent(payload, asset.id, 'asset_deleted', now, member.id)
-  }
   try {
     await cleanupRevokedAsset(payload, deletedAsset, now, options.providers ?? getFakeProviders())
   } catch (error) {
     console.error('Media Asset provider cleanup will be retried.', error)
   }
+  await reconcileLifecycleEvents(payload, asset.id)
 }
 
 async function cleanupRevokedAsset(
@@ -125,7 +183,6 @@ async function cleanupRevokedAsset(
         id: asset.id,
         overrideAccess: true,
       })
-      await recordLifecycleEvent(payload, asset.id, 'access_revoked', now)
     } catch (error) {
       firstError ??= error
     }
@@ -150,7 +207,6 @@ async function cleanupRevokedAsset(
         id: asset.id,
         overrideAccess: true,
       })
-      await recordLifecycleEvent(payload, asset.id, 'outputs_deleted', now)
     } catch (error) {
       firstError ??= error
     }
@@ -195,7 +251,6 @@ async function deleteRawSource(
     id: asset.id,
     overrideAccess: true,
   })
-  await recordLifecycleEvent(payload, asset.id, 'source_deleted', now)
 }
 
 export async function runMediaLifecycle(
@@ -208,8 +263,8 @@ export async function runMediaLifecycle(
     payload.find({
       collection: 'processing-jobs',
       depth: 0,
-      limit: 100,
       overrideAccess: true,
+      pagination: false,
       where: {
         and: [
           { status: { equals: 'ready' } },
@@ -220,8 +275,8 @@ export async function runMediaLifecycle(
     payload.find({
       collection: 'processing-jobs',
       depth: 0,
-      limit: 100,
       overrideAccess: true,
+      pagination: false,
       where: {
         and: [
           { status: { equals: 'failed' } },
@@ -262,7 +317,6 @@ export async function runMediaLifecycle(
       id: asset.id,
       overrideAccess: true,
     })
-    await recordLifecycleEvent(payload, asset.id, 'asset_expired', now)
   }
 
   const cleanupPending = await payload.find({
@@ -290,4 +344,5 @@ export async function runMediaLifecycle(
       console.error('Media Asset provider cleanup will be retried.', error)
     }
   }
+  await reconcileLifecycleEvents(payload)
 }

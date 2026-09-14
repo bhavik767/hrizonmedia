@@ -5,8 +5,8 @@ import {
   completeUpload,
   cleanupAbandonedUploads,
   createUploadSession,
-  getOwnedAsset,
-  listOwnedAssets,
+  getVisibleAsset,
+  listVisibleAssets,
   resumeUploadSession,
   receiveUploadPart,
 } from '@/media/library'
@@ -92,7 +92,7 @@ describe('Media Asset library persistence', () => {
     const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
     const parts = await uploadAllParts(session, fixture)
     await completeUpload(payload, firstUploader, session.uploadSessionId, parts)
-    const detail = await getOwnedAsset(payload, firstUploader, session.asset.mediaAssetId)
+    const detail = await getVisibleAsset(payload, firstUploader, session.asset.mediaAssetId)
 
     expect(detail.uploadSessionId).toMatch(/^upload_/)
     expect(detail.processingJobId).toMatch(/^processing_/)
@@ -105,9 +105,9 @@ describe('Media Asset library persistence', () => {
         detail.providerJobId,
       ]).size,
     ).toBe(4)
-    await expect(listOwnedAssets(payload, secondUploader)).resolves.toEqual([])
+    await expect(listVisibleAssets(payload, secondUploader)).resolves.toEqual([])
     await expect(
-      getOwnedAsset(payload, secondUploader, session.asset.mediaAssetId),
+      getVisibleAsset(payload, secondUploader, session.asset.mediaAssetId),
     ).rejects.toMatchObject({ status: 404 })
   })
 
@@ -179,7 +179,7 @@ describe('Media Asset library persistence', () => {
     await completeUpload(payload, firstUploader, session.uploadSessionId, parts)
 
     await expect(
-      getOwnedAsset(payload, firstUploader, session.asset.mediaAssetId),
+      getVisibleAsset(payload, firstUploader, session.asset.mediaAssetId),
     ).resolves.toMatchObject({ size: fixture.length })
   })
 

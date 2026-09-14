@@ -483,8 +483,6 @@ export async function listVisibleAssets(
   return result.docs.map(summary)
 }
 
-export const listOwnedAssets = listVisibleAssets
-
 export async function getVisibleAsset(
   payload: Payload,
   member: PilotMember,
@@ -539,11 +537,9 @@ export async function getVisibleAsset(
   }
 }
 
-export const getOwnedAsset = getVisibleAsset
-
-export async function retryOwnedAssetProcessing(
+export async function retryVisibleAssetProcessing(
   payload: Payload,
-  owner: PilotMember,
+  member: PilotMember,
   mediaAssetId: MediaAssetId,
   processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary> {
@@ -553,7 +549,10 @@ export async function retryOwnedAssetProcessing(
     limit: 1,
     overrideAccess: true,
     where: {
-      and: [{ mediaAssetId: { equals: mediaAssetId } }, { owner: { equals: owner.id } }],
+      and: [
+        { mediaAssetId: { equals: mediaAssetId } },
+        ...(member.role === 'operator' ? [] : [{ owner: { equals: member.id } }]),
+      ],
     },
   })
   const asset = result.docs[0]

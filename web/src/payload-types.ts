@@ -1182,6 +1182,7 @@ export interface MediaAsset {
   drmContentId?: string | null;
   expiresAt?: string | null;
   deletedAt?: string | null;
+  deletedBy?: (number | null) | PilotMember;
   accessRevokedAt?: string | null;
   sourceDeletedAt?: string | null;
   outputsDeletedAt?: string | null;
@@ -2078,6 +2079,7 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   drmContentId?: T;
   expiresAt?: T;
   deletedAt?: T;
+  deletedBy?: T;
   accessRevokedAt?: T;
   sourceDeletedAt?: T;
   outputsDeletedAt?: T;

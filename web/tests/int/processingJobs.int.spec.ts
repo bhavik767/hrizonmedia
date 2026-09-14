@@ -5,9 +5,9 @@ import { newProcessingJobId } from '@/media/identifiers'
 import {
   completeUpload,
   createUploadSession,
-  getOwnedAsset,
+  getVisibleAsset,
   receiveUploadPart,
-  retryOwnedAssetProcessing,
+  retryVisibleAssetProcessing,
 } from '@/media/library'
 import {
   PermanentTranscodeError,
@@ -104,7 +104,7 @@ describe('reliable Processing Jobs', () => {
   it('dispatches a completed upload immediately with idempotency and adaptive outputs', async () => {
     const provider = { ...fakeTranscodeProvider, queue: vi.fn(fakeTranscodeProvider.queue) }
     const session = await upload(fixture('1280x720:2'), provider)
-    const detail = await getOwnedAsset(payload, uploader, session.asset.mediaAssetId, {
+    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
       now: start,
     })
 
@@ -272,7 +272,7 @@ describe('reliable Processing Jobs', () => {
 
     expect(queue).toHaveBeenCalledOnce()
     await expect(
-      getOwnedAsset(payload, uploader, session.asset.mediaAssetId, { now: start }),
+      getVisibleAsset(payload, uploader, session.asset.mediaAssetId, { now: start }),
     ).resolves.toMatchObject({
       status: 'processing',
     })
@@ -308,7 +308,7 @@ describe('reliable Processing Jobs', () => {
     ).resolves.toMatchObject({ attempts: 2, leaseToken: null, status: 'processing' })
   })
 
-  it('retries transient failures twice, sanitizes exhaustion, and permits a manual retry', async () => {
+  it('retries transient failures twice, sanitizes exhaustion, and lets an operator retry', async () => {
     const transientProvider: TranscodeProvider = {
       ...fakeTranscodeProvider,
       queue: async () => {
@@ -326,7 +326,7 @@ describe('reliable Processing Jobs', () => {
       provider: transientProvider,
     })
 
-    const failed = await getOwnedAsset(payload, uploader, session.asset.mediaAssetId, {
+    const failed = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
       now: at('2026-09-14T12:00:06.000Z'),
       provider: transientProvider,
     })
@@ -338,10 +338,27 @@ describe('reliable Processing Jobs', () => {
     })
     expect(JSON.stringify(failed)).not.toContain('credential=abc')
 
-    const retried = await retryOwnedAssetProcessing(payload, uploader, session.asset.mediaAssetId, {
-      now: at('2026-09-14T12:00:07.000Z'),
-      provider: fakeTranscodeProvider,
+    const operator = await payload.create({
+      collection: 'pilot-members',
+      data: {
+        email: 'processing-operator@example.test',
+        invitationAcceptedAt: start.toISOString(),
+        name: 'Processing operator',
+        password: 'operator-password',
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
     })
+    const retried = await retryVisibleAssetProcessing(
+      payload,
+      operator,
+      session.asset.mediaAssetId,
+      {
+        now: at('2026-09-14T12:00:07.000Z'),
+        provider: fakeTranscodeProvider,
+      },
+    )
     expect(retried.status).toBe('processing')
   })
 
@@ -370,7 +387,7 @@ describe('reliable Processing Jobs', () => {
     expect(after.processingJobId).toBe(jobs.docs[0]!.processingJobId)
     expect(after.status).toBe('processing')
     await expect(
-      getOwnedAsset(payload, uploader, session.asset.mediaAssetId, { now: start }),
+      getVisibleAsset(payload, uploader, session.asset.mediaAssetId, { now: start }),
     ).resolves.toBeTruthy()
   })
 
@@ -378,7 +395,7 @@ describe('reliable Processing Jobs', () => {
     const session = await upload(fixture('1920x1080:600'))
 
     await runProcessingCycle(payload, { now: at('2026-09-14T12:14:00.000Z') })
-    const ready = await getOwnedAsset(payload, uploader, session.asset.mediaAssetId, {
+    const ready = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
       now: at('2026-09-14T12:14:00.000Z'),
     })
 
@@ -406,13 +423,13 @@ describe('reliable Processing Jobs', () => {
       overrideAccess: true,
     })
 
-    const detail = await getOwnedAsset(payload, uploader, session.asset.mediaAssetId, {
+    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
       now: start,
       provider,
     })
     expect(detail.canRetry).toBe(false)
     await expect(
-      retryOwnedAssetProcessing(payload, uploader, session.asset.mediaAssetId, { now: start }),
+      retryVisibleAssetProcessing(payload, uploader, session.asset.mediaAssetId, { now: start }),
     ).rejects.toMatchObject({ status: 409 })
   })
 })

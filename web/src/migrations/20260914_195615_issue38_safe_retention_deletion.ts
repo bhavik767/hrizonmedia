@@ -4,17 +4,17 @@ export async function up({ db }: MigrateUpArgs): Promise<void> {
   await db.execute(sql`
    CREATE TYPE "public"."enum_audit_events_action" AS ENUM('asset_deleted', 'asset_expired', 'access_revoked', 'source_deleted', 'outputs_deleted');
   CREATE TABLE "audit_events" (
-  	"id" serial PRIMARY KEY NOT NULL,
-  	"event_key" varchar NOT NULL,
-  	"action" "enum_audit_events_action" NOT NULL,
-  	"asset_id" integer NOT NULL,
-  	"actor_id" integer,
-  	"occurred_at" timestamp(3) with time zone NOT NULL,
-  	"details" jsonb,
-  	"updated_at" timestamp(3) with time zone DEFAULT now() NOT NULL,
-  	"created_at" timestamp(3) with time zone DEFAULT now() NOT NULL
+    "id" serial PRIMARY KEY NOT NULL,
+    "event_key" varchar NOT NULL,
+    "action" "enum_audit_events_action" NOT NULL,
+    "asset_id" integer NOT NULL,
+    "actor_id" integer,
+    "occurred_at" timestamp(3) with time zone NOT NULL,
+    "details" jsonb,
+    "updated_at" timestamp(3) with time zone DEFAULT now() NOT NULL,
+    "created_at" timestamp(3) with time zone DEFAULT now() NOT NULL
   );
-  
+
   ALTER TABLE "media_assets" ADD COLUMN "deleted_at" timestamp(3) with time zone;
   ALTER TABLE "media_assets" ADD COLUMN "access_revoked_at" timestamp(3) with time zone;
   ALTER TABLE "media_assets" ADD COLUMN "source_deleted_at" timestamp(3) with time zone;
@@ -42,7 +42,7 @@ export async function down({ db }: MigrateDownArgs): Promise<void> {
    ALTER TABLE "audit_events" DISABLE ROW LEVEL SECURITY;
   ALTER TABLE "payload_locked_documents_rels" DROP CONSTRAINT "payload_locked_documents_rels_audit_events_fk";
   DROP TABLE "audit_events" CASCADE;
-  
+
   DROP INDEX "media_assets_deleted_at_idx";
   DROP INDEX "media_assets_access_revoked_at_idx";
   DROP INDEX "media_assets_source_deleted_at_idx";
