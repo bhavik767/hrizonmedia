@@ -1,25 +1,53 @@
-import { File as NodeFile } from 'node:buffer'
-
 import { getPayload, type Payload } from 'payload'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   completeUpload,
+  cleanupAbandonedUploads,
   createUploadSession,
   getOwnedAsset,
   listOwnedAssets,
+  resumeUploadSession,
+  uploadPart,
 } from '@/media/library'
+import { resetFakeMediaStorage } from '@/media/providers/fake'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
+import { mp4Fixture } from '../helpers/mediaFixtures'
 
 let payload: Payload
 let firstUploader: PilotMember
 let secondUploader: PilotMember
 
-const validFixture = () =>
-  new NodeFile([Buffer.from('000000186674797069736f6d0000020069736f6d', 'hex')], 'fixture.mp4', {
-    type: 'video/mp4',
-  })
+const metadataFor = (bytes: Uint8Array, fileName = 'fixture.mp4') => ({
+  fileFingerprint: `${fileName}:${bytes.length}:1234`,
+  fileName,
+  mimeType: 'video/mp4',
+  size: bytes.length,
+})
+
+async function uploadAllParts(
+  session: Awaited<ReturnType<typeof createUploadSession>>,
+  bytes: Uint8Array,
+) {
+  const parts = []
+  for (
+    let offset = 0, partNumber = 1;
+    offset < bytes.length;
+    offset += session.partSize, partNumber += 1
+  ) {
+    parts.push(
+      await uploadPart(
+        payload,
+        firstUploader,
+        session.uploadSessionId,
+        partNumber,
+        bytes.subarray(offset, offset + session.partSize),
+      ),
+    )
+  }
+  return parts
+}
 
 async function cleanMediaLibrary() {
   await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
@@ -49,6 +77,7 @@ describe('Media Asset library persistence', () => {
   })
 
   beforeEach(async () => {
+    resetFakeMediaStorage()
     await cleanMediaLibrary()
     firstUploader = await createUploader('first-library-uploader@example.test')
     secondUploader = await createUploader('second-library-uploader@example.test')
@@ -59,13 +88,10 @@ describe('Media Asset library persistence', () => {
   })
 
   it('persists distinct record IDs and filters list/detail reads by owner', async () => {
-    const fixture = validFixture()
-    const session = await createUploadSession(payload, firstUploader, {
-      fileName: fixture.name,
-      mimeType: fixture.type,
-      size: fixture.size,
-    })
-    await completeUpload(payload, firstUploader, session.uploadSessionId, fixture)
+    const fixture = mp4Fixture()
+    const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
+    const parts = await uploadAllParts(session, fixture)
+    await completeUpload(payload, firstUploader, session.uploadSessionId, parts)
     const detail = await getOwnedAsset(payload, firstUploader, session.asset.mediaAssetId)
 
     expect(detail.uploadSessionId).toMatch(/^upload_/)
@@ -86,12 +112,8 @@ describe('Media Asset library persistence', () => {
   })
 
   it('rejects completion after the persisted Upload Session expires', async () => {
-    const fixture = validFixture()
-    const session = await createUploadSession(payload, firstUploader, {
-      fileName: fixture.name,
-      mimeType: fixture.type,
-      size: fixture.size,
-    })
+    const fixture = mp4Fixture()
+    const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
     const stored = await payload.find({
       collection: 'upload-sessions',
       limit: 1,
@@ -106,7 +128,89 @@ describe('Media Asset library persistence', () => {
     })
 
     await expect(
-      completeUpload(payload, firstUploader, session.uploadSessionId, fixture),
+      resumeUploadSession(
+        payload,
+        firstUploader,
+        session.uploadSessionId,
+        metadataFor(fixture).fileFingerprint,
+      ),
     ).rejects.toMatchObject({ status: 410 })
+  })
+
+  it('resumes with completed parts but rejects a mismatched file', async () => {
+    const fixture = mp4Fixture()
+    const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
+    await uploadPart(
+      payload,
+      firstUploader,
+      session.uploadSessionId,
+      1,
+      fixture.subarray(0, session.partSize),
+    )
+
+    await expect(
+      resumeUploadSession(
+        payload,
+        firstUploader,
+        session.uploadSessionId,
+        metadataFor(fixture).fileFingerprint,
+      ),
+    ).resolves.toMatchObject({ completedParts: [{ partNumber: 1 }] })
+    await expect(
+      resumeUploadSession(payload, firstUploader, session.uploadSessionId, 'different-file'),
+    ).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('rejects corrupt and over-duration completed media after server-side probing', async () => {
+    for (const fixture of [Buffer.from('not a video'), mp4Fixture(7_201)]) {
+      const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
+      const parts = await uploadAllParts(session, fixture)
+      await expect(
+        completeUpload(payload, firstUploader, session.uploadSessionId, parts),
+      ).rejects.toMatchObject({ status: 400 })
+    }
+  })
+
+  it('replaces advisory size metadata with the verified completed object size', async () => {
+    const fixture = mp4Fixture()
+    const advisory = { ...metadataFor(fixture), size: 1 }
+    const session = await createUploadSession(payload, firstUploader, advisory)
+    const parts = await uploadAllParts(session, fixture)
+    await completeUpload(payload, firstUploader, session.uploadSessionId, parts)
+
+    await expect(
+      getOwnedAsset(payload, firstUploader, session.asset.mediaAssetId),
+    ).resolves.toMatchObject({ size: fixture.length })
+  })
+
+  it('rejects advisory metadata over 2 GB before starting storage', async () => {
+    await expect(
+      createUploadSession(payload, firstUploader, {
+        fileFingerprint: 'oversized',
+        fileName: 'oversized.mp4',
+        mimeType: 'video/mp4',
+        size: 2 * 1024 * 1024 * 1024 + 1,
+      }),
+    ).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('cleans expired multipart uploads idempotently', async () => {
+    const fixture = mp4Fixture()
+    const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
+    const stored = await payload.find({
+      collection: 'upload-sessions',
+      limit: 1,
+      overrideAccess: true,
+      where: { uploadSessionId: { equals: session.uploadSessionId } },
+    })
+    await payload.update({
+      collection: 'upload-sessions',
+      data: { expiresAt: new Date(Date.now() - 1_000).toISOString() },
+      id: stored.docs[0]!.id,
+      overrideAccess: true,
+    })
+
+    await expect(cleanupAbandonedUploads(payload)).resolves.toBe(1)
+    await expect(cleanupAbandonedUploads(payload)).resolves.toBe(0)
   })
 })
