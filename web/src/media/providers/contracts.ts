@@ -1,6 +1,12 @@
 import 'server-only'
 
-import type { MediaAssetId, ProviderJobId, ProviderUploadId, UploadSessionId } from '../identifiers'
+import type {
+  MediaAssetId,
+  PlaybackGrantId,
+  ProviderJobId,
+  ProviderUploadId,
+  UploadSessionId,
+} from '../identifiers'
 import type { CompletedPart, PartUploadTarget } from '../multipart'
 import type { UploadMetadata } from '../types'
 
@@ -69,7 +75,40 @@ export interface TranscodeProvider {
   }): Promise<'processing' | 'ready'>
 }
 
+export interface DeliveryAuthorization {
+  expiresAt: string
+  manifestURL: string
+}
+
+export interface DeliveryProvider {
+  authorize(input: {
+    expiresAt: Date
+    mediaAssetId: MediaAssetId
+    playbackGrantId: PlaybackGrantId
+    token: string
+  }): Promise<DeliveryAuthorization>
+}
+
+export interface DrmPlaybackContract {
+  distinctiveIdentifier: 'not-allowed'
+  keySystem: 'com.widevine.alpha'
+  licenceURL: string
+  persistentState: 'not-allowed'
+  sessionType: 'temporary'
+}
+
+export interface DrmProvider {
+  acquireTemporaryLicence(input: {
+    challenge: Uint8Array
+    drmContentId: string
+    playbackGrantId: PlaybackGrantId
+  }): Promise<Uint8Array>
+  createPlaybackContract(input: { playbackGrantId: PlaybackGrantId }): DrmPlaybackContract
+}
+
 export interface MediaProviders {
+  delivery: DeliveryProvider
+  drm: DrmProvider
   storage: StorageProvider
   transcode: TranscodeProvider
 }

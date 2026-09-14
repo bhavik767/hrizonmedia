@@ -63,6 +63,7 @@ export async function cleanupPilotMembers(): Promise<void> {
 
 async function cleanupMediaRecords(): Promise<void> {
   const payload = await getPayload({ config })
+  await payload.delete({ collection: 'playback-grants', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'upload-sessions', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })

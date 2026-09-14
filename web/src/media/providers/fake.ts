@@ -5,7 +5,14 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { ProviderJobId, ProviderUploadId } from '../identifiers'
 import type { CompletedPart } from '../multipart'
 import type { UploadMetadata } from '../types'
-import type { Rendition, SourceMedia, StorageProvider, TranscodeProvider } from './contracts'
+import type {
+  DeliveryProvider,
+  DrmProvider,
+  Rendition,
+  SourceMedia,
+  StorageProvider,
+  TranscodeProvider,
+} from './contracts'
 
 const FAKE_PART_SIZE = 5 * 1024 * 1024
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
@@ -276,6 +283,37 @@ export const fakeTranscodeProvider: TranscodeProvider = {
   },
 }
 
+export const fakeDeliveryProvider: DeliveryProvider = {
+  async authorize({ expiresAt, mediaAssetId, playbackGrantId, token }) {
+    return {
+      expiresAt: expiresAt.toISOString(),
+      manifestURL: `/api/demo/playback/${playbackGrantId}/manifest.mpd?asset=${mediaAssetId}&token=${encodeURIComponent(token)}`,
+    }
+  },
+}
+
+export const fakeDrmProvider: DrmProvider = {
+  async acquireTemporaryLicence({ challenge, drmContentId, playbackGrantId }) {
+    return createHash('sha256')
+      .update(challenge)
+      .update('\0')
+      .update(drmContentId)
+      .update('\0')
+      .update(playbackGrantId)
+      .digest()
+  },
+
+  createPlaybackContract({ playbackGrantId }) {
+    return {
+      distinctiveIdentifier: 'not-allowed',
+      keySystem: 'com.widevine.alpha',
+      licenceURL: `/api/demo/playback/${playbackGrantId}/licence`,
+      persistentState: 'not-allowed',
+      sessionType: 'temporary',
+    }
+  },
+}
+
 export function resetFakeMediaStorage(): void {
   state.objects.clear()
   state.uploads.clear()
@@ -287,5 +325,10 @@ export function getFakeProviders(environment: NodeJS.ProcessEnv = process.env) {
     throw new Error('Deterministic fake media providers are prohibited in production.')
   }
 
-  return { storage: fakeStorageProvider, transcode: fakeTranscodeProvider }
+  return {
+    delivery: fakeDeliveryProvider,
+    drm: fakeDrmProvider,
+    storage: fakeStorageProvider,
+    transcode: fakeTranscodeProvider,
+  }
 }

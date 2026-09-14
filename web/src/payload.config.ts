@@ -11,6 +11,7 @@ import { Media } from './collections/Media'
 import { MediaAssets } from './collections/MediaAssets'
 import { Pages } from './collections/Pages'
 import { PilotMembers } from './collections/PilotMembers'
+import { PlaybackGrants } from './collections/PlaybackGrants'
 import { Posts } from './collections/Posts'
 import { ProcessingJobs } from './collections/ProcessingJobs'
 import { ReusableBlocks } from './collections/ReusableBlocks'
@@ -117,6 +118,7 @@ export default buildConfig({
     MediaAssets,
     UploadSessions,
     ProcessingJobs,
+    PlaybackGrants,
     ReusableBlocks,
   ],
   cors: [getServerSideURL()].filter(Boolean),

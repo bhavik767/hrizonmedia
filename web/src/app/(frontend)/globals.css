@@ -817,6 +817,38 @@ h2 {
   color: var(--licensed);
 }
 
+.secure-playback {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.secure-playback__heading {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.secure-playback video {
+  aspect-ratio: 16 / 9;
+  background: #020504;
+  border: 1px solid var(--hairline);
+  max-height: 70vh;
+  width: 100%;
+}
+
+.secure-playback__status,
+.secure-playback__disclosure {
+  margin: 0;
+}
+
+.secure-playback__disclosure {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 .asset-status--queued,
 .asset-status--processing,
 .asset-status--uploading {
