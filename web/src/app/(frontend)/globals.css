@@ -647,6 +647,76 @@ h2 {
   text-underline-offset: 0.35em;
 }
 
+.pilot-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 2rem;
+  max-width: 34rem;
+}
+
+.pilot-form input,
+.pilot-form select {
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  color: var(--heading);
+  font: inherit;
+  min-height: 46px;
+  padding: 0.65rem 0.8rem;
+}
+
+.pilot-form input:focus-visible,
+.pilot-form select:focus-visible,
+.text-button:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 3px;
+}
+
+.pilot-form .primary-action {
+  border: 0;
+  cursor: pointer;
+  justify-content: center;
+  margin-top: 0.75rem;
+  width: fit-content;
+}
+
+.form-message {
+  margin: 1.5rem 0 0;
+  max-width: 58ch;
+}
+
+.form-message--error {
+  color: var(--error);
+}
+
+.form-message--success {
+  color: var(--licensed);
+}
+
+.form-message a {
+  overflow-wrap: anywhere;
+  text-decoration-color: var(--signal);
+}
+
+.demo-actions {
+  align-items: center;
+  display: flex;
+  gap: 1.5rem;
+}
+
+.text-button {
+  background: none;
+  border: 0;
+  color: var(--body-copy);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: var(--signal);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.35em;
+}
+
 @media (max-width: 800px) {
   .hero {
     grid-template-columns: 1fr;
