@@ -1,4 +1,7 @@
+import 'server-only'
+
 import type { MediaAssetId, ProviderJobId, UploadSessionId } from '../identifiers'
+import type { UploadMetadata } from '../types'
 
 export interface StoredUpload {
   objectKey: string
@@ -7,8 +10,7 @@ export interface StoredUpload {
 export interface StorageProvider {
   store(input: {
     bytes: Uint8Array
-    fileName: string
-    mimeType: string
+    metadata: UploadMetadata
     uploadSessionId: UploadSessionId
   }): Promise<StoredUpload>
 }

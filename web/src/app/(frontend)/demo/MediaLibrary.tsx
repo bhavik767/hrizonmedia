@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { MediaAssetSummary } from '@/media/types'
 
+type DisplayedAsset = Omit<MediaAssetSummary, 'mediaAssetId'> & { mediaAssetId: string }
+
 function readableBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
@@ -17,8 +19,9 @@ async function responseJSON<T>(response: Response): Promise<T> {
 }
 
 export function MediaLibrary() {
-  const [assets, setAssets] = useState<MediaAssetSummary[]>([])
+  const [assets, setAssets] = useState<DisplayedAsset[]>([])
   const [error, setError] = useState('')
+  const [hydrated, setHydrated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
 
@@ -27,6 +30,10 @@ export function MediaLibrary() {
     const result = await responseJSON<{ assets: MediaAssetSummary[] }>(response)
     setAssets(result.assets)
     setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    setHydrated(true)
   }, [])
 
   useEffect(() => {
@@ -118,7 +125,7 @@ export function MediaLibrary() {
             required
             type="file"
           />
-          <button className="primary-action" disabled={uploading} type="submit">
+          <button className="primary-action" disabled={!hydrated || uploading} type="submit">
             {uploading ? 'Uploading…' : 'Upload asset'}
           </button>
         </form>

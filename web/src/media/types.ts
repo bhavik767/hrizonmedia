@@ -1,3 +1,5 @@
+import type { MediaAssetId, ProcessingJobId, ProviderJobId, UploadSessionId } from './identifiers'
+
 export const mediaAssetStatuses = [
   'uploading',
   'queued',
@@ -13,13 +15,27 @@ export type MediaAssetStatus = (typeof mediaAssetStatuses)[number]
 export interface MediaAssetSummary {
   createdAt: string
   fileName: string
-  mediaAssetId: string
+  mediaAssetId: MediaAssetId
   size: number
   status: MediaAssetStatus
 }
 
 export interface MediaAssetDetail extends MediaAssetSummary {
   mimeType: string
-  providerJobId: string | null
-  uploadSessionId: string
+  processingJobId: ProcessingJobId | null
+  providerJobId: ProviderJobId | null
+  uploadSessionId: UploadSessionId
+}
+
+export interface UploadMetadata {
+  fileName: string
+  mimeType: string
+  size: number
+}
+
+export interface UploadedFile {
+  arrayBuffer(): Promise<ArrayBuffer>
+  name: string
+  size: number
+  type: string
 }

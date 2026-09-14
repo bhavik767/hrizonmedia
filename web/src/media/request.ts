@@ -27,3 +27,14 @@ export function mediaErrorResponse(error: unknown): Response {
   console.error(error)
   return Response.json({ error: 'Unable to complete the media request.' }, { status: 500 })
 }
+
+export async function withAuthenticatedUploader(
+  request: Request,
+  handler: (context: Awaited<ReturnType<typeof authenticatedUploader>>) => Promise<Response>,
+): Promise<Response> {
+  try {
+    return await handler(await authenticatedUploader(request))
+  } catch (error) {
+    return mediaErrorResponse(error)
+  }
+}

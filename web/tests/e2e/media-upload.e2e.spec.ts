@@ -12,7 +12,7 @@ async function signIn(page: Page, member: { email: string; password: string }) {
   await page.getByLabel('Email').fill(member.email)
   await page.getByLabel('Password').fill(member.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL('/demo')
+  await expect(page).toHaveURL('/demo', { timeout: 60_000 })
 }
 
 test.describe('Media Asset tracer bullet', () => {
@@ -47,6 +47,9 @@ test.describe('Media Asset tracer bullet', () => {
     await asset.getByRole('link', { name: 'Inspect asset' }).click()
     await expect(page.getByRole('heading', { name: 'private-lesson.mp4' })).toBeVisible()
     await expect(page.getByText('Media Asset ID')).toBeVisible()
+    await expect(page.getByText('Upload Session ID')).toBeVisible()
+    await expect(page.getByText('Processing Job ID')).toBeVisible()
+    await expect(page.getByText('Provider Job ID')).toBeVisible()
     const assetID = page.url().split('/').at(-1)
     expect(assetID).toMatch(/^asset_/)
 

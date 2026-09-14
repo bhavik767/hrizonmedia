@@ -1,9 +1,8 @@
 import { createUploadSession } from '@/media/library'
-import { authenticatedUploader, mediaErrorResponse } from '@/media/request'
+import { withAuthenticatedUploader } from '@/media/request'
 
 export async function POST(request: Request): Promise<Response> {
-  try {
-    const { member, payload } = await authenticatedUploader(request)
+  return withAuthenticatedUploader(request, async ({ member, payload }) => {
     const body = (await request.json()) as Record<string, unknown>
     const result = await createUploadSession(payload, member, {
       fileName: String(body.fileName || ''),
@@ -11,7 +10,5 @@ export async function POST(request: Request): Promise<Response> {
       size: Number(body.size),
     })
     return Response.json(result, { status: 201 })
-  } catch (error) {
-    return mediaErrorResponse(error)
-  }
+  })
 }

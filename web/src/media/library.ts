@@ -4,12 +4,19 @@ import type { MediaAsset, PilotMember, UploadSession } from '@/payload-types'
 
 import {
   newMediaAssetId,
+  newProcessingJobId,
   newUploadSessionId,
   type MediaAssetId,
   type UploadSessionId,
 } from './identifiers'
 import { getFakeProviders, InvalidMediaError } from './providers/fake'
-import type { MediaAssetDetail, MediaAssetSummary, MediaAssetStatus } from './types'
+import type {
+  MediaAssetDetail,
+  MediaAssetStatus,
+  MediaAssetSummary,
+  UploadedFile,
+  UploadMetadata,
+} from './types'
 
 const MAX_ASSET_BYTES = 2 * 1024 * 1024 * 1024
 const UPLOAD_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1000
@@ -33,13 +40,13 @@ function summary(asset: MediaAsset): MediaAssetSummary {
   return {
     createdAt: asset.createdAt,
     fileName: asset.fileName,
-    mediaAssetId: asset.mediaAssetId,
+    mediaAssetId: asset.mediaAssetId as MediaAssetId,
     size: asset.size,
     status: asset.status as MediaAssetStatus,
   }
 }
 
-function validateMetadata(input: { fileName: string; mimeType: string; size: number }) {
+function validateMetadata(input: UploadMetadata) {
   const extension = input.fileName.toLowerCase().split('.').at(-1)
   const supported =
     (input.mimeType === 'video/mp4' && extension === 'mp4') ||
@@ -54,7 +61,7 @@ function validateMetadata(input: { fileName: string; mimeType: string; size: num
 export async function createUploadSession(
   payload: Payload,
   owner: PilotMember,
-  input: { fileName: string; mimeType: string; size: number },
+  input: UploadMetadata,
 ) {
   validateMetadata(input)
   const now = new Date()
@@ -116,7 +123,7 @@ export async function completeUpload(
   payload: Payload,
   owner: PilotMember,
   uploadSessionId: UploadSessionId,
-  file: File,
+  file: UploadedFile,
 ): Promise<MediaAssetSummary> {
   const session = await findOwnedSession(payload, owner.id, uploadSessionId)
   if (session.status !== 'pending') throw new MediaLibraryError('Upload already completed.', 409)
@@ -143,8 +150,7 @@ export async function completeUpload(
   try {
     stored = await providers.storage.store({
       bytes: new Uint8Array(await file.arrayBuffer()),
-      fileName: file.name,
-      mimeType: file.type,
+      metadata: { fileName: file.name, mimeType: file.type, size: file.size },
       uploadSessionId,
     })
   } catch (error) {
@@ -157,6 +163,7 @@ export async function completeUpload(
     objectKey: stored.objectKey,
   })
   const queuedAt = new Date().toISOString()
+  const processingJobId = newProcessingJobId()
 
   await payload.update({
     collection: 'upload-sessions',
@@ -166,7 +173,14 @@ export async function completeUpload(
   })
   await payload.create({
     collection: 'processing-jobs',
-    data: { asset: asset.id, owner: owner.id, providerJobId, queuedAt, status: 'queued' },
+    data: {
+      asset: asset.id,
+      owner: owner.id,
+      processingJobId,
+      providerJobId,
+      queuedAt,
+      status: 'queued',
+    },
     overrideAccess: true,
   })
   const queuedAsset = await payload.update({
@@ -232,7 +246,7 @@ export async function listOwnedAssets(
 export async function getOwnedAsset(
   payload: Payload,
   owner: PilotMember,
-  mediaAssetId: string,
+  mediaAssetId: MediaAssetId,
 ): Promise<MediaAssetDetail> {
   await advanceFakePipeline(payload, owner.id)
   const result = await payload.find({
@@ -269,7 +283,8 @@ export async function getOwnedAsset(
   return {
     ...summary(asset),
     mimeType: asset.mimeType,
-    providerJobId: jobs.docs[0]?.providerJobId ?? null,
-    uploadSessionId: session.uploadSessionId,
+    processingJobId: (jobs.docs[0]?.processingJobId as MediaAssetDetail['processingJobId']) ?? null,
+    providerJobId: (jobs.docs[0]?.providerJobId as MediaAssetDetail['providerJobId']) ?? null,
+    uploadSessionId: session.uploadSessionId as UploadSessionId,
   }
 }

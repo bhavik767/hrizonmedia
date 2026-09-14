@@ -9,8 +9,9 @@ export const ProcessingJobs: CollectionConfig = {
     read: () => false,
     update: () => false,
   },
-  admin: { hidden: true, useAsTitle: 'providerJobId' },
+  admin: { hidden: true, useAsTitle: 'processingJobId' },
   fields: [
+    { name: 'processingJobId', type: 'text', required: true, unique: true, index: true },
     { name: 'providerJobId', type: 'text', required: true, unique: true, index: true },
     {
       name: 'asset',

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
+import { parseMediaAssetId } from '@/media/identifiers'
 import { getOwnedAsset, MediaLibraryError } from '@/media/library'
 import type { MediaAssetDetail } from '@/media/types'
 import config from '@/payload.config'
@@ -18,10 +19,12 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
   const member = await getPilotMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
   if (member.role !== 'uploader') notFound()
+  const mediaAssetId = parseMediaAssetId((await params).mediaAssetId)
+  if (!mediaAssetId) notFound()
 
   let asset: MediaAssetDetail
   try {
-    asset = await getOwnedAsset(await getPayload({ config }), member, (await params).mediaAssetId)
+    asset = await getOwnedAsset(await getPayload({ config }), member, mediaAssetId)
   } catch (error) {
     if (error instanceof MediaLibraryError && error.status === 404) notFound()
     throw error
@@ -46,6 +49,10 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
         <div>
           <dt>Upload Session ID</dt>
           <dd>{asset.uploadSessionId}</dd>
+        </div>
+        <div>
+          <dt>Processing Job ID</dt>
+          <dd>{asset.processingJobId}</dd>
         </div>
         <div>
           <dt>Provider Job ID</dt>

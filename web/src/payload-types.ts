@@ -1199,6 +1199,7 @@ export interface UploadSession {
  */
 export interface ProcessingJob {
   id: number;
+  processingJobId: string;
   providerJobId: string;
   asset: number | MediaAsset;
   owner: number | PilotMember;
@@ -2002,6 +2003,7 @@ export interface UploadSessionsSelect<T extends boolean = true> {
  * via the `definition` "processing-jobs_select".
  */
 export interface ProcessingJobsSelect<T extends boolean = true> {
+  processingJobId?: T;
   providerJobId?: T;
   asset?: T;
   owner?: T;
