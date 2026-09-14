@@ -1,15 +1,16 @@
 import { getPayload, type Payload } from 'payload'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { newMediaAssetId, type MediaAssetId } from '@/media/identifiers'
+import { newMediaAssetId, newPlaybackGrantId, type MediaAssetId } from '@/media/identifiers'
 import {
   acquirePlaybackLicence,
   authorizePlaybackResource,
   createPlaybackGrant,
 } from '@/media/playback'
-import { resetFakeMediaStorage } from '@/media/providers/fake'
+import { getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
 import config from '@/payload.config'
 import type { MediaAsset, PilotMember } from '@/payload-types'
+import { cleanMediaRecords } from '../helpers/cleanMediaRecords'
 
 let payload: Payload
 let owner: PilotMember
@@ -18,10 +19,7 @@ let otherUploader: PilotMember
 const now = new Date('2026-09-14T12:00:00.000Z')
 
 async function cleanPlaybackRecords() {
-  await payload.delete({ collection: 'playback-grants', overrideAccess: true, where: {} })
-  await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
-  await payload.delete({ collection: 'upload-sessions', overrideAccess: true, where: {} })
-  await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })
+  await cleanMediaRecords(payload)
   await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
 }
 
@@ -43,7 +41,7 @@ async function createUploader(email: string, status: 'active' | 'disabled' = 'ac
 async function createAsset(
   member: PilotMember,
   status: MediaAsset['status'] = 'ready',
-  expiresAt = new Date(now.getTime() + 60 * 60 * 1000),
+  expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
 ): Promise<MediaAsset & { mediaAssetId: MediaAssetId }> {
   return payload.create({
     collection: 'media-assets',
@@ -108,6 +106,14 @@ describe('Playback Grant authorization', () => {
   it('denies guessed IDs, cross-member access, disabled members, and expired assets', async () => {
     const asset = await createAsset(owner)
     const expiredAsset = await createAsset(owner, 'ready', new Date(now.getTime() - 1))
+    const boundaryAsset = await createAsset(owner, 'ready', now)
+    const missingExpiryAsset = await createAsset(owner)
+    await payload.update({
+      collection: 'media-assets',
+      data: { expiresAt: null },
+      id: missingExpiryAsset.id,
+      overrideAccess: true,
+    })
     const disabledOwner = await createUploader('disabled-playback-owner@example.test', 'disabled')
 
     await expect(
@@ -118,6 +124,12 @@ describe('Playback Grant authorization', () => {
     ).rejects.toMatchObject({ status: 404 })
     await expect(
       createPlaybackGrant(payload, owner, expiredAsset.mediaAssetId!, { now }),
+    ).rejects.toMatchObject({ status: 410 })
+    await expect(
+      createPlaybackGrant(payload, owner, boundaryAsset.mediaAssetId, { now }),
+    ).rejects.toMatchObject({ status: 410 })
+    await expect(
+      createPlaybackGrant(payload, owner, missingExpiryAsset.mediaAssetId, { now }),
     ).rejects.toMatchObject({ status: 410 })
     await expect(
       createPlaybackGrant(payload, disabledOwner, asset.mediaAssetId!, { now }),
@@ -145,16 +157,23 @@ describe('Playback Grant authorization', () => {
     ).rejects.toMatchObject({ status: 401 })
 
     await expect(
-      authorizePlaybackResource(payload, grant.deliveryToken, asset.mediaAssetId!, {
-        now: new Date(now.getTime() + 60 * 60 * 1000),
+      authorizePlaybackResource(payload, owner, grant.deliveryToken, asset.mediaAssetId!, {
+        now: new Date(now.getTime() + 2 * 60 * 60 * 1000 + 299_999),
       }),
     ).resolves.toMatchObject({ mediaAssetId: asset.mediaAssetId })
     await expect(
-      authorizePlaybackResource(payload, grant.deliveryToken, otherAsset.mediaAssetId!, { now }),
+      authorizePlaybackResource(payload, owner, grant.deliveryToken, otherAsset.mediaAssetId!, {
+        now,
+      }),
     ).rejects.toMatchObject({ status: 403 })
     await expect(
-      authorizePlaybackResource(payload, grant.deliveryToken, asset.mediaAssetId!, {
-        now: new Date(now.getTime() + 6 * 60 * 60 * 1000 + 1),
+      authorizePlaybackResource(payload, otherUploader, grant.deliveryToken, asset.mediaAssetId!, {
+        now,
+      }),
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(
+      authorizePlaybackResource(payload, owner, grant.deliveryToken, asset.mediaAssetId!, {
+        now: new Date(now.getTime() + 2 * 60 * 60 * 1000 + 300_001),
       }),
     ).rejects.toMatchObject({ status: 401 })
   })
@@ -162,13 +181,33 @@ describe('Playback Grant authorization', () => {
   it('rejects tampered grant and delivery tokens', async () => {
     const asset = await createAsset(owner)
     const grant = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, { now })
-    const tamper = (token: string) => `${token.slice(0, -1)}${token.endsWith('a') ? 'b' : 'a'}`
+    const tamper = <Token extends string>(token: Token) =>
+      `${token.slice(0, -1)}${token.endsWith('a') ? 'b' : 'a'}` as Token
 
     await expect(
       acquirePlaybackLicence(payload, owner, tamper(grant.playbackGrantToken), { now }),
     ).rejects.toMatchObject({ status: 401 })
     await expect(
-      authorizePlaybackResource(payload, tamper(grant.deliveryToken), asset.mediaAssetId!, { now }),
+      authorizePlaybackResource(payload, owner, tamper(grant.deliveryToken), asset.mediaAssetId!, {
+        now,
+      }),
     ).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('rejects a guessed licence route ID before asking the DRM provider for a licence', async () => {
+    const asset = await createAsset(owner)
+    const grant = await createPlaybackGrant(payload, owner, asset.mediaAssetId, { now })
+    const providers = getFakeProviders()
+    const acquireTemporaryLicence = vi.fn(providers.drm.acquireTemporaryLicence)
+    providers.drm = { ...providers.drm, acquireTemporaryLicence }
+
+    await expect(
+      acquirePlaybackLicence(payload, owner, grant.playbackGrantToken, {
+        now,
+        providers,
+        requestedPlaybackGrantId: newPlaybackGrantId(),
+      }),
+    ).rejects.toMatchObject({ status: 403 })
+    expect(acquireTemporaryLicence).not.toHaveBeenCalled()
   })
 })

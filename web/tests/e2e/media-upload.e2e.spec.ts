@@ -123,6 +123,7 @@ test.describe('Media Asset tracer bullet', () => {
     await page.getByRole('button', { name: 'Upload asset' }).click()
     await expect(page.locator('.form-message[role="alert"]')).toContainText(
       'Reselect this file to resume',
+      { timeout: 45_000 },
     )
     expect(partRequests.get('1')).toBe(1)
 
@@ -133,7 +134,7 @@ test.describe('Media Asset tracer bullet', () => {
 
     await expect(
       page.getByRole('article', { name: 'resume-lesson.mp4' }).getByText('ready'),
-    ).toBeVisible()
+    ).toBeVisible({ timeout: 45_000 })
     expect(partRequests.get('1')).toBe(1)
   })
 

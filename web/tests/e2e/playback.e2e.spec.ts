@@ -40,7 +40,27 @@ test.describe('encrypted playback contract', () => {
         Object.assign(window, { playbackConfiguration: event.detail })
       }) as EventListener)
     })
+    const grantResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes('/playback-grants') && response.request().method() === 'POST',
+    )
+    const manifestResponsePromise = page.waitForResponse((response) =>
+      response.url().includes('/manifest.mpd'),
+    )
     await page.getByRole('button', { name: 'Start secure playback' }).click()
+
+    const grantResponse = await grantResponsePromise
+    expect(grantResponse.status()).toBe(201)
+    const grant = (await grantResponse.json()) as {
+      licenceURL: string
+      playbackGrantToken: string
+    }
+    expect((await manifestResponsePromise).status()).toBe(200)
+    const licenceResponse = await page.request.post(grant.licenceURL, {
+      data: Buffer.from('deterministic-widevine-challenge'),
+      headers: { 'X-Playback-Grant': grant.playbackGrantToken },
+    })
+    expect(licenceResponse.status()).toBe(200)
 
     const video = page.getByTestId('secure-video')
     await expect(video).toHaveAttribute('controlslist', /nodownload/)

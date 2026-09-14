@@ -6,12 +6,19 @@ import type { Payload } from 'payload'
 
 import type { MediaAsset, PilotMember, PlaybackGrant } from '@/payload-types'
 
-import { newPlaybackGrantId, type MediaAssetId, type PlaybackGrantId } from './identifiers'
+import {
+  newPlaybackGrantId,
+  type DeliveryToken,
+  type MediaAssetId,
+  type PlaybackGrantId,
+  type PlaybackGrantToken,
+} from './identifiers'
 import type { DrmPlaybackContract, MediaProviders } from './providers/contracts'
 import { getFakeProviders } from './providers/fake'
 
 const GRANT_LIFETIME_MS = 5 * 60 * 1000
-const DELIVERY_LIFETIME_MS = 6 * 60 * 60 * 1000
+const MAX_ASSET_DURATION_MS = 2 * 60 * 60 * 1000
+const DELIVERY_LIFETIME_MS = MAX_ASSET_DURATION_MS + GRANT_LIFETIME_MS
 
 type PlaybackTokenKind = 'delivery' | 'grant'
 
@@ -25,11 +32,11 @@ interface PlaybackTokenClaims {
 
 export interface PlaybackGrantResponse extends DrmPlaybackContract {
   deliveryExpiresAt: string
-  deliveryToken: string
+  deliveryToken: DeliveryToken
   expiresAt: string
   manifestURL: string
   playbackGrantId: PlaybackGrantId
-  playbackGrantToken: string
+  playbackGrantToken: PlaybackGrantToken
 }
 
 export class PlaybackAuthorizationError extends Error {
@@ -52,13 +59,17 @@ function signingSecret(): string {
   throw new Error('PAYLOAD_SECRET is required for playback authorization.')
 }
 
-function encodeClaims(claims: PlaybackTokenClaims): string {
+function encodeClaims(claims: PlaybackTokenClaims): DeliveryToken | PlaybackGrantToken {
   const payload = Buffer.from(JSON.stringify(claims)).toString('base64url')
   const signature = createHmac('sha256', signingSecret()).update(payload).digest('base64url')
-  return `${payload}.${signature}`
+  return `${payload}.${signature}` as DeliveryToken | PlaybackGrantToken
 }
 
-function decodeClaims(token: string, kind: PlaybackTokenKind, now: Date): PlaybackTokenClaims {
+function decodeClaims(
+  token: DeliveryToken | PlaybackGrantToken,
+  kind: PlaybackTokenKind,
+  now: Date,
+): PlaybackTokenClaims {
   const [payload, suppliedSignature] = token.split('.')
   if (!payload || !suppliedSignature) {
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 401)
@@ -129,7 +140,7 @@ function assertPlayable(asset: MediaAsset, now: Date): void {
   if (!asset.drmContentId) {
     throw new PlaybackAuthorizationError('Media Asset is not encrypted for playback.', 409)
   }
-  if (asset.expiresAt && new Date(asset.expiresAt).getTime() < now.getTime()) {
+  if (!asset.expiresAt || new Date(asset.expiresAt).getTime() <= now.getTime()) {
     throw new PlaybackAuthorizationError('Media Asset has expired.', 410)
   }
 }
@@ -181,14 +192,14 @@ export async function createPlaybackGrant(
     grant: playbackGrantId,
     kind: 'grant',
     owner: owner.id,
-  })
+  }) as PlaybackGrantToken
   const deliveryToken = encodeClaims({
     asset: mediaAssetId,
     exp: deliveryExpiresAt.getTime(),
     grant: playbackGrantId,
     kind: 'delivery',
     owner: owner.id,
-  })
+  }) as DeliveryToken
   const [delivery, drm] = await Promise.all([
     providers.delivery.authorize({
       expiresAt: deliveryExpiresAt,
@@ -212,13 +223,21 @@ export async function createPlaybackGrant(
 export async function acquirePlaybackLicence(
   payload: Payload,
   member: PilotMember,
-  token: string,
-  options: { challenge?: Uint8Array; now?: Date; providers?: MediaProviders } = {},
+  token: PlaybackGrantToken,
+  options: {
+    challenge?: Uint8Array
+    now?: Date
+    providers?: MediaProviders
+    requestedPlaybackGrantId?: PlaybackGrantId
+  } = {},
 ) {
   const now = options.now ?? new Date()
   const providers = options.providers ?? getFakeProviders()
   const owner = await activeUploader(payload, member)
   const claims = decodeClaims(token, 'grant', now)
+  if (options.requestedPlaybackGrantId && claims.grant !== options.requestedPlaybackGrantId) {
+    throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
+  }
   if (claims.owner !== owner.id) {
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
   }
@@ -236,12 +255,17 @@ export async function acquirePlaybackLicence(
 
 export async function authorizePlaybackResource(
   payload: Payload,
-  token: string,
+  member: PilotMember,
+  token: DeliveryToken,
   requestedAssetId: MediaAssetId,
   options: { now?: Date } = {},
 ) {
   const now = options.now ?? new Date()
+  const owner = await activeUploader(payload, member)
   const claims = decodeClaims(token, 'delivery', now)
+  if (claims.owner !== owner.id) {
+    throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
+  }
   if (claims.asset !== requestedAssetId) {
     throw new PlaybackAuthorizationError('Playback authorization is scoped to another asset.', 403)
   }

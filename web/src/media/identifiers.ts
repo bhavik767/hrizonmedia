@@ -6,6 +6,10 @@ export type ProcessingJobId = `processing_${string}`
 export type ProviderJobId = `provider_job_${string}`
 export type ProviderUploadId = `provider_upload_${string}`
 export type PlaybackGrantId = `playback_${string}`
+declare const deliveryTokenBrand: unique symbol
+declare const playbackGrantTokenBrand: unique symbol
+export type DeliveryToken = string & { readonly [deliveryTokenBrand]: true }
+export type PlaybackGrantToken = string & { readonly [playbackGrantTokenBrand]: true }
 
 export function newMediaAssetId(): MediaAssetId {
   return `asset_${randomUUID()}`

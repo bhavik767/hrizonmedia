@@ -3,16 +3,16 @@ import { MigrateUpArgs, MigrateDownArgs, sql } from '@payloadcms/db-postgres'
 export async function up({ db, payload: _payload, req: _req }: MigrateUpArgs): Promise<void> {
   await db.execute(sql`
    CREATE TABLE "playback_grants" (
-  	"id" serial PRIMARY KEY NOT NULL,
-  	"playback_grant_id" varchar NOT NULL,
-  	"asset_id" integer NOT NULL,
-  	"owner_id" integer NOT NULL,
-  	"expires_at" timestamp(3) with time zone NOT NULL,
-  	"delivery_expires_at" timestamp(3) with time zone NOT NULL,
-  	"updated_at" timestamp(3) with time zone DEFAULT now() NOT NULL,
-  	"created_at" timestamp(3) with time zone DEFAULT now() NOT NULL
+    "id" serial PRIMARY KEY NOT NULL,
+    "playback_grant_id" varchar NOT NULL,
+    "asset_id" integer NOT NULL,
+    "owner_id" integer NOT NULL,
+    "expires_at" timestamp(3) with time zone NOT NULL,
+    "delivery_expires_at" timestamp(3) with time zone NOT NULL,
+    "updated_at" timestamp(3) with time zone DEFAULT now() NOT NULL,
+    "created_at" timestamp(3) with time zone DEFAULT now() NOT NULL
   );
-  
+
   ALTER TABLE "media_assets" ADD COLUMN "drm_content_id" varchar;
   ALTER TABLE "media_assets" ADD COLUMN "expires_at" timestamp(3) with time zone;
   ALTER TABLE "payload_locked_documents_rels" ADD COLUMN "playback_grants_id" integer;

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type {
+  DeliveryToken,
   MediaAssetId,
   PlaybackGrantId,
   ProviderJobId,
@@ -85,7 +86,7 @@ export interface DeliveryProvider {
     expiresAt: Date
     mediaAssetId: MediaAssetId
     playbackGrantId: PlaybackGrantId
-    token: string
+    token: DeliveryToken
   }): Promise<DeliveryAuthorization>
 }
 
