@@ -11,6 +11,7 @@ import { ensureDemoEnabled } from '@/pilot/demoAvailability'
 import { getPilotMember } from '@/pilot/session'
 
 import { signOut } from '../../actions'
+import { RetryProcessingButton } from './RetryProcessingButton'
 
 export const metadata: Metadata = { title: 'Media Asset | HrizonMedia Demo' }
 
@@ -58,7 +59,24 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
           <dt>Provider Job ID</dt>
           <dd>{asset.providerJobId}</dd>
         </div>
+        {asset.renditions && (
+          <div>
+            <dt>Adaptive outputs</dt>
+            <dd>{asset.renditions.map(({ height }) => `${height}p H.264/AAC`).join(', ')}</dd>
+          </div>
+        )}
       </dl>
+      {asset.status === 'failed' && asset.failureMessage && (
+        <section aria-labelledby="processing-failure-title" className="processing-failure">
+          <h2 id="processing-failure-title">Processing failed</h2>
+          <p>{asset.failureMessage}</p>
+          {asset.canRetry ? (
+            <RetryProcessingButton mediaAssetId={asset.mediaAssetId} />
+          ) : (
+            <p>The source is no longer available. Upload the video again to continue.</p>
+          )}
+        </section>
+      )}
       <div className="demo-actions">
         <Link className="text-link" href="/demo">
           Back to library

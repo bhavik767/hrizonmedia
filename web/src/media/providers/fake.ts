@@ -3,7 +3,7 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 
 import type { ProviderJobId } from '../identifiers'
-import type { StorageProvider, TranscodeProvider } from './contracts'
+import type { SourceMedia, StorageProvider, TranscodeProvider } from './contracts'
 
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
 const MKV_SIGNATURE = Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3])
@@ -13,6 +13,18 @@ function hasBytesAt(bytes: Uint8Array, signature: Uint8Array, offset: number): b
 }
 
 export class InvalidMediaError extends Error {}
+export class TransientTranscodeError extends Error {}
+export class PermanentTranscodeError extends Error {}
+
+function fakeSource(bytes: Uint8Array): SourceMedia {
+  const marker = new TextDecoder().decode(bytes).match(/HRIZON:(\d+)x(\d+):(\d+)/)
+  if (!marker) return { durationSeconds: 2, height: 1080, width: 1920 }
+  return {
+    durationSeconds: Number(marker[3]),
+    height: Number(marker[2]),
+    width: Number(marker[1]),
+  }
+}
 
 export const fakeStorageProvider: StorageProvider = {
   async store({ bytes, metadata, uploadSessionId }) {
@@ -25,14 +37,21 @@ export const fakeStorageProvider: StorageProvider = {
 
     return {
       objectKey: `fake-private/${uploadSessionId}/${encodeURIComponent(metadata.fileName)}`,
+      source: fakeSource(bytes),
     }
   },
 }
 
 export const fakeTranscodeProvider: TranscodeProvider = {
-  async queue({ mediaAssetId, objectKey }) {
-    const digest = createHash('sha256').update(`${mediaAssetId}\0${objectKey}`).digest('hex')
+  async queue({ idempotencyKey, mediaAssetId, objectKey, renditions }) {
+    const digest = createHash('sha256')
+      .update(`${idempotencyKey}\0${mediaAssetId}\0${objectKey}\0${JSON.stringify(renditions)}`)
+      .digest('hex')
     return `provider_job_${digest.slice(0, 32)}` as ProviderJobId
+  },
+  async status({ now, source, startedAt }) {
+    const processingTime = source.durationSeconds * 1_400
+    return now.getTime() - startedAt.getTime() >= processingTime ? 'ready' : 'processing'
   },
 }
 

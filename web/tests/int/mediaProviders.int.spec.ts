@@ -20,12 +20,18 @@ describe('deterministic media providers', () => {
       uploadSessionId,
     })
     const providerJobId = await fakeTranscodeProvider.queue({
+      idempotencyKey: processingJobId,
       mediaAssetId,
       objectKey: stored.objectKey,
+      renditions: [],
+      source: stored.source,
     })
     const repeatedProviderJobId = await fakeTranscodeProvider.queue({
+      idempotencyKey: processingJobId,
       mediaAssetId,
       objectKey: stored.objectKey,
+      renditions: [],
+      source: stored.source,
     })
 
     expect(mediaAssetId).toMatch(/^asset_/)

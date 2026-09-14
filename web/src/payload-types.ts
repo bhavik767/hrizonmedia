@@ -1200,11 +1200,36 @@ export interface UploadSession {
 export interface ProcessingJob {
   id: number;
   processingJobId: string;
-  providerJobId: string;
+  providerJobId?: string | null;
   asset: number | MediaAsset;
   owner: number | PilotMember;
-  status: 'queued' | 'processing' | 'ready' | 'failed';
+  status: 'queued' | 'dispatching' | 'processing' | 'ready' | 'failed';
   queuedAt: string;
+  dispatchBy: string;
+  nextAttemptAt: string;
+  attempts: number;
+  leaseToken?: string | null;
+  leasedUntil?: string | null;
+  dispatchedAt?: string | null;
+  startedAt?: string | null;
+  processingDeadlineAt?: string | null;
+  readyAt?: string | null;
+  failedAt?: string | null;
+  failureCode?: string | null;
+  failureMessage?: string | null;
+  objectKey: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  sourceDurationSeconds: number;
+  renditions:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2009,6 +2034,23 @@ export interface ProcessingJobsSelect<T extends boolean = true> {
   owner?: T;
   status?: T;
   queuedAt?: T;
+  dispatchBy?: T;
+  nextAttemptAt?: T;
+  attempts?: T;
+  leaseToken?: T;
+  leasedUntil?: T;
+  dispatchedAt?: T;
+  startedAt?: T;
+  processingDeadlineAt?: T;
+  readyAt?: T;
+  failedAt?: T;
+  failureCode?: T;
+  failureMessage?: T;
+  objectKey?: T;
+  sourceWidth?: T;
+  sourceHeight?: T;
+  sourceDurationSeconds?: T;
+  renditions?: T;
   updatedAt?: T;
   createdAt?: T;
 }
