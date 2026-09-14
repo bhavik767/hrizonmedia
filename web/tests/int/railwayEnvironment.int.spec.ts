@@ -14,7 +14,7 @@ describe('Railway environment validation', () => {
 
     expect(result.status).toBe(1)
     expect(result.stderr).toContain(
-      'Missing required production environment variables: ACCESS_KEY_ID, BUCKET, DATABASE_URL, ENDPOINT, PAYLOAD_SECRET, SECRET_ACCESS_KEY',
+      'Missing required production environment variables: ACCESS_KEY_ID, BUCKET, DATABASE_URL, ENDPOINT, PAYLOAD_SECRET, SECRET_ACCESS_KEY, TRANSCODER_CALLBACK_SECRET',
     )
   })
 
@@ -30,6 +30,7 @@ describe('Railway environment validation', () => {
         PATH: process.env.PATH,
         PAYLOAD_SECRET: 'payload-secret',
         SECRET_ACCESS_KEY: 'secret-key',
+        TRANSCODER_CALLBACK_SECRET: 'callback-secret',
       },
     })
 

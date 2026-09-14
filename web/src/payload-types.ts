@@ -76,6 +76,7 @@ export interface Config {
     users: User;
     'pilot-members': PilotMember;
     'media-assets': MediaAsset;
+    'media-operations': MediaOperation;
     'upload-sessions': UploadSession;
     'processing-jobs': ProcessingJob;
     'playback-grants': PlaybackGrant;
@@ -106,6 +107,7 @@ export interface Config {
     users: UsersSelect<false> | UsersSelect<true>;
     'pilot-members': PilotMembersSelect<false> | PilotMembersSelect<true>;
     'media-assets': MediaAssetsSelect<false> | MediaAssetsSelect<true>;
+    'media-operations': MediaOperationsSelect<false> | MediaOperationsSelect<true>;
     'upload-sessions': UploadSessionsSelect<false> | UploadSessionsSelect<true>;
     'processing-jobs': ProcessingJobsSelect<false> | ProcessingJobsSelect<true>;
     'playback-grants': PlaybackGrantsSelect<false> | PlaybackGrantsSelect<true>;
@@ -1193,6 +1195,19 @@ export interface MediaAsset {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-operations".
+ */
+export interface MediaOperation {
+  id: number;
+  key: string;
+  providerConcurrency: number;
+  killSwitchEnabled: boolean;
+  updatedBy?: (number | null) | PilotMember;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "upload-sessions".
  */
 export interface UploadSession {
@@ -1273,8 +1288,31 @@ export interface PlaybackGrant {
 export interface AuditEvent {
   id: number;
   eventKey: string;
-  action: 'asset_deleted' | 'asset_expired' | 'access_revoked' | 'source_deleted' | 'outputs_deleted';
-  asset: number | MediaAsset;
+  action:
+    | 'invitation_created'
+    | 'invitation_accepted'
+    | 'member_disabled'
+    | 'upload_started'
+    | 'upload_completed'
+    | 'upload_aborted'
+    | 'upload_expired'
+    | 'processing_queued'
+    | 'processing_dispatched'
+    | 'processing_ready'
+    | 'processing_failed'
+    | 'processing_retried'
+    | 'playback_granted'
+    | 'playback_licence_acquired'
+    | 'processing_callback_received'
+    | 'processing_callback_rejected'
+    | 'asset_deleted'
+    | 'asset_expired'
+    | 'access_revoked'
+    | 'source_deleted'
+    | 'outputs_deleted'
+    | 'operations_controls_updated';
+  member?: (number | null) | PilotMember;
+  asset?: (number | null) | MediaAsset;
   actor?: (number | null) | PilotMember;
   occurredAt: string;
   details?:
@@ -1519,6 +1557,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media-assets';
         value: number | MediaAsset;
+      } | null)
+    | ({
+        relationTo: 'media-operations';
+        value: number | MediaOperation;
       } | null)
     | ({
         relationTo: 'upload-sessions';
@@ -2090,6 +2132,18 @@ export interface MediaAssetsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-operations_select".
+ */
+export interface MediaOperationsSelect<T extends boolean = true> {
+  key?: T;
+  providerConcurrency?: T;
+  killSwitchEnabled?: T;
+  updatedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "upload-sessions_select".
  */
 export interface UploadSessionsSelect<T extends boolean = true> {
@@ -2159,6 +2213,7 @@ export interface PlaybackGrantsSelect<T extends boolean = true> {
 export interface AuditEventsSelect<T extends boolean = true> {
   eventKey?: T;
   action?: T;
+  member?: T;
   asset?: T;
   actor?: T;
   occurredAt?: T;

@@ -10,6 +10,7 @@ import {
 import { getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
 import config from '@/payload.config'
 import type { MediaAsset, PilotMember } from '@/payload-types'
+import { getOperatorOverview, updateOperationalControls } from '@/pilot/operations'
 import { cleanMediaRecords } from '../helpers/cleanMediaRecords'
 
 let payload: Payload
@@ -90,6 +91,30 @@ describe('Playback Grant authorization', () => {
     expect(first.licenceURL).toContain(`/api/demo/playback/${first.playbackGrantId}/licence`)
     expect(refreshed.playbackGrantId).not.toBe(first.playbackGrantId)
     expect(refreshed.expiresAt).toBe('2026-09-14T12:09:59.000Z')
+  })
+
+  it('blocks new playback activity while the operator kill switch is enabled', async () => {
+    const asset = await createAsset(owner)
+    const operator = await payload.create({
+      collection: 'pilot-members',
+      data: {
+        email: 'playback-kill-switch-operator@example.test',
+        invitationAcceptedAt: now.toISOString(),
+        name: 'Playback kill switch operator',
+        password: 'operator-password',
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    await updateOperationalControls(payload, operator, {
+      killSwitchEnabled: true,
+      providerConcurrency: 2,
+    })
+
+    await expect(createPlaybackGrant(payload, owner, asset.mediaAssetId!, { now })).rejects.toMatchObject(
+      { status: 503 },
+    )
   })
 
   it.each(['uploading', 'queued', 'processing', 'failed', 'expired', 'deleted'] as const)(
@@ -209,5 +234,27 @@ describe('Playback Grant authorization', () => {
       }),
     ).rejects.toMatchObject({ status: 403 })
     expect(acquireTemporaryLicence).not.toHaveBeenCalled()
+  })
+
+  it('records grants and licence acquisition for operator investigation', async () => {
+    const asset = await createAsset(owner)
+    const grant = await createPlaybackGrant(payload, owner, asset.mediaAssetId, { now })
+    await acquirePlaybackLicence(payload, owner, grant.playbackGrantToken, { now })
+    const operator = await payload.create({
+      collection: 'pilot-members',
+      data: {
+        email: 'playback-audit-operator@example.test',
+        invitationAcceptedAt: now.toISOString(),
+        name: 'Playback audit operator',
+        password: 'operator-password',
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+
+    expect((await getOperatorOverview(payload, operator)).auditEvents.map(({ action }) => action)).toEqual(
+      expect.arrayContaining(['playback_granted', 'playback_licence_acquired']),
+    )
   })
 })

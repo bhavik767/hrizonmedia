@@ -1,10 +1,12 @@
 import 'server-only'
 
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 
 import type { Payload } from 'payload'
 
 import type { MediaAsset, PilotMember, PlaybackGrant } from '@/payload-types'
+import { recordAuditEvent } from '@/audit/events'
+import { assertMediaActivityAllowed } from '@/pilot/operations'
 
 import {
   newPlaybackGrantId,
@@ -166,6 +168,7 @@ export async function createPlaybackGrant(
   mediaAssetId: MediaAssetId,
   options: { now?: Date; providers?: MediaProviders } = {},
 ): Promise<PlaybackGrantResponse> {
+  await assertMediaActivityAllowed(payload)
   const now = options.now ?? new Date()
   const providers = options.providers ?? getFakeProviders()
   const owner = await activeUploader(payload, member)
@@ -209,6 +212,13 @@ export async function createPlaybackGrant(
     }),
     providers.drm.createPlaybackContract({ playbackGrantId }),
   ])
+  await recordAuditEvent(payload, {
+    action: 'playback_granted',
+    actorID: owner.id,
+    assetID: asset.id,
+    eventKey: `playback-grant:${playbackGrantId}:granted`,
+    occurredAt: now,
+  })
   return {
     ...drm,
     deliveryExpiresAt: delivery.expiresAt,
@@ -231,6 +241,7 @@ export async function acquirePlaybackLicence(
     requestedPlaybackGrantId?: PlaybackGrantId
   } = {},
 ) {
+  await assertMediaActivityAllowed(payload)
   const now = options.now ?? new Date()
   const providers = options.providers ?? getFakeProviders()
   const owner = await activeUploader(payload, member)
@@ -250,6 +261,13 @@ export async function acquirePlaybackLicence(
     drmContentId: asset.drmContentId!,
     playbackGrantId: claims.grant,
   })
+  await recordAuditEvent(payload, {
+    action: 'playback_licence_acquired',
+    actorID: owner.id,
+    assetID: asset.id,
+    eventKey: `playback-grant:${claims.grant}:licence:${now.toISOString()}:${randomUUID()}`,
+    occurredAt: now,
+  })
   return { ...contract, licence, playbackGrantId: claims.grant }
 }
 
@@ -260,6 +278,7 @@ export async function authorizePlaybackResource(
   requestedAssetId: MediaAssetId,
   options: { now?: Date } = {},
 ) {
+  await assertMediaActivityAllowed(payload)
   const now = options.now ?? new Date()
   const owner = await activeUploader(payload, member)
   const claims = decodeClaims(token, 'delivery', now)

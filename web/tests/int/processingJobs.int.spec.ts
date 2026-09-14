@@ -1,4 +1,5 @@
 import { getPayload, type Payload } from 'payload'
+import { createHmac } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { newProcessingJobId } from '@/media/identifiers'
@@ -19,7 +20,9 @@ import {
 import type { TranscodeProvider } from '@/media/providers/contracts'
 import { newProcessingJobData, runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
+import { POST as processingCallback } from '@/app/(frontend)/api/internal/transcode/callback/route'
 import type { PilotMember } from '@/payload-types'
+import { getOperatorOverview, updateOperationalControls } from '@/pilot/operations'
 import { mp4Fixture } from '../helpers/mediaFixtures'
 
 let payload: Payload
@@ -43,6 +46,8 @@ function fixture(source = '1920x1080:2') {
 }
 
 async function clean() {
+  await payload.delete({ collection: 'audit-events', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'media-operations', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'upload-sessions', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })
@@ -278,6 +283,115 @@ describe('reliable Processing Jobs', () => {
     })
   })
 
+  it('dispatches no more jobs than the configured provider concurrency', async () => {
+    await upload()
+    await upload()
+    await upload()
+    const jobs = await payload.find({
+      collection: 'processing-jobs',
+      overrideAccess: true,
+      pagination: false,
+      where: {},
+    })
+    for (const job of jobs.docs) {
+      await payload.update({
+        collection: 'processing-jobs',
+        data: {
+          attempts: 0,
+          leaseToken: null,
+          leasedUntil: null,
+          nextAttemptAt: start.toISOString(),
+          providerJobId: null,
+          status: 'queued',
+        },
+        id: job.id,
+        overrideAccess: true,
+      })
+    }
+    const operator = await payload.create({
+      collection: 'pilot-members',
+      data: {
+        email: 'concurrency-operator@example.test',
+        invitationAcceptedAt: start.toISOString(),
+        name: 'Concurrency operator',
+        password: 'operator-password',
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    await updateOperationalControls(payload, operator, {
+      killSwitchEnabled: false,
+      providerConcurrency: 2,
+    })
+    const queue = vi.fn(fakeTranscodeProvider.queue)
+
+    const provider = { ...fakeTranscodeProvider, queue }
+    await Promise.all([
+      runProcessingCycle(payload, { now: start, provider, workerId: 'limited-worker-a' }),
+      runProcessingCycle(payload, { now: start, provider, workerId: 'limited-worker-b' }),
+    ])
+
+    expect(queue).toHaveBeenCalledTimes(2)
+    const after = await payload.find({
+      collection: 'processing-jobs',
+      overrideAccess: true,
+      pagination: false,
+      where: {},
+    })
+    expect(after.docs.filter(({ status }) => status === 'processing')).toHaveLength(2)
+    expect(after.docs.filter(({ status }) => status === 'queued')).toHaveLength(1)
+  })
+
+  it('makes no provider calls while the operator kill switch is enabled', async () => {
+    await upload()
+    const jobs = await payload.find({
+      collection: 'processing-jobs',
+      limit: 1,
+      overrideAccess: true,
+      where: {},
+    })
+    await payload.update({
+      collection: 'processing-jobs',
+      data: { nextAttemptAt: start.toISOString(), providerJobId: null, status: 'queued' },
+      id: jobs.docs[0]!.id,
+      overrideAccess: true,
+    })
+    const operator = await payload.create({
+      collection: 'pilot-members',
+      data: {
+        email: 'processing-kill-switch-operator@example.test',
+        invitationAcceptedAt: start.toISOString(),
+        name: 'Processing kill switch operator',
+        password: 'operator-password',
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    await updateOperationalControls(payload, operator, {
+      killSwitchEnabled: true,
+      providerConcurrency: 2,
+    })
+    const queue = vi.fn(fakeTranscodeProvider.queue)
+    const status = vi.fn(fakeTranscodeProvider.status)
+
+    await runProcessingCycle(payload, {
+      now: start,
+      provider: { ...fakeTranscodeProvider, queue, status },
+    })
+
+    expect(queue).not.toHaveBeenCalled()
+    expect(status).not.toHaveBeenCalled()
+    await expect(
+      payload.findByID({
+        collection: 'processing-jobs',
+        id: jobs.docs[0]!.id,
+        overrideAccess: true,
+      }),
+    ).resolves.toMatchObject({ status: 'queued' })
+  })
+
   it('reclaims an abandoned dispatch lease', async () => {
     await upload()
     const jobs = await payload.find({
@@ -431,5 +545,148 @@ describe('reliable Processing Jobs', () => {
     await expect(
       retryVisibleAssetProcessing(payload, uploader, session.asset.mediaAssetId, { now: start }),
     ).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('accepts a signed idempotent processing callback and records it', async () => {
+    const session = await upload()
+    const jobs = await payload.find({
+      collection: 'processing-jobs',
+      limit: 1,
+      overrideAccess: true,
+      where: {},
+    })
+    const job = jobs.docs[0]!
+    const callbackBody = JSON.stringify({
+      callbackId: 'callback-issue-39',
+      providerJobId: job.providerJobId,
+      status: 'ready',
+    })
+    const timestamp = String(Date.now())
+    const secret = 'callback-test-secret'
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    const signature = createHmac('sha256', secret)
+      .update(`${timestamp}.${callbackBody}`)
+      .digest('base64url')
+    const request = () =>
+      new Request('http://localhost/api/internal/transcode/callback', {
+        body: callbackBody,
+        headers: {
+          'content-type': 'application/json',
+          'x-hrizon-signature': signature,
+          'x-hrizon-timestamp': timestamp,
+        },
+        method: 'POST',
+      })
+
+    expect((await processingCallback(request())).status).toBe(204)
+    expect((await processingCallback(request())).status).toBe(204)
+    const operator = await payload.create({
+      collection: 'pilot-members',
+      data: {
+        email: 'callback-audit-operator@example.test',
+        invitationAcceptedAt: start.toISOString(),
+        name: 'Callback audit operator',
+        password: 'operator-password',
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    const callbackEvents = (await getOperatorOverview(payload, operator)).auditEvents.filter(
+      ({ action }) => action === 'processing_callback_received',
+    )
+    expect(callbackEvents).toHaveLength(1)
+    expect(callbackEvents[0]).toMatchObject({
+      assetId: session.asset.mediaAssetId,
+      details: { providerJobId: job.providerJobId, status: 'ready' },
+    })
+    vi.unstubAllEnvs()
+  })
+
+  it('rolls back callback state so a retry can restore missing audit evidence', async () => {
+    await upload()
+    const job = (
+      await payload.find({ collection: 'processing-jobs', limit: 1, overrideAccess: true, where: {} })
+    ).docs[0]!
+    const callbackBody = JSON.stringify({
+      callbackId: 'callback-audit-retry',
+      providerJobId: job.providerJobId,
+      status: 'ready',
+    })
+    const timestamp = String(Date.now())
+    const secret = 'callback-test-secret'
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    const signature = createHmac('sha256', secret)
+      .update(`${timestamp}.${callbackBody}`)
+      .digest('base64url')
+    const request = () =>
+      new Request('http://localhost/api/internal/transcode/callback', {
+        body: callbackBody,
+        headers: {
+          'content-type': 'application/json',
+          'x-hrizon-signature': signature,
+          'x-hrizon-timestamp': timestamp,
+        },
+        method: 'POST',
+      })
+    const create = payload.create.bind(payload)
+    const createSpy = vi.spyOn(payload, 'create').mockImplementation(async (args) => {
+      if (
+        args.collection === 'audit-events' &&
+        'action' in args.data &&
+        args.data.action === 'processing_callback_received'
+      ) {
+        createSpy.mockImplementation(create)
+        throw new Error('audit database unavailable')
+      }
+      return create(args as never)
+    })
+
+    expect((await processingCallback(request())).status).toBe(500)
+    expect((await processingCallback(request())).status).toBe(204)
+    const events = await payload.find({
+      collection: 'audit-events',
+      overrideAccess: true,
+      where: { action: { equals: 'processing_callback_received' } },
+    })
+    expect(events.docs).toHaveLength(1)
+    vi.unstubAllEnvs()
+  })
+
+  it('rejects an unsigned processing callback without changing state', async () => {
+    await upload()
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', 'callback-test-secret')
+    const response = await processingCallback(
+      new Request('http://localhost/api/internal/transcode/callback', {
+        body: JSON.stringify({
+          callbackId: 'unsigned-callback',
+          providerJobId: 'provider_job_unknown',
+          status: 'ready',
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      }),
+    )
+
+    expect(response.status).toBe(401)
+    const operator = await payload.create({
+      collection: 'pilot-members',
+      data: {
+        email: 'rejected-callback-operator@example.test',
+        invitationAcceptedAt: start.toISOString(),
+        name: 'Rejected callback operator',
+        password: 'operator-password',
+        role: 'operator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    const events = (await getOperatorOverview(payload, operator)).auditEvents.filter(
+      ({ action }) => action === 'processing_callback_rejected',
+    )
+    expect(events).toEqual([
+      expect.objectContaining({ details: { reason: 'authentication_failed' } }),
+    ])
+    vi.unstubAllEnvs()
   })
 })

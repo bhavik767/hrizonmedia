@@ -3,6 +3,8 @@ import 'server-only'
 import { createLocalReq, type Payload } from 'payload'
 
 import type { MediaAsset, PilotMember, UploadSession } from '@/payload-types'
+import { recordAuditEvent } from '@/audit/events'
+import { assertMediaActivityAllowed } from '@/pilot/operations'
 
 import {
   newMediaAssetId,
@@ -81,7 +83,9 @@ async function terminateUpload(
   providers: MediaProviders,
   sessionStatus: 'aborted' | 'expired',
   assetStatus: 'failed' | 'expired',
+  actorID?: number,
 ): Promise<void> {
+  const occurredAt = new Date()
   await providers.storage.abortMultipart(providerUploadID(session))
   await Promise.all([
     payload.update({
@@ -92,11 +96,18 @@ async function terminateUpload(
     }),
     payload.update({
       collection: 'media-assets',
-      data: { status: assetStatus, statusChangedAt: new Date().toISOString() },
+      data: { status: assetStatus, statusChangedAt: occurredAt.toISOString() },
       id: relationID(session.asset),
       overrideAccess: true,
     }),
   ])
+  await recordAuditEvent(payload, {
+    action: sessionStatus === 'expired' ? 'upload_expired' : 'upload_aborted',
+    actorID,
+    assetID: relationID(session.asset),
+    eventKey: `upload-session:${session.id}:${sessionStatus}`,
+    occurredAt,
+  })
 }
 
 async function requirePendingSession(
@@ -123,6 +134,7 @@ export async function createUploadSession(
   input: UploadMetadata,
   providers: MediaProviders = getFakeProviders(),
 ) {
+  await assertMediaActivityAllowed(payload)
   const metadata = validateMetadata(input)
   await cleanupAbandonedUploads(payload, new Date(), providers)
   const now = new Date()
@@ -163,6 +175,13 @@ export async function createUploadSession(
       },
       overrideAccess: true,
     })
+    await recordAuditEvent(payload, {
+      action: 'upload_started',
+      actorID: owner.id,
+      assetID: asset.id,
+      eventKey: `upload-session:${session.id}:started`,
+      occurredAt: now,
+    })
     return sessionResponse(session, asset)
   } catch (error) {
     await providers.storage.abortMultipart(initiated.providerUploadId)
@@ -199,6 +218,7 @@ export async function resumeUploadSession(
   fileFingerprint: string,
   providers: MediaProviders = getFakeProviders(),
 ) {
+  await assertMediaActivityAllowed(payload)
   const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
   if (session.fileFingerprint !== fileFingerprint) {
     throw new MediaLibraryError('The selected file does not match this upload session.', 409)
@@ -237,6 +257,7 @@ export async function renewUploadPart(
   partNumber: number,
   providers: MediaProviders = getFakeProviders(),
 ) {
+  await assertMediaActivityAllowed(payload)
   const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
   validatePartNumber(session, partNumber)
   return providers.storage.createPartUploadTarget({
@@ -254,6 +275,7 @@ export async function receiveUploadPart(
   bytes: Uint8Array,
   providers: MediaProviders = getFakeProviders(),
 ): Promise<CompletedPart> {
+  await assertMediaActivityAllowed(payload)
   const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
   validatePartNumber(session, partNumber)
   if (bytes.byteLength > session.partSize) {
@@ -299,6 +321,7 @@ export async function completeUpload(
   providers: MediaProviders = getFakeProviders(),
   processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary> {
+  await assertMediaActivityAllowed(payload)
   const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
   let stored
   try {
@@ -409,6 +432,23 @@ export async function completeUpload(
     throw error
   }
 
+  await Promise.all([
+    recordAuditEvent(payload, {
+      action: 'upload_completed',
+      actorID: owner.id,
+      assetID: asset.id,
+      eventKey: `upload-session:${session.id}:completed`,
+      occurredAt: queuedAt,
+    }),
+    recordAuditEvent(payload, {
+      action: 'processing_queued',
+      actorID: owner.id,
+      assetID: asset.id,
+      eventKey: `processing-job:${processingJobId}:queued`,
+      occurredAt: queuedAt,
+    }),
+  ])
+
   await runProcessingCycle(payload, {
     ...processingOptions,
     now: queuedAt,
@@ -430,7 +470,7 @@ export async function abortUpload(
     session.status === 'expired'
   )
     return
-  await terminateUpload(payload, session, providers, 'aborted', 'failed')
+  await terminateUpload(payload, session, providers, 'aborted', 'failed', owner.id)
 }
 
 export async function cleanupAbandonedUploads(
@@ -543,6 +583,7 @@ export async function retryVisibleAssetProcessing(
   mediaAssetId: MediaAssetId,
   processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary> {
+  await assertMediaActivityAllowed(payload)
   const result = await payload.find({
     collection: 'media-assets',
     depth: 0,
@@ -596,6 +637,13 @@ export async function retryVisibleAssetProcessing(
     },
     id: job.id,
     overrideAccess: true,
+  })
+  await recordAuditEvent(payload, {
+    action: 'processing_retried',
+    actorID: member.id,
+    assetID: asset.id,
+    eventKey: `processing-job:${job.processingJobId}:manual-retry:${now.toISOString()}`,
+    occurredAt: now,
   })
   const queuedAsset = await payload.update({
     collection: 'media-assets',

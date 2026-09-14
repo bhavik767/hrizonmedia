@@ -30,9 +30,14 @@ export default async function DemoPage() {
       </p>
       <div className="demo-actions">
         {member.role === 'operator' && (
-          <Link className="text-link" href="/demo/members">
-            Invite Pilot Members
-          </Link>
+          <>
+            <Link className="text-link" href="/demo/operations">
+              Operator oversight
+            </Link>
+            <Link className="text-link" href="/demo/members">
+              Invite Pilot Members
+            </Link>
+          </>
         )}
         <form action={signOut}>
           <button className="text-button" type="submit">
