@@ -1,4 +1,5 @@
 import type { MediaAssetId, ProcessingJobId, ProviderJobId, UploadSessionId } from './identifiers'
+import type { Rendition } from './providers/contracts'
 
 export const mediaAssetStatuses = [
   'uploading',
@@ -21,9 +22,14 @@ export interface MediaAssetSummary {
 }
 
 export interface MediaAssetDetail extends MediaAssetSummary {
+  canRetry: boolean
+  dispatchedAt: string | null
+  failureMessage: string | null
   mimeType: string
   processingJobId: ProcessingJobId | null
   providerJobId: ProviderJobId | null
+  readyAt: string | null
+  renditions: Rendition[] | null
   uploadSessionId: UploadSessionId
 }
 
@@ -32,11 +38,4 @@ export interface UploadMetadata {
   fileName: string
   mimeType: string
   size: number
-}
-
-export interface UploadedFile {
-  arrayBuffer(): Promise<ArrayBuffer>
-  name: string
-  size: number
-  type: string
 }

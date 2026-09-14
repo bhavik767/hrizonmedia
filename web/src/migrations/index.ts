@@ -4,6 +4,7 @@ import * as migration_20260914_062531_pilot_members from './20260914_062531_pilo
 import * as migration_20260914_070412_issue33_media_assets from './20260914_070412_issue33_media_assets'
 import * as migration_20260914_092953_issue33_processing_job_id from './20260914_092953_issue33_processing_job_id'
 import * as migration_20260914_105053_issue34_resumable_uploads from './20260914_105053_issue34_resumable_uploads'
+import * as migration_20260914_123628 from './20260914_123628'
 
 export const migrations = [
   {
@@ -35,5 +36,10 @@ export const migrations = [
     up: migration_20260914_105053_issue34_resumable_uploads.up,
     down: migration_20260914_105053_issue34_resumable_uploads.down,
     name: '20260914_105053_issue34_resumable_uploads',
+  },
+  {
+    up: migration_20260914_123628.up,
+    down: migration_20260914_123628.down,
+    name: '20260914_123628',
   },
 ]

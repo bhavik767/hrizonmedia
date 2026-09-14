@@ -41,8 +41,10 @@ describe('deterministic media providers', () => {
     })
     await expect(fakeStorageProvider.probe(stored.objectKey)).resolves.toEqual({
       durationSeconds: 90,
+      height: 1080,
       mimeType: 'video/mp4',
       size: bytes.length,
+      width: 1920,
     })
   })
 
@@ -70,8 +72,10 @@ describe('deterministic media providers', () => {
 
     await expect(fakeStorageProvider.probe(stored.objectKey)).resolves.toEqual({
       durationSeconds: 125,
+      height: 1080,
       mimeType: 'video/x-matroska',
       size: bytes.length,
+      width: 1920,
     })
   })
 
@@ -106,12 +110,18 @@ describe('deterministic media providers', () => {
       providerUploadId: initiated.providerUploadId,
     })
     const providerJobId = await fakeTranscodeProvider.queue({
+      idempotencyKey: processingJobId,
       mediaAssetId,
       objectKey: stored.objectKey,
+      renditions: [],
+      source: { durationSeconds: 60, height: 1080, width: 1920 },
     })
     const repeatedProviderJobId = await fakeTranscodeProvider.queue({
+      idempotencyKey: processingJobId,
       mediaAssetId,
       objectKey: stored.objectKey,
+      renditions: [],
+      source: { durationSeconds: 60, height: 1080, width: 1920 },
     })
 
     expect(mediaAssetId).toMatch(/^asset_/)

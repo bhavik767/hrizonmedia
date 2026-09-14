@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { ProviderJobId, ProviderUploadId } from '../identifiers'
 import type { CompletedPart } from '../multipart'
 import type { UploadMetadata } from '../types'
-import type { StorageProvider, TranscodeProvider } from './contracts'
+import type { Rendition, SourceMedia, StorageProvider, TranscodeProvider } from './contracts'
 
 const FAKE_PART_SIZE = 5 * 1024 * 1024
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
@@ -30,6 +30,15 @@ const state = (sharedGlobal[fakeMediaStateKey] ??= { objects: new Map(), uploads
 
 export class InvalidMediaError extends Error {}
 export class MultipartUploadError extends Error {}
+export class PermanentTranscodeError extends Error {}
+export class TransientTranscodeError extends Error {}
+
+function sourceDimensions(bytes: Uint8Array): Pick<SourceMedia, 'height' | 'width'> {
+  const marker = new TextDecoder().decode(bytes).match(/HRIZON:(\d+)x(\d+)/)
+  return marker
+    ? { height: Number(marker[2]), width: Number(marker[1]) }
+    : { height: 1080, width: 1920 }
+}
 
 function hasBytesAt(bytes: Uint8Array, signature: Uint8Array, offset: number): boolean {
   return signature.every((byte, index) => bytes[offset + index] === byte)
@@ -212,11 +221,21 @@ export const fakeStorageProvider: StorageProvider & {
     if (!bytes) throw new InvalidMediaError('The completed upload could not be read.')
     const mp4Duration = probeMP4(bytes)
     if (mp4Duration !== null) {
-      return { durationSeconds: mp4Duration, mimeType: 'video/mp4', size: bytes.byteLength }
+      return {
+        durationSeconds: mp4Duration,
+        mimeType: 'video/mp4',
+        size: bytes.byteLength,
+        ...sourceDimensions(bytes),
+      }
     }
     const mkvDuration = probeMKV(bytes)
     if (mkvDuration !== null) {
-      return { durationSeconds: mkvDuration, mimeType: 'video/x-matroska', size: bytes.byteLength }
+      return {
+        durationSeconds: mkvDuration,
+        mimeType: 'video/x-matroska',
+        size: bytes.byteLength,
+        ...sourceDimensions(bytes),
+      }
     }
     throw new InvalidMediaError('The completed upload is not a valid MP4 or MKV video.')
   },
@@ -237,9 +256,23 @@ export const fakeStorageProvider: StorageProvider & {
 }
 
 export const fakeTranscodeProvider: TranscodeProvider = {
-  async queue({ mediaAssetId, objectKey }) {
-    const digest = createHash('sha256').update(`${mediaAssetId}\0${objectKey}`).digest('hex')
+  async queue({ idempotencyKey, mediaAssetId, objectKey, renditions }) {
+    const renditionKey = (renditions as Rendition[])
+      .map((rendition) => `${rendition.width}x${rendition.height}`)
+      .join(',')
+    const digest = createHash('sha256')
+      .update(`${idempotencyKey}\0${mediaAssetId}\0${objectKey}\0${renditionKey}`)
+      .digest('hex')
     return `provider_job_${digest.slice(0, 32)}` as ProviderJobId
+  },
+
+  async status({ now, source, startedAt }) {
+    const elapsed = now.getTime() - startedAt.getTime()
+    const simulatedDuration =
+      source.durationSeconds >= 600
+        ? source.durationSeconds * 1_400
+        : Math.min(source.durationSeconds * 1_400, 7_000)
+    return elapsed >= simulatedDuration ? 'ready' : 'processing'
   },
 }
 

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
+import { flushSync } from 'react-dom'
 
 import type { CompletedPart, PartUploadTarget } from '@/media/multipart'
 import type { MediaAssetSummary } from '@/media/types'
@@ -20,6 +21,7 @@ interface UploadSessionResponse {
 
 const PENDING_UPLOAD_PREFIX = 'hrizonmedia.pending-upload.v1:'
 const MAX_PART_ATTEMPTS = 3
+const MIN_VISIBLE_STATUS_MS = 2_000
 
 class MediaRequestError extends Error {
   constructor(
@@ -127,10 +129,11 @@ export function MediaLibrary() {
   }, [refresh])
 
   useEffect(() => {
+    if (uploading) return
     if (!assets.some(({ status }) => status === 'queued' || status === 'processing')) return
     const timer = window.setInterval(() => void refresh().catch(() => undefined), 250)
     return () => window.clearInterval(timer)
-  }, [assets, refresh])
+  }, [assets, refresh, uploading])
 
   async function upload(formData: FormData) {
     const file = formData.get('file')
@@ -143,7 +146,21 @@ export function MediaLibrary() {
     const temporaryID = `local_${Date.now()}`
     let session: UploadSessionResponse | null = null
 
+    flushSync(() => {
+      setAssets((current) => [
+        {
+          createdAt: new Date().toISOString(),
+          fileName: file.name,
+          mediaAssetId: temporaryID,
+          size: file.size,
+          status: 'uploading',
+        },
+        ...current,
+      ])
+    })
+
     try {
+      await new Promise((resolve) => window.setTimeout(resolve, MIN_VISIBLE_STATUS_MS))
       const pending = readPendingUpload(fingerprint)
       if (pending) {
         const resumeResponse = await fetch(
@@ -155,16 +172,6 @@ export function MediaLibrary() {
         }
         session = await responseJSON<UploadSessionResponse>(resumeResponse)
       } else {
-        setAssets((current) => [
-          {
-            createdAt: new Date().toISOString(),
-            fileName: file.name,
-            mediaAssetId: temporaryID,
-            size: file.size,
-            status: 'uploading',
-          },
-          ...current,
-        ])
         const sessionResponse = await fetch('/api/demo/uploads', {
           body: JSON.stringify({
             fileFingerprint: fingerprint,
@@ -218,11 +225,14 @@ export function MediaLibrary() {
       })
       const completedUpload = await responseJSON<{ asset: MediaAssetSummary }>(completeResponse)
       window.localStorage.removeItem(pendingUploadKey(fingerprint))
-      setAssets((current) =>
-        current.map((item) =>
-          item.mediaAssetId === session!.asset.mediaAssetId ? completedUpload.asset : item,
-        ),
-      )
+      flushSync(() => {
+        setAssets((current) =>
+          current.map((item) =>
+            item.mediaAssetId === session!.asset.mediaAssetId ? completedUpload.asset : item,
+          ),
+        )
+      })
+      await new Promise((resolve) => window.setTimeout(resolve, MIN_VISIBLE_STATUS_MS))
     } catch (caught) {
       setAssets((current) => current.filter(({ mediaAssetId }) => mediaAssetId !== temporaryID))
       setError(caught instanceof Error ? caught.message : 'Unable to upload this video.')

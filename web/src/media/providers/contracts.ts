@@ -13,10 +13,25 @@ export interface StoredUpload {
   objectKey: string
 }
 
+export interface SourceMedia {
+  durationSeconds: number
+  height: number
+  width: number
+}
+
+export interface Rendition {
+  audioCodec: 'aac'
+  height: 360 | 480 | 720 | 1080
+  videoCodec: 'h264'
+  width: number
+}
+
 export interface MediaProbe {
   durationSeconds: number
+  height: number
   mimeType: 'video/mp4' | 'video/x-matroska'
   size: number
+  width: number
 }
 
 export interface StorageProvider {
@@ -39,7 +54,19 @@ export interface StorageProvider {
 }
 
 export interface TranscodeProvider {
-  queue(input: { mediaAssetId: MediaAssetId; objectKey: string }): Promise<ProviderJobId>
+  queue(input: {
+    idempotencyKey: string
+    mediaAssetId: MediaAssetId
+    objectKey: string
+    renditions: Rendition[]
+    source: SourceMedia
+  }): Promise<ProviderJobId>
+  status(input: {
+    now: Date
+    providerJobId: ProviderJobId
+    source: SourceMedia
+    startedAt: Date
+  }): Promise<'processing' | 'ready'>
 }
 
 export interface MediaProviders {

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { Payload } from 'payload'
+import { createLocalReq, type Payload } from 'payload'
 
 import type { MediaAsset, PilotMember, UploadSession } from '@/payload-types'
 
@@ -15,13 +15,12 @@ import {
 import type { CompletedPart } from './multipart'
 import type { MediaProviders, StorageProvider } from './providers/contracts'
 import { getFakeProviders, InvalidMediaError, MultipartUploadError } from './providers/fake'
+import { newProcessingJobData, runProcessingCycle, type ProcessingOptions } from './processing'
 import type { MediaAssetDetail, MediaAssetStatus, MediaAssetSummary, UploadMetadata } from './types'
 
 const MAX_ASSET_BYTES = 2 * 1024 * 1024 * 1024
 const MAX_DURATION_SECONDS = 2 * 60 * 60
 const UPLOAD_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1000
-const FAKE_PROCESSING_DELAY_MS = 2_000
-const FAKE_READY_DELAY_MS = 4_000
 
 export class MediaLibraryError extends Error {
   constructor(
@@ -298,6 +297,7 @@ export async function completeUpload(
   uploadSessionId: UploadSessionId,
   parts: CompletedPart[],
   providers: MediaProviders = getFakeProviders(),
+  processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary> {
   const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
   let stored
@@ -357,43 +357,62 @@ export async function completeUpload(
     id: assetRecordID,
     overrideAccess: true,
   })
-  const providerJobId = await providers.transcode.queue({
-    mediaAssetId: asset.mediaAssetId as MediaAssetId,
-    objectKey: stored.objectKey,
-  })
-  const queuedAt = new Date().toISOString()
+  const queuedAt = processingOptions.now ?? new Date()
   const processingJobId = newProcessingJobId()
 
-  await payload.update({
-    collection: 'upload-sessions',
-    data: { objectKey: stored.objectKey, status: 'completed' },
-    id: session.id,
-    overrideAccess: true,
-  })
-  await payload.create({
-    collection: 'processing-jobs',
-    data: {
-      asset: asset.id,
-      owner: owner.id,
-      processingJobId,
-      providerJobId,
-      queuedAt,
-      status: 'queued',
-    },
-    overrideAccess: true,
-  })
-  const queuedAsset = await payload.update({
-    collection: 'media-assets',
-    data: {
-      durationSeconds: probe.durationSeconds,
-      mimeType: probe.mimeType,
-      size: probe.size,
-      status: 'queued',
-      statusChangedAt: queuedAt,
-      verifiedAt: queuedAt,
-    },
-    id: asset.id,
-    overrideAccess: true,
+  const transactionID = await payload.db.beginTransaction()
+  if (transactionID === null) throw new Error('Processing Jobs require database transactions.')
+  const req = await createLocalReq({ req: { transactionID } }, payload)
+  let queuedAsset: MediaAsset
+  try {
+    await payload.update({
+      collection: 'upload-sessions',
+      data: { objectKey: stored.objectKey, status: 'completed' },
+      id: session.id,
+      overrideAccess: true,
+      req,
+    })
+    await payload.create({
+      collection: 'processing-jobs',
+      data: newProcessingJobData({
+        asset,
+        objectKey: stored.objectKey,
+        ownerID: owner.id,
+        processingJobId,
+        queuedAt,
+        source: {
+          durationSeconds: probe.durationSeconds,
+          height: probe.height,
+          width: probe.width,
+        },
+      }),
+      overrideAccess: true,
+      req,
+    })
+    queuedAsset = await payload.update({
+      collection: 'media-assets',
+      data: {
+        durationSeconds: probe.durationSeconds,
+        mimeType: probe.mimeType,
+        size: probe.size,
+        status: 'queued',
+        statusChangedAt: queuedAt.toISOString(),
+        verifiedAt: queuedAt.toISOString(),
+      },
+      id: asset.id,
+      overrideAccess: true,
+      req,
+    })
+    await payload.db.commitTransaction(transactionID)
+  } catch (error) {
+    await payload.db.rollbackTransaction(transactionID)
+    throw error
+  }
+
+  await runProcessingCycle(payload, {
+    ...processingOptions,
+    now: queuedAt,
+    provider: processingOptions.provider ?? providers.transcode,
   })
   return summary(queuedAsset)
 }
@@ -441,44 +460,13 @@ export async function cleanupAbandonedUploads(
   }
 }
 
-async function advanceFakePipeline(payload: Payload, ownerID: number): Promise<void> {
-  const jobs = await payload.find({
-    collection: 'processing-jobs',
-    depth: 0,
-    limit: 100,
-    overrideAccess: true,
-    where: { owner: { equals: ownerID } },
-  })
-  for (const job of jobs.docs) {
-    const age = Date.now() - new Date(job.queuedAt).getTime()
-    const nextStatus =
-      job.status === 'queued' && age >= FAKE_PROCESSING_DELAY_MS
-        ? 'processing'
-        : job.status === 'processing' && age >= FAKE_READY_DELAY_MS
-          ? 'ready'
-          : null
-    if (!nextStatus) continue
-    await payload.update({
-      collection: 'processing-jobs',
-      data: { status: nextStatus },
-      id: job.id,
-      overrideAccess: true,
-    })
-    await payload.update({
-      collection: 'media-assets',
-      data: { status: nextStatus, statusChangedAt: new Date().toISOString() },
-      id: relationID(job.asset),
-      overrideAccess: true,
-    })
-  }
-}
-
 export async function listOwnedAssets(
   payload: Payload,
   owner: PilotMember,
+  processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary[]> {
   await cleanupAbandonedUploads(payload)
-  await advanceFakePipeline(payload, owner.id)
+  await runProcessingCycle(payload, processingOptions)
   const result = await payload.find({
     collection: 'media-assets',
     depth: 0,
@@ -494,8 +482,9 @@ export async function getOwnedAsset(
   payload: Payload,
   owner: PilotMember,
   mediaAssetId: MediaAssetId,
+  processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetDetail> {
-  await advanceFakePipeline(payload, owner.id)
+  await runProcessingCycle(payload, processingOptions)
   const result = await payload.find({
     collection: 'media-assets',
     depth: 0,
@@ -525,9 +514,87 @@ export async function getOwnedAsset(
   if (!session) throw new MediaLibraryError('Upload Session not found.', 500)
   return {
     ...summary(asset),
+    canRetry: asset.status === 'failed' && Boolean(session.objectKey),
+    dispatchedAt: jobs.docs[0]?.dispatchedAt ?? null,
+    failureMessage: jobs.docs[0]?.failureMessage ?? null,
     mimeType: asset.mimeType,
     processingJobId: (jobs.docs[0]?.processingJobId as MediaAssetDetail['processingJobId']) ?? null,
     providerJobId: (jobs.docs[0]?.providerJobId as MediaAssetDetail['providerJobId']) ?? null,
+    readyAt: jobs.docs[0]?.readyAt ?? null,
+    renditions: (jobs.docs[0]?.renditions as MediaAssetDetail['renditions']) ?? null,
     uploadSessionId: session.uploadSessionId as UploadSessionId,
   }
+}
+
+export async function retryOwnedAssetProcessing(
+  payload: Payload,
+  owner: PilotMember,
+  mediaAssetId: MediaAssetId,
+  processingOptions: ProcessingOptions = {},
+): Promise<MediaAssetSummary> {
+  const result = await payload.find({
+    collection: 'media-assets',
+    depth: 0,
+    limit: 1,
+    overrideAccess: true,
+    where: {
+      and: [{ mediaAssetId: { equals: mediaAssetId } }, { owner: { equals: owner.id } }],
+    },
+  })
+  const asset = result.docs[0]
+  if (!asset) throw new MediaLibraryError('Media Asset not found.', 404)
+  if (asset.status !== 'failed')
+    throw new MediaLibraryError('Only failed assets can be retried.', 409)
+
+  const [sessions, jobs] = await Promise.all([
+    payload.find({
+      collection: 'upload-sessions',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { asset: { equals: asset.id } },
+    }),
+    payload.find({
+      collection: 'processing-jobs',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { asset: { equals: asset.id } },
+    }),
+  ])
+  const session = sessions.docs[0]
+  const job = jobs.docs[0]
+  if (!session?.objectKey || !job) {
+    throw new MediaLibraryError('The source is no longer available for retry.', 409)
+  }
+
+  const now = processingOptions.now ?? new Date()
+  await payload.update({
+    collection: 'processing-jobs',
+    data: {
+      attempts: 0,
+      failedAt: null,
+      failureCode: null,
+      failureMessage: null,
+      nextAttemptAt: now.toISOString(),
+      providerJobId: null,
+      status: 'queued',
+    },
+    id: job.id,
+    overrideAccess: true,
+  })
+  const queuedAsset = await payload.update({
+    collection: 'media-assets',
+    data: { status: 'queued', statusChangedAt: now.toISOString() },
+    id: asset.id,
+    overrideAccess: true,
+  })
+  await runProcessingCycle(payload, { ...processingOptions, now })
+  return summary(
+    await payload.findByID({
+      collection: 'media-assets',
+      id: queuedAsset.id,
+      overrideAccess: true,
+    }),
+  )
 }

@@ -127,12 +127,14 @@ export interface Config {
     footer: Footer;
     organization: Organization;
     integrations: Integration;
+    'payload-jobs-stats': PayloadJobsStat;
   };
   globalsSelect: {
     header: HeaderSelect<false> | HeaderSelect<true>;
     footer: FooterSelect<false> | FooterSelect<true>;
     organization: OrganizationSelect<false> | OrganizationSelect<true>;
     integrations: IntegrationsSelect<false> | IntegrationsSelect<true>;
+    'payload-jobs-stats': PayloadJobsStatsSelect<false> | PayloadJobsStatsSelect<true>;
   };
   locale: null;
   widgets: {
@@ -141,6 +143,7 @@ export interface Config {
   user: User | PilotMember;
   jobs: {
     tasks: {
+      'process-media-jobs': TaskProcessMediaJobs;
       schedulePublish: TaskSchedulePublish;
       inline: {
         input: unknown;
@@ -1205,11 +1208,36 @@ export interface UploadSession {
 export interface ProcessingJob {
   id: number;
   processingJobId: string;
-  providerJobId: string;
+  providerJobId?: string | null;
   asset: number | MediaAsset;
   owner: number | PilotMember;
-  status: 'queued' | 'processing' | 'ready' | 'failed';
+  status: 'queued' | 'dispatching' | 'processing' | 'ready' | 'failed';
   queuedAt: string;
+  dispatchBy: string;
+  nextAttemptAt: string;
+  attempts: number;
+  leaseToken?: string | null;
+  leasedUntil?: string | null;
+  dispatchedAt?: string | null;
+  startedAt?: string | null;
+  processingDeadlineAt?: string | null;
+  readyAt?: string | null;
+  failedAt?: string | null;
+  failureCode?: string | null;
+  failureMessage?: string | null;
+  objectKey: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  sourceDurationSeconds: number;
+  renditions:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1356,7 +1384,7 @@ export interface PayloadJob {
     | {
         executedAt: string;
         completedAt: string;
-        taskSlug: 'inline' | 'schedulePublish';
+        taskSlug: 'inline' | 'process-media-jobs' | 'schedulePublish';
         taskID: string;
         input?:
           | {
@@ -1389,10 +1417,19 @@ export interface PayloadJob {
         id?: string | null;
       }[]
     | null;
-  taskSlug?: ('inline' | 'schedulePublish') | null;
+  taskSlug?: ('inline' | 'process-media-jobs' | 'schedulePublish') | null;
   queue?: string | null;
   waitUntil?: string | null;
   processing?: boolean | null;
+  meta?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2019,6 +2056,23 @@ export interface ProcessingJobsSelect<T extends boolean = true> {
   owner?: T;
   status?: T;
   queuedAt?: T;
+  dispatchBy?: T;
+  nextAttemptAt?: T;
+  attempts?: T;
+  leaseToken?: T;
+  leasedUntil?: T;
+  dispatchedAt?: T;
+  startedAt?: T;
+  processingDeadlineAt?: T;
+  readyAt?: T;
+  failedAt?: T;
+  failureCode?: T;
+  failureMessage?: T;
+  objectKey?: T;
+  sourceWidth?: T;
+  sourceHeight?: T;
+  sourceDurationSeconds?: T;
+  renditions?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -2283,6 +2337,7 @@ export interface PayloadJobsSelect<T extends boolean = true> {
   queue?: T;
   waitUntil?: T;
   processing?: T;
+  meta?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -2585,6 +2640,24 @@ export interface Integration {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats".
+ */
+export interface PayloadJobsStat {
+  id: number;
+  stats?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "header_select".
  */
 export interface HeaderSelect<T extends boolean = true> {
@@ -2762,6 +2835,16 @@ export interface IntegrationsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats_select".
+ */
+export interface PayloadJobsStatsSelect<T extends boolean = true> {
+  stats?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "collections_widget".
  */
 export interface CollectionsWidget {
@@ -2769,6 +2852,14 @@ export interface CollectionsWidget {
     [k: string]: unknown;
   };
   width: 'full';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskProcess-media-jobs".
+ */
+export interface TaskProcessMediaJobs {
+  input?: unknown;
+  output?: unknown;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

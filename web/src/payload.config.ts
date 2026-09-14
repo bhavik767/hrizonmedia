@@ -134,6 +134,7 @@ export default buildConfig({
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   jobs: {
+    autoRun: [{ cron: '*/10 * * * * *', limit: 1, queue: 'media-processing' }],
     access: {
       run: ({ req }: { req: PayloadRequest }): boolean => {
         // Allow logged in users to execute this endpoint (default)
@@ -149,6 +150,19 @@ export default buildConfig({
         return authHeader === `Bearer ${secret}`
       },
     },
-    tasks: [],
+    deleteJobOnComplete: true,
+    tasks: [
+      {
+        handler: async ({ req }) => {
+          const { runProcessingCycle } = await import('./media/processing')
+          await runProcessingCycle(req.payload)
+          return { output: {} }
+        },
+        inputSchema: [],
+        outputSchema: [],
+        schedule: [{ cron: '*/10 * * * * *', queue: 'media-processing' }],
+        slug: 'process-media-jobs',
+      },
+    ],
   },
 })
