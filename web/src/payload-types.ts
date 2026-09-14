@@ -75,6 +75,9 @@ export interface Config {
     authors: Author;
     users: User;
     'pilot-members': PilotMember;
+    'media-assets': MediaAsset;
+    'upload-sessions': UploadSession;
+    'processing-jobs': ProcessingJob;
     'reusable-blocks': ReusableBlock;
     redirects: Redirect;
     forms: Form;
@@ -100,6 +103,9 @@ export interface Config {
     authors: AuthorsSelect<false> | AuthorsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'pilot-members': PilotMembersSelect<false> | PilotMembersSelect<true>;
+    'media-assets': MediaAssetsSelect<false> | MediaAssetsSelect<true>;
+    'upload-sessions': UploadSessionsSelect<false> | UploadSessionsSelect<true>;
+    'processing-jobs': ProcessingJobsSelect<false> | ProcessingJobsSelect<true>;
     'reusable-blocks': ReusableBlocksSelect<false> | ReusableBlocksSelect<true>;
     redirects: RedirectsSelect<false> | RedirectsSelect<true>;
     forms: FormsSelect<false> | FormsSelect<true>;
@@ -1155,6 +1161,55 @@ export interface PilotMember {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-assets".
+ */
+export interface MediaAsset {
+  id: number;
+  mediaAssetId: string;
+  owner: number | PilotMember;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  status: 'uploading' | 'queued' | 'processing' | 'ready' | 'failed' | 'expired' | 'deleted';
+  statusChangedAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "upload-sessions".
+ */
+export interface UploadSession {
+  id: number;
+  uploadSessionId: string;
+  asset: number | MediaAsset;
+  owner: number | PilotMember;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  objectKey?: string | null;
+  status: 'pending' | 'completed';
+  expiresAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "processing-jobs".
+ */
+export interface ProcessingJob {
+  id: number;
+  processingJobId: string;
+  providerJobId: string;
+  asset: number | MediaAsset;
+  owner: number | PilotMember;
+  status: 'queued' | 'processing' | 'ready' | 'failed';
+  queuedAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "redirects".
  */
 export interface Redirect {
@@ -1370,6 +1425,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'pilot-members';
         value: number | PilotMember;
+      } | null)
+    | ({
+        relationTo: 'media-assets';
+        value: number | MediaAsset;
+      } | null)
+    | ({
+        relationTo: 'upload-sessions';
+        value: number | UploadSession;
+      } | null)
+    | ({
+        relationTo: 'processing-jobs';
+        value: number | ProcessingJob;
       } | null)
     | ({
         relationTo: 'reusable-blocks';
@@ -1898,6 +1965,52 @@ export interface PilotMembersSelect<T extends boolean = true> {
         createdAt?: T;
         expiresAt?: T;
       };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-assets_select".
+ */
+export interface MediaAssetsSelect<T extends boolean = true> {
+  mediaAssetId?: T;
+  owner?: T;
+  fileName?: T;
+  mimeType?: T;
+  size?: T;
+  status?: T;
+  statusChangedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "upload-sessions_select".
+ */
+export interface UploadSessionsSelect<T extends boolean = true> {
+  uploadSessionId?: T;
+  asset?: T;
+  owner?: T;
+  fileName?: T;
+  mimeType?: T;
+  size?: T;
+  objectKey?: T;
+  status?: T;
+  expiresAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "processing-jobs_select".
+ */
+export interface ProcessingJobsSelect<T extends boolean = true> {
+  processingJobId?: T;
+  providerJobId?: T;
+  asset?: T;
+  owner?: T;
+  status?: T;
+  queuedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

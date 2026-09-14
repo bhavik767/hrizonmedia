@@ -1,0 +1,42 @@
+import type { CollectionConfig } from 'payload'
+
+export const UploadSessions: CollectionConfig = {
+  slug: 'upload-sessions',
+  access: {
+    admin: () => false,
+    create: () => false,
+    delete: () => false,
+    read: () => false,
+    update: () => false,
+  },
+  admin: { hidden: true, useAsTitle: 'uploadSessionId' },
+  fields: [
+    { name: 'uploadSessionId', type: 'text', required: true, unique: true, index: true },
+    {
+      name: 'asset',
+      type: 'relationship',
+      relationTo: 'media-assets',
+      required: true,
+      unique: true,
+    },
+    {
+      name: 'owner',
+      type: 'relationship',
+      relationTo: 'pilot-members',
+      required: true,
+      index: true,
+    },
+    { name: 'fileName', type: 'text', required: true },
+    { name: 'mimeType', type: 'text', required: true },
+    { name: 'size', type: 'number', required: true },
+    { name: 'objectKey', type: 'text' },
+    {
+      name: 'status',
+      type: 'select',
+      options: ['pending', 'completed'],
+      required: true,
+    },
+    { name: 'expiresAt', type: 'date', required: true },
+  ],
+  timestamps: true,
+}
