@@ -78,6 +78,7 @@ export interface Config {
     'media-assets': MediaAsset;
     'upload-sessions': UploadSession;
     'processing-jobs': ProcessingJob;
+    'playback-grants': PlaybackGrant;
     'reusable-blocks': ReusableBlock;
     redirects: Redirect;
     forms: Form;
@@ -106,6 +107,7 @@ export interface Config {
     'media-assets': MediaAssetsSelect<false> | MediaAssetsSelect<true>;
     'upload-sessions': UploadSessionsSelect<false> | UploadSessionsSelect<true>;
     'processing-jobs': ProcessingJobsSelect<false> | ProcessingJobsSelect<true>;
+    'playback-grants': PlaybackGrantsSelect<false> | PlaybackGrantsSelect<true>;
     'reusable-blocks': ReusableBlocksSelect<false> | ReusableBlocksSelect<true>;
     redirects: RedirectsSelect<false> | RedirectsSelect<true>;
     forms: FormsSelect<false> | FormsSelect<true>;
@@ -1175,6 +1177,8 @@ export interface MediaAsset {
   size: number;
   durationSeconds?: number | null;
   verifiedAt?: string | null;
+  drmContentId?: string | null;
+  expiresAt?: string | null;
   status: 'uploading' | 'queued' | 'processing' | 'ready' | 'failed' | 'expired' | 'deleted';
   statusChangedAt: string;
   updatedAt: string;
@@ -1238,6 +1242,20 @@ export interface ProcessingJob {
     | number
     | boolean
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "playback-grants".
+ */
+export interface PlaybackGrant {
+  id: number;
+  playbackGrantId: string;
+  asset: number | MediaAsset;
+  owner: number | PilotMember;
+  expiresAt: string;
+  deliveryExpiresAt: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -1479,6 +1497,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'processing-jobs';
         value: number | ProcessingJob;
+      } | null)
+    | ({
+        relationTo: 'playback-grants';
+        value: number | PlaybackGrant;
       } | null)
     | ({
         relationTo: 'reusable-blocks';
@@ -2020,6 +2042,8 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   size?: T;
   durationSeconds?: T;
   verifiedAt?: T;
+  drmContentId?: T;
+  expiresAt?: T;
   status?: T;
   statusChangedAt?: T;
   updatedAt?: T;
@@ -2073,6 +2097,19 @@ export interface ProcessingJobsSelect<T extends boolean = true> {
   sourceHeight?: T;
   sourceDurationSeconds?: T;
   renditions?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "playback-grants_select".
+ */
+export interface PlaybackGrantsSelect<T extends boolean = true> {
+  playbackGrantId?: T;
+  asset?: T;
+  owner?: T;
+  expiresAt?: T;
+  deliveryExpiresAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -94,9 +94,16 @@ async function setAssetStatus(
   status: 'queued' | 'processing' | 'ready' | 'failed',
   now: Date,
 ) {
+  const playbackData =
+    status === 'ready'
+      ? {
+          drmContentId: `drm_${job.processingJobId}`,
+          expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        }
+      : {}
   await payload.update({
     collection: 'media-assets',
-    data: { status, statusChangedAt: now.toISOString() },
+    data: { ...playbackData, status, statusChangedAt: now.toISOString() },
     id: relationID(job.asset),
     overrideAccess: true,
   })

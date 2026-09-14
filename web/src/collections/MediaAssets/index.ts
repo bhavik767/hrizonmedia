@@ -24,6 +24,8 @@ export const MediaAssets: CollectionConfig = {
     { name: 'size', type: 'number', required: true },
     { name: 'durationSeconds', type: 'number' },
     { name: 'verifiedAt', type: 'date' },
+    { name: 'drmContentId', type: 'text', unique: true, index: true },
+    { name: 'expiresAt', type: 'date', index: true },
     {
       name: 'status',
       type: 'select',

@@ -12,6 +12,7 @@ import { getPilotMember } from '@/pilot/session'
 
 import { signOut } from '../../actions'
 import { RetryProcessingButton } from './RetryProcessingButton'
+import { PlaybackPlayer } from './PlaybackPlayer'
 
 export const metadata: Metadata = { title: 'Media Asset | HrizonMedia Demo' }
 
@@ -66,6 +67,7 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
           </div>
         )}
       </dl>
+      {asset.status === 'ready' && <PlaybackPlayer mediaAssetId={asset.mediaAssetId} />}
       {asset.status === 'failed' && asset.failureMessage && (
         <section aria-labelledby="processing-failure-title" className="processing-failure">
           <h2 id="processing-failure-title">Processing failed</h2>

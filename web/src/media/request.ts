@@ -3,6 +3,9 @@ import { getPayload } from 'payload'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
 
+import { parseMediaAssetId, parsePlaybackGrantId, type DeliveryToken } from './identifiers'
+import { authorizePlaybackResource, PlaybackAuthorizationError } from './playback'
+
 export async function authenticatedUploader(request: Request): Promise<{
   member: PilotMember
   payload: Awaited<ReturnType<typeof getPayload>>
@@ -37,4 +40,29 @@ export async function withAuthenticatedUploader(
   } catch (error) {
     return mediaErrorResponse(error)
   }
+}
+
+export async function authorizePlaybackResourceRequest(input: {
+  member: PilotMember
+  payload: Awaited<ReturnType<typeof getPayload>>
+  rawPlaybackGrantId: string
+  request: Request
+}) {
+  const playbackGrantId = parsePlaybackGrantId(input.rawPlaybackGrantId)
+  const url = new URL(input.request.url)
+  const mediaAssetId = parseMediaAssetId(url.searchParams.get('asset') ?? '')
+  const token = url.searchParams.get('token') as DeliveryToken | null
+  if (!playbackGrantId || !mediaAssetId || !token) {
+    throw new PlaybackAuthorizationError('Playback authorization is invalid.', 401)
+  }
+  const authorized = await authorizePlaybackResource(
+    input.payload,
+    input.member,
+    token,
+    mediaAssetId,
+  )
+  if (authorized.playbackGrantId !== playbackGrantId) {
+    throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
+  }
+  return { mediaAssetId, playbackGrantId, token }
 }

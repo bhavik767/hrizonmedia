@@ -36,7 +36,18 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: /playback\.e2e\.spec\.ts/,
       use: { ...devices['Desktop Chrome'], channel: 'chromium' },
+    },
+    {
+      name: 'chrome-playback',
+      testMatch: /playback\.e2e\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
+    },
+    {
+      name: 'edge-playback',
+      testMatch: /playback\.e2e\.spec\.ts/,
+      use: { ...devices['Desktop Edge'], channel: 'msedge' },
     },
   ],
   webServer: {

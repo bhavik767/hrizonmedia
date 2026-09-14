@@ -5,6 +5,7 @@ import * as migration_20260914_070412_issue33_media_assets from './20260914_0704
 import * as migration_20260914_092953_issue33_processing_job_id from './20260914_092953_issue33_processing_job_id'
 import * as migration_20260914_105053_issue34_resumable_uploads from './20260914_105053_issue34_resumable_uploads'
 import * as migration_20260914_123628 from './20260914_123628'
+import * as migration_20260914_131520_issue36_playback_grants from './20260914_131520_issue36_playback_grants'
 
 export const migrations = [
   {
@@ -41,5 +42,10 @@ export const migrations = [
     up: migration_20260914_123628.up,
     down: migration_20260914_123628.down,
     name: '20260914_123628',
+  },
+  {
+    up: migration_20260914_131520_issue36_playback_grants.up,
+    down: migration_20260914_131520_issue36_playback_grants.down,
+    name: '20260914_131520_issue36_playback_grants',
   },
 ]
