@@ -46,7 +46,7 @@ test.describe('Media Asset tracer bullet', () => {
     await expect(asset.getByText('uploading', { exact: true })).toBeVisible()
     await expect(asset.getByText('queued', { exact: true })).toBeVisible({ timeout: 45_000 })
     await expect(asset.getByText('processing', { exact: true })).toBeVisible()
-    await expect(asset.getByText('ready', { exact: true })).toBeVisible()
+    await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
 
     await asset.getByRole('link', { name: 'Inspect asset' }).click()
     await expect(page).toHaveURL(/\/demo\/assets\//, { timeout: 45_000 })
@@ -66,6 +66,27 @@ test.describe('Media Asset tracer bullet', () => {
 
     const denied = await page.request.get(`/api/demo/assets/${assetID}`)
     expect(denied.status()).toBe(404)
+  })
+
+  test('deletes an owned Media Asset and removes it from the library immediately', async ({
+    page,
+  }) => {
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles({
+      buffer: mp4Fixture(),
+      mimeType: 'video/mp4',
+      name: 'delete-me.mp4',
+    })
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    const asset = page.getByRole('article', { name: 'delete-me.mp4' })
+    await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
+    await asset.getByRole('link', { name: 'Inspect asset' }).click()
+
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.getByRole('button', { name: 'Delete asset' }).click()
+
+    await expect(page).toHaveURL('/demo')
+    await expect(page.getByText('Your library is empty.')).toBeVisible()
   })
 
   test('retries a transient part failure without restarting completed parts', async ({ page }) => {

@@ -52,6 +52,7 @@ export interface StorageProvider {
     providerUploadId: ProviderUploadId
     uploadSessionId: UploadSessionId
   }): Promise<PartUploadTarget>
+  deleteObject(objectKey: string): Promise<void>
   initiateMultipart(input: {
     metadata: UploadMetadata
     uploadSessionId: UploadSessionId
@@ -61,6 +62,10 @@ export interface StorageProvider {
 }
 
 export interface TranscodeProvider {
+  deleteOutputs(input: {
+    mediaAssetId: MediaAssetId
+    providerJobId: ProviderJobId | null
+  }): Promise<void>
   queue(input: {
     idempotencyKey: string
     mediaAssetId: MediaAssetId
@@ -88,6 +93,7 @@ export interface DeliveryProvider {
     playbackGrantId: PlaybackGrantId
     token: DeliveryToken
   }): Promise<DeliveryAuthorization>
+  revokeAsset(mediaAssetId: MediaAssetId): Promise<void>
 }
 
 export interface DrmPlaybackContract {

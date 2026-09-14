@@ -26,6 +26,10 @@ export const MediaAssets: CollectionConfig = {
     { name: 'verifiedAt', type: 'date' },
     { name: 'drmContentId', type: 'text', unique: true, index: true },
     { name: 'expiresAt', type: 'date', index: true },
+    { name: 'deletedAt', type: 'date', index: true },
+    { name: 'accessRevokedAt', type: 'date', index: true },
+    { name: 'sourceDeletedAt', type: 'date', index: true },
+    { name: 'outputsDeletedAt', type: 'date', index: true },
     {
       name: 'status',
       type: 'select',

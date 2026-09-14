@@ -104,7 +104,7 @@ async function uploadPartWithRetry(targetURL: string, bytes: Blob): Promise<Comp
   throw new Error(`${lastError?.message || 'A storage part failed.'} Reselect this file to resume.`)
 }
 
-export function MediaLibrary() {
+export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
   const [assets, setAssets] = useState<DisplayedAsset[]>([])
   const [error, setError] = useState('')
   const [hydrated, setHydrated] = useState(false)
@@ -252,25 +252,27 @@ export function MediaLibrary() {
           </p>
           <h2 id="media-library-title">Media Assets</h2>
         </div>
-        <form
-          className="upload-form"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void upload(new FormData(event.currentTarget))
-          }}
-        >
-          <label htmlFor="video-file">Video file</label>
-          <input
-            accept="video/mp4,.mp4,video/x-matroska,.mkv"
-            id="video-file"
-            name="file"
-            required
-            type="file"
-          />
-          <button className="primary-action" disabled={!hydrated || uploading} type="submit">
-            {uploading ? `Uploading${progress === null ? '…' : ` ${progress}%`}` : 'Upload asset'}
-          </button>
-        </form>
+        {canUpload && (
+          <form
+            className="upload-form"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void upload(new FormData(event.currentTarget))
+            }}
+          >
+            <label htmlFor="video-file">Video file</label>
+            <input
+              accept="video/mp4,.mp4,video/x-matroska,.mkv"
+              id="video-file"
+              name="file"
+              required
+              type="file"
+            />
+            <button className="primary-action" disabled={!hydrated || uploading} type="submit">
+              {uploading ? `Uploading${progress === null ? '…' : ` ${progress}%`}` : 'Upload asset'}
+            </button>
+          </form>
+        )}
       </div>
 
       {error && (

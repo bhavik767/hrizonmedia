@@ -460,9 +460,9 @@ export async function cleanupAbandonedUploads(
   }
 }
 
-export async function listOwnedAssets(
+export async function listVisibleAssets(
   payload: Payload,
-  owner: PilotMember,
+  member: PilotMember,
   processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary[]> {
   await cleanupAbandonedUploads(payload)
@@ -473,14 +473,21 @@ export async function listOwnedAssets(
     limit: 100,
     overrideAccess: true,
     sort: '-createdAt',
-    where: { owner: { equals: owner.id } },
+    where:
+      member.role === 'operator'
+        ? { status: { not_equals: 'deleted' } }
+        : {
+            and: [{ owner: { equals: member.id } }, { status: { not_equals: 'deleted' } }],
+          },
   })
   return result.docs.map(summary)
 }
 
-export async function getOwnedAsset(
+export const listOwnedAssets = listVisibleAssets
+
+export async function getVisibleAsset(
   payload: Payload,
-  owner: PilotMember,
+  member: PilotMember,
   mediaAssetId: MediaAssetId,
   processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetDetail> {
@@ -490,7 +497,13 @@ export async function getOwnedAsset(
     depth: 0,
     limit: 1,
     overrideAccess: true,
-    where: { and: [{ mediaAssetId: { equals: mediaAssetId } }, { owner: { equals: owner.id } }] },
+    where: {
+      and: [
+        { mediaAssetId: { equals: mediaAssetId } },
+        { status: { not_equals: 'deleted' } },
+        ...(member.role === 'operator' ? [] : [{ owner: { equals: member.id } }]),
+      ],
+    },
   })
   const asset = result.docs[0]
   if (!asset) throw new MediaLibraryError('Media Asset not found.', 404)
@@ -525,6 +538,8 @@ export async function getOwnedAsset(
     uploadSessionId: session.uploadSessionId as UploadSessionId,
   }
 }
+
+export const getOwnedAsset = getVisibleAsset
 
 export async function retryOwnedAssetProcessing(
   payload: Payload,

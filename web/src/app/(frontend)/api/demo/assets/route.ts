@@ -1,8 +1,10 @@
-import { listOwnedAssets } from '@/media/library'
-import { withAuthenticatedUploader } from '@/media/request'
+import { runMediaLifecycle } from '@/media/lifecycle'
+import { listVisibleAssets } from '@/media/library'
+import { withAuthenticatedPilotMember } from '@/media/request'
 
 export async function GET(request: Request): Promise<Response> {
-  return withAuthenticatedUploader(request, async ({ member, payload }) => {
-    return Response.json({ assets: await listOwnedAssets(payload, member) })
+  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+    await runMediaLifecycle(payload)
+    return Response.json({ assets: await listVisibleAssets(payload, member) })
   })
 }

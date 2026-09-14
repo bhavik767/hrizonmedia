@@ -22,6 +22,18 @@ export async function authenticatedUploader(request: Request): Promise<{
   return { member: user, payload }
 }
 
+export async function authenticatedPilotMember(request: Request): Promise<{
+  member: PilotMember
+  payload: Awaited<ReturnType<typeof getPayload>>
+}> {
+  const payload = await getPayload({ config })
+  const { user } = await payload.auth({ headers: request.headers })
+  if (user?.collection !== 'pilot-members' || user.status !== 'active') {
+    throw new Response('Pilot Member authentication required.', { status: 401 })
+  }
+  return { member: user, payload }
+}
+
 export function mediaErrorResponse(error: unknown): Response {
   if (error instanceof Response) return error
   if (error instanceof Error && 'status' in error && typeof error.status === 'number') {
@@ -37,6 +49,17 @@ export async function withAuthenticatedUploader(
 ): Promise<Response> {
   try {
     return await handler(await authenticatedUploader(request))
+  } catch (error) {
+    return mediaErrorResponse(error)
+  }
+}
+
+export async function withAuthenticatedPilotMember(
+  request: Request,
+  handler: (context: Awaited<ReturnType<typeof authenticatedPilotMember>>) => Promise<Response>,
+): Promise<Response> {
+  try {
+    return await handler(await authenticatedPilotMember(request))
   } catch (error) {
     return mediaErrorResponse(error)
   }
