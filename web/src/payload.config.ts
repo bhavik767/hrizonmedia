@@ -9,6 +9,7 @@ import { Authors } from './collections/Authors'
 import { Categories } from './collections/Categories'
 import { Media } from './collections/Media'
 import { Pages } from './collections/Pages'
+import { PilotMembers } from './collections/PilotMembers'
 import { Posts } from './collections/Posts'
 import { ReusableBlocks } from './collections/ReusableBlocks'
 import { Users } from './collections/Users'
@@ -102,7 +103,7 @@ export default buildConfig({
       connectionString: process.env.DATABASE_URL || '',
     },
   }),
-  collections: [Pages, Posts, Media, Categories, Authors, Users, ReusableBlocks],
+  collections: [Pages, Posts, Media, Categories, Authors, Users, PilotMembers, ReusableBlocks],
   cors: [getServerSideURL()].filter(Boolean),
   // Media is the only collection with folder organization enabled; hide the cross-collection
   // "Browse by Folder" entry point at the top of the admin nav sidebar while keeping folders

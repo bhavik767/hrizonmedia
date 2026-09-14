@@ -64,6 +64,7 @@ export type SupportedTimezones =
 export interface Config {
   auth: {
     users: UserAuthOperations;
+    'pilot-members': PilotMemberAuthOperations;
   };
   blocks: {};
   collections: {
@@ -73,6 +74,7 @@ export interface Config {
     categories: Category;
     authors: Author;
     users: User;
+    'pilot-members': PilotMember;
     'reusable-blocks': ReusableBlock;
     redirects: Redirect;
     forms: Form;
@@ -97,6 +99,7 @@ export interface Config {
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
     authors: AuthorsSelect<false> | AuthorsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
+    'pilot-members': PilotMembersSelect<false> | PilotMembersSelect<true>;
     'reusable-blocks': ReusableBlocksSelect<false> | ReusableBlocksSelect<true>;
     redirects: RedirectsSelect<false> | RedirectsSelect<true>;
     forms: FormsSelect<false> | FormsSelect<true>;
@@ -129,7 +132,7 @@ export interface Config {
   widgets: {
     collections: CollectionsWidget;
   };
-  user: User;
+  user: User | PilotMember;
   jobs: {
     tasks: {
       schedulePublish: TaskSchedulePublish;
@@ -142,6 +145,24 @@ export interface Config {
   };
 }
 export interface UserAuthOperations {
+  forgotPassword: {
+    email: string;
+    password: string;
+  };
+  login: {
+    email: string;
+    password: string;
+  };
+  registerFirstUser: {
+    email: string;
+    password: string;
+  };
+  unlock: {
+    email: string;
+    password: string;
+  };
+}
+export interface PilotMemberAuthOperations {
   forgotPassword: {
     email: string;
     password: string;
@@ -1103,6 +1124,37 @@ export interface User {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pilot-members".
+ */
+export interface PilotMember {
+  id: number;
+  name: string;
+  role: 'uploader' | 'operator';
+  status: 'active' | 'disabled';
+  invitationTokenHash?: string | null;
+  invitationExpiresAt?: string | null;
+  invitationAcceptedAt?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'pilot-members';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "redirects".
  */
 export interface Redirect {
@@ -1316,6 +1368,10 @@ export interface PayloadLockedDocument {
         value: number | User;
       } | null)
     | ({
+        relationTo: 'pilot-members';
+        value: number | PilotMember;
+      } | null)
+    | ({
         relationTo: 'reusable-blocks';
         value: number | ReusableBlock;
       } | null)
@@ -1340,10 +1396,15 @@ export interface PayloadLockedDocument {
         value: number | FolderInterface;
       } | null);
   globalSlug?: string | null;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'users';
+        value: number | User;
+      }
+    | {
+        relationTo: 'pilot-members';
+        value: number | PilotMember;
+      };
   updatedAt: string;
   createdAt: string;
 }
@@ -1353,10 +1414,15 @@ export interface PayloadLockedDocument {
  */
 export interface PayloadPreference {
   id: number;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'users';
+        value: number | User;
+      }
+    | {
+        relationTo: 'pilot-members';
+        value: number | PilotMember;
+      };
   key?: string | null;
   value?:
     | {
@@ -1807,6 +1873,34 @@ export interface UsersSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pilot-members_select".
+ */
+export interface PilotMembersSelect<T extends boolean = true> {
+  name?: T;
+  role?: T;
+  status?: T;
+  invitationTokenHash?: T;
+  invitationExpiresAt?: T;
+  invitationAcceptedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  email?: T;
+  resetPasswordToken?: T;
+  resetPasswordExpiration?: T;
+  salt?: T;
+  hash?: T;
+  loginAttempts?: T;
+  lockUntil?: T;
+  sessions?:
+    | T
+    | {
+        id?: T;
+        createdAt?: T;
+        expiresAt?: T;
+      };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "reusable-blocks_select".
  */
 export interface ReusableBlocksSelect<T extends boolean = true> {
@@ -2172,7 +2266,7 @@ export interface Footer {
   createdAt?: string | null;
 }
 /**
- * eSaral's organization info, used to populate schema.org structured data (Article publisher, Course provider) and site-level assets (favicon) across the site.
+ * HrizonMedia organization information used for structured data and site-level assets.
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "organization".
@@ -2225,7 +2319,7 @@ export interface Organization {
    */
   telephone?: string | null;
   /**
-   * When eSaral was founded (schema.org foundingDate).
+   * When HrizonMedia was founded (schema.org foundingDate).
    */
   foundingDate?: string | null;
   /**
@@ -2257,7 +2351,7 @@ export interface Organization {
    */
   organizationType?: ('EducationalOrganization' | 'Organization') | null;
   /**
-   * Topics eSaral is known for (e.g. JEE, NEET, Physics, Chemistry, Maths, Biology) — populates schema.org knowsAbout, a GEO/E-E-A-T signal for AI answer engines.
+   * Topics HrizonMedia is known for — populates schema.org knowsAbout.
    */
   knowsAbout?:
     | {

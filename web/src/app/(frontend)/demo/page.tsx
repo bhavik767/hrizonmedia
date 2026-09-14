@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { connection } from 'next/server'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+
+import { getPilotMember } from '@/pilot/session'
+
+import { signOut } from './actions'
 
 export const metadata: Metadata = {
   title: 'Demo | HrizonMedia',
@@ -13,15 +17,30 @@ export default async function DemoPage() {
 
   if (process.env.HRIZONMEDIA_DEMO_ENABLED !== 'true') notFound()
 
+  const member = await getPilotMember()
+  if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
+
   return (
     <main className="demo-page shell" id="main-content">
-      <p className="eyebrow"><span aria-hidden="true" /> Private pilot</p>
+      <p className="eyebrow">
+        <span aria-hidden="true" /> Private pilot
+      </p>
       <h1>HrizonMedia Demo</h1>
       <p>
-        The secure-video workspace is ready for the invited pilot. Sign-in and upload
-        access arrive in the next MVP slice.
+        Signed in as {member.name} ({member.email}). The secure-video workspace is ready.
       </p>
-      <Link className="text-link" href="/">Return home</Link>
+      <div className="demo-actions">
+        {member.role === 'operator' && (
+          <Link className="text-link" href="/demo/members">
+            Invite Pilot Members
+          </Link>
+        )}
+        <form action={signOut}>
+          <button className="text-button" type="submit">
+            Sign out
+          </button>
+        </form>
+      </div>
     </main>
   )
 }
