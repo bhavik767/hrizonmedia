@@ -120,7 +120,8 @@ test.describe('HrizonMedia landing page', () => {
     await page.goto('/')
 
     await page.getByRole('link', { name: 'Open the HrizonMedia Demo' }).click()
-    await expect(page).toHaveURL('/demo/sign-in?returnTo=%2Fdemo')
+    // The first Demo navigation can include cold compilation on the local test server.
+    await expect(page).toHaveURL('/demo/sign-in?returnTo=%2Fdemo', { timeout: 60_000 })
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign in to the Demo')
   })
 

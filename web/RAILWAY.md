@@ -1,4 +1,80 @@
-# Railway baseline
+# Railway staging deployment
+
+Issue #41 prepares the complete deterministic MVP for isolated staging. Configure
+the connected GitHub web service root directory as `/web`. The staging infrastructure
+definition is `web/.railway/railway.ts`; it refuses to plan/apply against production
+and preserves existing secret values on Railway. Run `railway config plan` and then
+`railway config apply` from `web` while linked to `staging`. Inspect the plan first.
+The checked-in configuration selects the Dockerfile, one
+continuously awake replica (required by process-local fake storage and rate limits),
+`/health`, a 180-second readiness window, and at most three failure restarts.
+See [Railway infrastructure-as-code](https://docs.railway.com/infrastructure-as-code).
+New services cannot select the deprecated `railway.json` format.
+
+Create/select an environment named exactly `staging`. Use a separate staging
+PostgreSQL service and private CMS bucket, not references to production resources.
+Provide the variables below, `NEXT_PUBLIC_SERVER_URL` as the staging HTTPS origin
+at both build and runtime, `HRIZONMEDIA_DEMO_ENABLED=true`, and independent staging
+secrets. Railway supplies `RAILWAY_ENVIRONMENT_NAME=staging`. Never duplicate
+production data or run the old template seed/reset scripts.
+
+Deploy this branch using the connected GitHub source or authenticated Railway CLI
+from the repository root: `railway up . --path-as-root --project <project-id>
+--environment staging --service <staging-web-service>`. This preserves `/web` in
+the upload archive, matching the service root and watch patterns.
+Confirm the linked project/service first. Do not change the production source branch,
+domain or variables. Keep `HRIZONMEDIA_DEMO_ENABLED` unset or `false` there.
+
+## Readiness and operations
+
+`/health` initializes Payload (including committed production migrations) and queries
+PostgreSQL before returning an uncached 200. An unavailable database returns a
+sanitized, uncached 503. Readiness does not certify real provider connectivity.
+Payload's scheduled worker dispatches/reconciles every ten seconds without browser
+traffic; sleeping or multiple staging replicas are unsupported.
+
+Railway logs contain JSON diagnostics with `timestamp`, `level`, `event` and an
+optional numeric `recordID`. Monitor `processing_stalled`, `source_cleanup_pending`,
+`media_cleanup_pending`, `lifecycle_audit_pending`, `media_cycle_failed` and
+`health_unavailable`; correlate record IDs with the operator console and Audit Events.
+`media_cycle_completed` is the maintenance heartbeat. Alert on absent heartbeats
+for one minute and on repeated pending cleanup; no raw exception or secret is logged
+by these diagnostics. Inspect Railway process logs for startup failures as well.
+
+Fake source/upload bytes live in memory and disappear on restart. Use only disposable
+fixtures; restart/redeploy requires fresh uploads, and stored records are not proof
+that the fake provider still has their source bytes. No real DRM or performance
+certification is implied by a passing deterministic demonstration.
+
+## Deployed acceptance checks
+
+Use a dedicated disposable staging test environment: browser fixture helpers delete
+Pilot Members, Media Assets, jobs, grants and Audit Events in the selected database.
+Do not run them on a staging environment holding a live pilot demonstration.
+Open a temporary localhost-only SSH tunnel with a registered personal key:
+`railway connect Postgres-RGHC --environment staging --tunnel-only --port 5439`.
+Keep the tunnel open during testing; its connection details contain credentials
+and must not be copied to logs or source. The database remains private.
+Export `DATABASE_URL` using the staging credentials with host `127.0.0.1` and
+port `5439`, matching `PAYLOAD_SECRET`, staging
+`NEXT_PUBLIC_SERVER_URL`, `RAILWAY_ENVIRONMENT_NAME=staging`,
+`HRIZONMEDIA_DEMO_ENABLED=true`, `NODE_ENV=production` and
+`HRIZONMEDIA_STAGING_TESTS=true` into the test runner without committing values.
+Run `npm run test:staging` from `web`; it uses the deployed origin and starts no
+local server. Install Playwright Chromium, Chrome and Edge first. The existing suite
+covers invitations/sign-in, multipart upload/resume, ownership, processing/retry,
+playback contracts/controls/watermark, deletion/expiry and brand/keyboard/contrast.
+The opt-in disables automatic maintenance in the fixture process only; never set
+`HRIZONMEDIA_STAGING_TESTS` on the deployed web service.
+Run `npm run test:int` separately against the disposable local database for hostile
+callbacks, retention, provider contracts and production startup rejection.
+
+Before declaring #41 complete, record the deployment URL and commit, Railway
+readiness result, deployed browser report, brand screenshots, and maintenance/log
+observations in the PR. Deployment and deployed checks remain pending until these
+artifacts exist; the configuration alone does not satisfy live acceptance.
+
+## Runtime baseline
 
 Railway builds `web/Dockerfile` and starts the standalone Next.js/Payload server on
 `0.0.0.0:$PORT`. Configure the service health-check path as `/health`.
@@ -21,5 +97,4 @@ Payload runs the committed migrations from `src/migrations` in production. CMS m
 uses the private S3-compatible bucket and signed downloads; local development keeps
 using `public/media` when the bucket variables are absent.
 
-Issue #30 establishes deployment plumbing only. It does not authorize changing Railway
-PostgreSQL rows, bucket objects, domains, or production variables.
+Production cutover and production data resets remain outside this staging deployment.

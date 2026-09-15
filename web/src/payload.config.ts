@@ -141,7 +141,11 @@ export default buildConfig({
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   jobs: {
-    autoRun: [{ cron: '*/10 * * * * *', limit: 1, queue: 'media-processing' }],
+    // Remote fixtures share PostgreSQL, but must never claim jobs with runner-local fakes.
+    autoRun:
+      process.env.HRIZONMEDIA_STAGING_TESTS === 'true'
+        ? []
+        : [{ cron: '*/10 * * * * *', limit: 1, queue: 'media-processing' }],
     access: {
       run: ({ req }: { req: PayloadRequest }): boolean => {
         // Allow logged in users to execute this endpoint (default)
@@ -163,8 +167,16 @@ export default buildConfig({
         handler: async ({ req }) => {
           const { runMediaLifecycle } = await import('./media/lifecycle')
           const { runProcessingCycle } = await import('./media/processing')
-          await runProcessingCycle(req.payload)
-          await runMediaLifecycle(req.payload)
+          const { logMediaDiagnostic } = await import('./media/diagnostics')
+          try {
+            await runProcessingCycle(req.payload)
+            await runMediaLifecycle(req.payload)
+            logMediaDiagnostic('info', 'media_cycle_completed')
+          } catch {
+            logMediaDiagnostic('error', 'media_cycle_failed')
+            // A fixed error also keeps Payload's job failure logs credential-safe.
+            throw new Error('Media maintenance failed; inspect structured diagnostics.')
+          }
           return { output: {} }
         },
         inputSchema: [],

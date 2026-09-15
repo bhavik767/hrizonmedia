@@ -7,6 +7,7 @@ import type { MediaAsset, PilotMember } from '@/payload-types'
 import type { MediaAssetId, ProviderJobId, ProviderUploadId } from './identifiers'
 import { MediaLibraryError } from './library'
 import { getFakeProviders } from './providers/fake'
+import { logMediaDiagnostic } from './diagnostics'
 import type { MediaProviders } from './providers/contracts'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -100,7 +101,7 @@ async function reconcileLifecycleEvents(payload: Payload, assetID?: number): Pro
           event.actorID,
         )
       } catch {
-        console.error('Media Asset audit event will be reconciled.')
+        logMediaDiagnostic('error', 'lifecycle_audit_pending', asset.id)
       }
     }
   }
@@ -155,7 +156,7 @@ export async function deleteMediaAsset(
   try {
     await cleanupRevokedAsset(payload, deletedAsset, now, options.providers ?? getFakeProviders())
   } catch {
-    console.error('Media Asset provider cleanup will be retried.')
+    logMediaDiagnostic('error', 'media_cleanup_pending', deletedAsset.id)
   }
   await reconcileLifecycleEvents(payload, asset.id)
 }
@@ -297,7 +298,7 @@ export async function runMediaLifecycle(
     try {
       await deleteRawSource(payload, asset, now, providers)
     } catch {
-      console.error('Media Asset source cleanup will be retried.')
+      logMediaDiagnostic('error', 'source_cleanup_pending', asset.id)
     }
   }
 
@@ -341,7 +342,7 @@ export async function runMediaLifecycle(
     try {
       await cleanupRevokedAsset(payload, asset, now, providers)
     } catch {
-      console.error('Media Asset provider cleanup will be retried.')
+      logMediaDiagnostic('error', 'media_cleanup_pending', asset.id)
     }
   }
   await reconcileLifecycleEvents(payload)
