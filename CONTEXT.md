@@ -5,6 +5,40 @@ and issue DRM licences so it plays on approved devices and nowhere else.
 
 ## Language
 
+### Pilot product
+
+**Pilot Workspace**:
+The shared pilot tenancy boundary in which invited members evaluate the secure video platform.
+
+**Pilot Member**:
+An invited, active or disabled identity within the Pilot Workspace, with uploader or operator privileges.
+_Avoid_: user, CMS administrator
+
+**Operator**:
+A Pilot Member authorized to invite and disable members and manage every Media Asset.
+
+**Media Asset**:
+An uploader-owned video and its lifecycle record, from uploading through processing, readiness, failure, expiry or deletion.
+_Avoid_: file, video upload (when referring to the whole asset)
+
+**Upload Session**:
+A resumable multipart transfer of one Media Asset's raw source, valid for 24 hours.
+
+**Processing Job**:
+An asynchronous attempt to prepare a Media Asset for adaptive encrypted playback.
+
+**Rendition**:
+A resolution-specific encoded version of a Media Asset for adaptive playback.
+
+**DRM Content ID**:
+The identifier binding encrypted media to its playback licences, distinct from the Media Asset identity.
+
+**Playback Grant**:
+An owner-authorized, asset-scoped permission to start playback within five minutes; it does not limit watch time.
+
+**Audit Event**:
+A record of a lifecycle, security or operator action in the Pilot Workspace.
+
 ### Registers
 
 Two vocabularies are in deliberate use. Confusing them is the most likely way this

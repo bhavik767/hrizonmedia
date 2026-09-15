@@ -25,6 +25,7 @@
     "start": "cross-env NODE_ENV=production node src/config/validate-environment.mjs && cross-env NODE_OPTIONS=--no-deprecation next start",
     "test": "npm run test:int && npm run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts",
+    "test:staging": "cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.staging.config.ts",
     "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
     "validate:env": "node src/config/validate-environment.mjs"
   },

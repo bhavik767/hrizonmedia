@@ -16,6 +16,7 @@ import {
   type ProviderJobId,
 } from './identifiers'
 import { PermanentTranscodeError, getFakeProviders } from './providers/fake'
+import { logMediaDiagnostic } from './diagnostics'
 import type { Rendition, SourceMedia, TranscodeProvider } from './providers/contracts'
 
 const DISPATCH_DEADLINE_MS = 30_000
@@ -196,8 +197,10 @@ async function recoverExpiredJobs(payload: Payload, now: Date, where: Where) {
     overrideAccess: true,
     where,
   })
-  for (const job of expired.docs)
+  for (const job of expired.docs) {
+    logMediaDiagnostic('error', 'processing_stalled', job.id)
     await scheduleRetry(payload, job, now, 'processing_timeout', false)
+  }
 }
 
 async function dispatchQueuedJobs(

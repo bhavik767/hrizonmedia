@@ -163,8 +163,16 @@ export default buildConfig({
         handler: async ({ req }) => {
           const { runMediaLifecycle } = await import('./media/lifecycle')
           const { runProcessingCycle } = await import('./media/processing')
-          await runProcessingCycle(req.payload)
-          await runMediaLifecycle(req.payload)
+          const { logMediaDiagnostic } = await import('./media/diagnostics')
+          try {
+            await runProcessingCycle(req.payload)
+            await runMediaLifecycle(req.payload)
+            logMediaDiagnostic('info', 'media_cycle_completed')
+          } catch {
+            logMediaDiagnostic('error', 'media_cycle_failed')
+            // A fixed error also keeps Payload's job failure logs credential-safe.
+            throw new Error('Media maintenance failed; inspect structured diagnostics.')
+          }
           return { output: {} }
         },
         inputSchema: [],
