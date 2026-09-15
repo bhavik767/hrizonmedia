@@ -12,6 +12,10 @@ Verification date: 2026-09-15.
 
 Implementation revision: `0c713fb` (fresh branch from `e8ac2a1`).
 
+Final source deployment: `e30ca97`, Railway deployment
+`8f3e95b9-ae48-4413-8c74-efb018c625fc`. The repository-root upload uses `/web`
+as the service root and completed successfully with the database health check.
+
 | Check | Result |
 | --- | --- |
 | Optimized Next.js build | Passed |
