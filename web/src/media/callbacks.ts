@@ -4,6 +4,7 @@ import { createLocalReq, type Payload } from 'payload'
 
 import { recordAuditEvent } from '@/audit/events'
 
+import { processingOutputPrefix } from './identifiers'
 import { failProcessingJob, setProcessingAssetStatus } from './processing'
 
 function relationID(value: number | { id: number }): number {
@@ -14,6 +15,7 @@ export async function applyProcessingCallback(
   payload: Payload,
   input: {
     callbackId: string
+    outputPrefix: string
     providerJobId: string
     status: 'failed' | 'ready'
   },
@@ -33,6 +35,19 @@ export async function applyProcessingCallback(
       where: { eventKey: { equals: `processing-callback:${input.callbackId}` } },
     })
     if (duplicate.docs.length > 0) {
+      const details = duplicate.docs[0]!.details
+      const sameEvent =
+        typeof details === 'object' &&
+        details !== null &&
+        'outputPrefix' in details &&
+        details.outputPrefix === input.outputPrefix &&
+        'providerJobId' in details &&
+        details.providerJobId === input.providerJobId &&
+        'status' in details &&
+        details.status === input.status
+      if (!sameEvent) {
+        throw Object.assign(new Error('Callback event ID has already been used.'), { status: 409 })
+      }
       await payload.db.commitTransaction(transactionID)
       return
     }
@@ -46,6 +61,9 @@ export async function applyProcessingCallback(
     })
     const job = jobs.docs[0]
     if (!job) throw Object.assign(new Error('Processing Job not found.'), { status: 404 })
+    if (input.outputPrefix !== processingOutputPrefix(job.processingJobId)) {
+      throw Object.assign(new Error('Callback output prefix is invalid.'), { status: 400 })
+    }
     if (job.status !== 'processing') {
       throw Object.assign(new Error('Processing Job is not awaiting a callback.'), { status: 409 })
     }
@@ -65,7 +83,11 @@ export async function applyProcessingCallback(
     await recordAuditEvent(payload, {
       action: 'processing_callback_received',
       assetID: relationID(job.asset),
-      details: { providerJobId: input.providerJobId, status: input.status },
+      details: {
+        outputPrefix: input.outputPrefix,
+        providerJobId: input.providerJobId,
+        status: input.status,
+      },
       eventKey: `processing-callback:${input.callbackId}`,
       occurredAt: now,
       req,

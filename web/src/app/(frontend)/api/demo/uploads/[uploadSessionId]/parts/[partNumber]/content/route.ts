@@ -1,6 +1,8 @@
 import { parseUploadSessionId } from '@/media/identifiers'
 import { receiveUploadPart } from '@/media/library'
-import { withAuthenticatedUploader } from '@/media/request'
+import { readBoundedBody, withAuthenticatedUploader } from '@/media/request'
+
+const MAX_UPLOAD_PART_BYTES = 5 * 1024 * 1024
 
 export async function PUT(
   request: Request,
@@ -19,7 +21,7 @@ export async function PUT(
       member,
       parsedID,
       parsedPartNumber,
-      new Uint8Array(await request.arrayBuffer()),
+      await readBoundedBody(request, MAX_UPLOAD_PART_BYTES),
     )
     return Response.json(part)
   })

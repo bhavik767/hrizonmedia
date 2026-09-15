@@ -126,6 +126,7 @@ export default buildConfig({
     ReusableBlocks,
   ],
   cors: [getServerSideURL()].filter(Boolean),
+  csrf: [getServerSideURL()].filter(Boolean),
   // Media is the only collection with folder organization enabled; hide the cross-collection
   // "Browse by Folder" entry point at the top of the admin nav sidebar while keeping folders
   // usable from within the Media list itself.

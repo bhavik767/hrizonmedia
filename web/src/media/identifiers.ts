@@ -27,6 +27,10 @@ export function newPlaybackGrantId(): PlaybackGrantId {
   return `playback_${randomUUID()}`
 }
 
+export function processingOutputPrefix(processingJobId: string): string {
+  return `outputs/${processingJobId}/`
+}
+
 export function parseMediaAssetId(value: string): MediaAssetId | null {
   return /^asset_[0-9a-f-]{36}$/.test(value) ? (value as MediaAssetId) : null
 }

@@ -1,7 +1,7 @@
 import type { CompletedPart } from '@/media/multipart'
 import { parseUploadSessionId } from '@/media/identifiers'
 import { completeUpload } from '@/media/library'
-import { withAuthenticatedUploader } from '@/media/request'
+import { parseJSONBody, withAuthenticatedUploader } from '@/media/request'
 
 export async function POST(
   request: Request,
@@ -11,7 +11,7 @@ export async function POST(
     const { uploadSessionId } = await context.params
     const parsedID = parseUploadSessionId(uploadSessionId)
     if (!parsedID) return Response.json({ error: 'Upload session not found.' }, { status: 404 })
-    const body = (await request.json()) as { parts?: CompletedPart[] }
+    const body = await parseJSONBody<{ parts?: CompletedPart[] }>(request)
     if (!Array.isArray(body.parts)) {
       return Response.json({ error: 'Uploaded parts are required.' }, { status: 400 })
     }

@@ -15,6 +15,10 @@ export const PilotMembers: CollectionConfig = {
     useAsTitle: 'email',
   },
   auth: {
+    cookies: {
+      sameSite: 'Strict',
+      secure: process.env.NODE_ENV === 'production',
+    },
     maxLoginAttempts: 5,
     lockTime: 10 * 60 * 1000,
   },

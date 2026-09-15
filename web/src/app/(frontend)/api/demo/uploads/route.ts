@@ -1,9 +1,9 @@
 import { createUploadSession } from '@/media/library'
-import { withAuthenticatedUploader } from '@/media/request'
+import { parseJSONBody, withAuthenticatedUploader } from '@/media/request'
 
 export async function POST(request: Request): Promise<Response> {
   return withAuthenticatedUploader(request, async ({ member, payload }) => {
-    const body = (await request.json()) as Record<string, unknown>
+    const body = await parseJSONBody<Record<string, unknown>>(request)
     const result = await createUploadSession(payload, member, {
       fileFingerprint: String(body.fileFingerprint || ''),
       fileName: String(body.fileName || ''),

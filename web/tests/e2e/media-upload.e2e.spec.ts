@@ -69,6 +69,23 @@ test.describe('Media Asset tracer bullet', () => {
     expect(denied.status()).toBe(404)
   })
 
+  test('issue 40: rejects a hostile browser origin without CORS access', async ({ page }) => {
+    await signIn(page, testInvitee)
+
+    const response = await page.request.post('/api/demo/uploads', {
+      data: {
+        fileFingerprint: 'hostile-origin',
+        fileName: 'hostile-origin.mp4',
+        mimeType: 'video/mp4',
+        size: 128,
+      },
+      headers: { origin: 'https://attacker.example' },
+    })
+
+    expect(response.status()).toBe(403)
+    expect(response.headers()['access-control-allow-origin']).toBeUndefined()
+  })
+
   test('issue 38: deletes an owned Media Asset and removes it from the library immediately', async ({
     page,
   }) => {

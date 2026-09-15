@@ -48,6 +48,16 @@ function summary(asset: MediaAsset): MediaAssetSummary {
 }
 
 function validateMetadata(input: UploadMetadata): UploadMetadata {
+  if (
+    input.fileName.length === 0 ||
+    input.fileName.length > 255 ||
+    input.fileName !== input.fileName.trim() ||
+    /[\\/\u0000-\u001f\u007f]/.test(input.fileName) ||
+    input.fileName === '.' ||
+    input.fileName === '..'
+  ) {
+    throw new MediaLibraryError('The video file name is invalid.', 400)
+  }
   const extension = input.fileName.toLowerCase().split('.').at(-1)
   if (extension !== 'mp4' && extension !== 'mkv') {
     throw new MediaLibraryError('Choose an MP4 or MKV video.', 400)

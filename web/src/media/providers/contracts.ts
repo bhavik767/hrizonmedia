@@ -70,6 +70,7 @@ export interface TranscodeProvider {
     idempotencyKey: string
     mediaAssetId: MediaAssetId
     objectKey: string
+    outputPrefix: string
     renditions: Rendition[]
     source: SourceMedia
   }): Promise<ProviderJobId>
