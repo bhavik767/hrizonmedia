@@ -9,6 +9,7 @@ node_modules
 *.db-wal
 public/media
 test-results
+staging-test-results
 playwright-report
 blob-report
 dev-server*.log

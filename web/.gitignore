@@ -17,6 +17,7 @@ public/sitemap*.xml
 # Playwright
 node_modules/
 /test-results/
+/staging-test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/

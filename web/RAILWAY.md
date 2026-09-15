@@ -1,11 +1,15 @@
 # Railway staging deployment
 
 Issue #41 prepares the complete deterministic MVP for isolated staging. Configure
-the Railway web service root directory as `/web` and config file path as
-`/web/railway.json`. The checked-in configuration selects the Dockerfile, one
+the connected GitHub web service root directory as `/web`. The staging infrastructure
+definition is `web/.railway/railway.ts`; it refuses to plan/apply against production
+and preserves existing secret values on Railway. Run `railway config plan` and then
+`railway config apply` from `web` while linked to `staging`. Inspect the plan first.
+The checked-in configuration selects the Dockerfile, one
 continuously awake replica (required by process-local fake storage and rate limits),
 `/health`, a 180-second readiness window, and at most three failure restarts.
-See [Railway config-as-code](https://docs.railway.com/config-as-code/reference).
+See [Railway infrastructure-as-code](https://docs.railway.com/infrastructure-as-code).
+New services cannot select the deprecated `railway.json` format.
 
 Create/select an environment named exactly `staging`. Use a separate staging
 PostgreSQL service and private CMS bucket, not references to production resources.
@@ -15,7 +19,9 @@ secrets. Railway supplies `RAILWAY_ENVIRONMENT_NAME=staging`. Never duplicate
 production data or run the old template seed/reset scripts.
 
 Deploy this branch using the connected GitHub source or authenticated Railway CLI
-from `web`: `railway up --environment staging --service <staging-web-service>`.
+from the repository root: `railway up . --path-as-root --project <project-id>
+--environment staging --service <staging-web-service>`. This preserves `/web` in
+the upload archive, matching the service root and watch patterns.
 Confirm the linked project/service first. Do not change the production source branch,
 domain or variables. Keep `HRIZONMEDIA_DEMO_ENABLED` unset or `false` there.
 
@@ -53,6 +59,8 @@ Run `npm run test:staging` from `web`; it uses the deployed origin and starts no
 local server. Install Playwright Chromium, Chrome and Edge first. The existing suite
 covers invitations/sign-in, multipart upload/resume, ownership, processing/retry,
 playback contracts/controls/watermark, deletion/expiry and brand/keyboard/contrast.
+The opt-in disables automatic maintenance in the fixture process only; never set
+`HRIZONMEDIA_STAGING_TESTS` on the deployed web service.
 Run `npm run test:int` separately against the disposable local database for hostile
 callbacks, retention, provider contracts and production startup rejection.
 

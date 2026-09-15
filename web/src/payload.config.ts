@@ -141,7 +141,11 @@ export default buildConfig({
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   jobs: {
-    autoRun: [{ cron: '*/10 * * * * *', limit: 1, queue: 'media-processing' }],
+    // Remote fixtures share PostgreSQL, but must never claim jobs with runner-local fakes.
+    autoRun:
+      process.env.HRIZONMEDIA_STAGING_TESTS === 'true'
+        ? []
+        : [{ cron: '*/10 * * * * *', limit: 1, queue: 'media-processing' }],
     access: {
       run: ({ req }: { req: PayloadRequest }): boolean => {
         // Allow logged in users to execute this endpoint (default)
