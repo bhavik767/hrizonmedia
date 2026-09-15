@@ -11,8 +11,25 @@ export async function POST(
     const { uploadSessionId } = await context.params
     const parsedID = parseUploadSessionId(uploadSessionId)
     if (!parsedID) return Response.json({ error: 'Upload session not found.' }, { status: 404 })
-    const body = await parseJSONBody<{ parts?: CompletedPart[] }>(request)
-    if (!Array.isArray(body.parts)) {
+    const body = await parseJSONBody<{ parts?: CompletedPart[] }>(request, 128 * 1024)
+    if (
+      !Array.isArray(body.parts) ||
+      body.parts.length === 0 ||
+      body.parts.length > 410 ||
+      body.parts.some(
+        (part, index) =>
+          typeof part !== 'object' ||
+          part === null ||
+          part.partNumber !== index + 1 ||
+          !Number.isSafeInteger(part.size) ||
+          part.size <= 0 ||
+          part.size > 5 * 1024 * 1024 ||
+          typeof part.etag !== 'string' ||
+          part.etag.length > 128 ||
+          typeof part.checksumSHA256 !== 'string' ||
+          !/^[0-9a-f]{64}$/.test(part.checksumSHA256),
+      )
+    ) {
       return Response.json({ error: 'Uploaded parts are required.' }, { status: 400 })
     }
     const asset = await completeUpload(payload, member, parsedID, body.parts)

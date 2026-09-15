@@ -26,6 +26,9 @@ function trustedOrigins(request: Request): Set<string> {
 }
 
 function ratePolicy(pathname: string): { bucket: string; limit: number } {
+  if (/\/uploads\/[^/]+\/parts\/[^/]+$/.test(pathname)) {
+    return { bucket: 'upload-targets', limit: 600 }
+  }
   if (/\/uploads\/[^/]+\/parts\/[^/]+\/content$/.test(pathname)) {
     return { bucket: 'upload-parts', limit: 600 }
   }
@@ -44,7 +47,7 @@ export function assertDemoMutationOrigin(request: Request): void {
 
 export function enforceDemoMutationRateLimit(
   request: Request,
-  member: PilotMember,
+  member: Pick<PilotMember, 'id'>,
   now = Date.now(),
 ): void {
   if (!MUTATION_METHODS.has(request.method.toUpperCase())) return
@@ -64,6 +67,12 @@ export function enforceDemoMutationRateLimit(
     )
   }
   current.count += 1
+}
+
+export function guardDemoActionMutation(headers: Headers, memberID = 0): void {
+  const request = new Request(`${getServerSideURL()}/demo`, { headers, method: 'POST' })
+  assertDemoMutationOrigin(request)
+  enforceDemoMutationRateLimit(request, { id: memberID })
 }
 
 export function hardenDemoResponse(response: Response, request: Request): Response {

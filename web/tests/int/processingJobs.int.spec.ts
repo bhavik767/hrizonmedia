@@ -842,4 +842,26 @@ describe('reliable Processing Jobs', () => {
     ).resolves.toMatchObject({ status: 'processing' })
     vi.unstubAllEnvs()
   })
+
+  it('rejects a correctly signed JSON null callback with a sanitized validation response', async () => {
+    const body = 'null'
+    const timestamp = String(Date.now())
+    const secret = 'callback-test-secret'
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    const response = await processingCallback(
+      new Request('http://localhost/api/internal/transcode/callback', {
+        body,
+        headers: {
+          'content-type': 'application/json',
+          'x-hrizon-timestamp': timestamp,
+          'x-hrizon-signature': createHmac('sha256', secret)
+            .update(`${timestamp}.${body}`)
+            .digest('base64url'),
+        },
+        method: 'POST',
+      }),
+    )
+    expect(response.status).toBe(400)
+    vi.unstubAllEnvs()
+  })
 })

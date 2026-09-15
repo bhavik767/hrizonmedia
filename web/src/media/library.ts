@@ -308,7 +308,8 @@ export async function receiveUploadPart(
       providerUploadId: providerUploadID(session),
     })
   } catch (error) {
-    if (error instanceof MultipartUploadError) throw new MediaLibraryError(error.message, 400)
+    if (error instanceof MultipartUploadError)
+      throw new MediaLibraryError('Uploaded parts could not be validated.', 400)
     throw error
   }
 }
@@ -340,7 +341,8 @@ export async function completeUpload(
       providerUploadId: providerUploadID(session),
     })
   } catch (error) {
-    if (error instanceof MultipartUploadError) throw new MediaLibraryError(error.message, 400)
+    if (error instanceof MultipartUploadError)
+      throw new MediaLibraryError('Uploaded parts could not be validated.', 400)
     throw error
   }
 
@@ -349,7 +351,12 @@ export async function completeUpload(
     probe = await providers.storage.probe(stored.objectKey)
   } catch (error) {
     if (error instanceof InvalidMediaError) {
-      return rejectCompletedUpload(payload, session, providers, error.message)
+      return rejectCompletedUpload(
+        payload,
+        session,
+        providers,
+        'The completed video could not be validated.',
+      )
     }
     throw error
   }

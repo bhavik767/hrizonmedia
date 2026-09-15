@@ -11,7 +11,11 @@ import {
   receiveUploadPart,
   renewUploadPart,
 } from '@/media/library'
-import { resetFakeMediaStorage } from '@/media/providers/fake'
+import {
+  getFakeProviders,
+  MultipartUploadError,
+  resetFakeMediaStorage,
+} from '@/media/providers/fake'
 import { runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
@@ -256,6 +260,21 @@ describe('Media Asset library persistence', () => {
         createUploadSession(payload, firstUploader, metadataFor(fixture, fileName)),
       ).rejects.toMatchObject({ status: 400 })
     }
+  })
+
+  it('sanitizes credential-bearing storage validation failures', async () => {
+    const fixture = mp4Fixture()
+    const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
+    const providers = getFakeProviders()
+    providers.storage = {
+      ...providers.storage,
+      completeMultipart: async () => {
+        throw new MultipartUploadError('credential=never-expose')
+      },
+    }
+    await expect(
+      completeUpload(payload, firstUploader, session.uploadSessionId, [], providers),
+    ).rejects.toMatchObject({ message: 'Uploaded parts could not be validated.', status: 400 })
   })
 
   it('cleans expired multipart uploads idempotently', async () => {

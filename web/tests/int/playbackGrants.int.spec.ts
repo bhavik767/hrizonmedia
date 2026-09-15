@@ -112,9 +112,9 @@ describe('Playback Grant authorization', () => {
       providerConcurrency: 2,
     })
 
-    await expect(createPlaybackGrant(payload, owner, asset.mediaAssetId!, { now })).rejects.toMatchObject(
-      { status: 503 },
-    )
+    await expect(
+      createPlaybackGrant(payload, owner, asset.mediaAssetId!, { now }),
+    ).rejects.toMatchObject({ status: 503 })
   })
 
   it.each(['uploading', 'queued', 'processing', 'failed', 'expired', 'deleted'] as const)(
@@ -219,6 +219,28 @@ describe('Playback Grant authorization', () => {
     ).rejects.toMatchObject({ status: 401 })
   })
 
+  it('rejects noncanonical signatures and trailing fields in playback tokens', async () => {
+    const asset = await createAsset(owner)
+    const grant = await createPlaybackGrant(payload, owner, asset.mediaAssetId, { now })
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+    const token = grant.deliveryToken
+    const alias =
+      `${token.slice(0, -1)}${alphabet[alphabet.indexOf(token.at(-1)!) + 1]}` as typeof token
+
+    await expect(
+      authorizePlaybackResource(payload, owner, alias, asset.mediaAssetId, { now }),
+    ).rejects.toMatchObject({ status: 401 })
+    await expect(
+      authorizePlaybackResource(
+        payload,
+        owner,
+        `${token}.ignored` as typeof token,
+        asset.mediaAssetId,
+        { now },
+      ),
+    ).rejects.toMatchObject({ status: 401 })
+  })
+
   it('rejects a guessed licence route ID before asking the DRM provider for a licence', async () => {
     const asset = await createAsset(owner)
     const grant = await createPlaybackGrant(payload, owner, asset.mediaAssetId, { now })
@@ -253,8 +275,8 @@ describe('Playback Grant authorization', () => {
       overrideAccess: true,
     })
 
-    expect((await getOperatorOverview(payload, operator)).auditEvents.map(({ action }) => action)).toEqual(
-      expect.arrayContaining(['playback_granted', 'playback_licence_acquired']),
-    )
+    expect(
+      (await getOperatorOverview(payload, operator)).auditEvents.map(({ action }) => action),
+    ).toEqual(expect.arrayContaining(['playback_granted', 'playback_licence_acquired']))
   })
 })

@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 
 import { recordAuditEvent } from '@/audit/events'
 import { applyProcessingCallback } from '@/media/callbacks'
+import { readBoundedBody } from '@/media/body'
 import config from '@/payload.config'
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000
@@ -21,7 +22,11 @@ function validSignature(
   } catch {
     return false
   }
-  return received.length === expected.length && timingSafeEqual(received, expected)
+  return (
+    received.toString('base64url') === supplied &&
+    received.length === expected.length &&
+    timingSafeEqual(received, expected)
+  )
 }
 
 async function rejectCallback(
@@ -52,13 +57,14 @@ export async function POST(request: Request): Promise<Response> {
       'Callback authentication is unavailable.',
     )
   }
-  const contentLength = Number(request.headers.get('content-length') ?? 0)
-  if (contentLength > 16 * 1024) {
-    return rejectCallback('body_too_large', 413, 'Callback body is too large.')
-  }
-  const body = await request.text()
-  if (Buffer.byteLength(body, 'utf8') > 16 * 1024) {
-    return rejectCallback('body_too_large', 413, 'Callback body is too large.')
+  let body: string
+  try {
+    body = Buffer.from(await readBoundedBody(request, 16 * 1024)).toString('utf8')
+  } catch (error) {
+    if (error instanceof Response && error.status === 413) {
+      return rejectCallback('body_too_large', 413, 'Callback body is too large.')
+    }
+    return rejectCallback('invalid_body', 400, 'Callback body is invalid.')
   }
   const timestamp = request.headers.get('x-hrizon-timestamp') ?? ''
   const signature = request.headers.get('x-hrizon-signature') ?? ''
@@ -83,6 +89,9 @@ export async function POST(request: Request): Promise<Response> {
     return rejectCallback('invalid_body', 400, 'Callback body is invalid.')
   }
   if (
+    typeof input !== 'object' ||
+    input === null ||
+    Array.isArray(input) ||
     typeof input.callbackId !== 'string' ||
     !/^[A-Za-z0-9._:-]{1,128}$/.test(input.callbackId) ||
     typeof input.providerJobId !== 'string' ||

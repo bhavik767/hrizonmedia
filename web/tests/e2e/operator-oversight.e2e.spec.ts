@@ -56,6 +56,7 @@ test.describe('operator oversight', () => {
     await expect(assets.getByText('operator-case.mp4')).toBeVisible()
     const deletion = await page.request.delete(
       '/api/demo/assets/asset_00000000-0000-4000-8000-000000000039',
+      { headers: { Origin: new URL(page.url()).origin } },
     )
     expect(deletion.status()).toBe(204)
     await page.reload()

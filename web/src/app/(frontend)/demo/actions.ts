@@ -2,12 +2,14 @@
 
 import { login, logout } from '@payloadcms/next/auth'
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { getPayload } from 'payload'
 
 import config from '@/payload.config'
 import { acceptPilotInvitation, createPilotInvitation, InvitationError } from '@/pilot/invitations'
 import { safeReturnTo } from '@/pilot/returnTo'
 import { getPilotMember } from '@/pilot/session'
+import { guardDemoActionMutation } from '@/media/requestSecurity'
 
 export type InviteMemberState = { error?: string; setupUrl?: string }
 
@@ -20,8 +22,11 @@ export async function signIn(formData: FormData) {
   let error = 'Email or password is incorrect.'
 
   try {
+    guardDemoActionMutation(await headers())
     await login({ collection: 'pilot-members', config, email, password })
   } catch (caught) {
+    if (caught instanceof Response && caught.status === 429)
+      error = 'Too many sign-in attempts. Try again shortly.'
     if (caught instanceof Error && /disabled|setting up/i.test(caught.message))
       error = caught.message
     redirect(
@@ -33,6 +38,7 @@ export async function signIn(formData: FormData) {
 }
 
 export async function signOut() {
+  guardDemoActionMutation(await headers(), (await getPilotMember())?.id)
   await logout({ config })
   redirect('/demo/sign-in?signedOut=true')
 }
@@ -42,6 +48,7 @@ export async function setPilotPassword(formData: FormData) {
   const token = String(formData.get('token') || '')
 
   try {
+    guardDemoActionMutation(await headers())
     await acceptPilotInvitation({
       password: String(formData.get('password') || ''),
       payload,
@@ -64,6 +71,7 @@ export async function invitePilotMember(
   if (!actor) return { error: 'Sign in as an operator to invite a Pilot Member.' }
 
   try {
+    guardDemoActionMutation(await headers(), actor.id)
     const payload = await getPayload({ config })
     const invitation = await createPilotInvitation({
       actor,
