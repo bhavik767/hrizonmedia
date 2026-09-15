@@ -51,7 +51,12 @@ certification is implied by a passing deterministic demonstration.
 Use a dedicated disposable staging test environment: browser fixture helpers delete
 Pilot Members, Media Assets, jobs, grants and Audit Events in the selected database.
 Do not run them on a staging environment holding a live pilot demonstration.
-Export its public PostgreSQL `DATABASE_URL`, matching `PAYLOAD_SECRET`, staging
+Open a temporary localhost-only SSH tunnel with a registered personal key:
+`railway connect Postgres-RGHC --environment staging --tunnel-only --port 5439`.
+Keep the tunnel open during testing; its connection details contain credentials
+and must not be copied to logs or source. The database remains private.
+Export `DATABASE_URL` using the staging credentials with host `127.0.0.1` and
+port `5439`, matching `PAYLOAD_SECRET`, staging
 `NEXT_PUBLIC_SERVER_URL`, `RAILWAY_ENVIRONMENT_NAME=staging`,
 `HRIZONMEDIA_DEMO_ENABLED=true`, `NODE_ENV=production` and
 `HRIZONMEDIA_STAGING_TESTS=true` into the test runner without committing values.
