@@ -48,6 +48,16 @@ function summary(asset: MediaAsset): MediaAssetSummary {
 }
 
 function validateMetadata(input: UploadMetadata): UploadMetadata {
+  if (
+    input.fileName.length === 0 ||
+    input.fileName.length > 255 ||
+    input.fileName !== input.fileName.trim() ||
+    /[\\/\u0000-\u001f\u007f]/.test(input.fileName) ||
+    input.fileName === '.' ||
+    input.fileName === '..'
+  ) {
+    throw new MediaLibraryError('The video file name is invalid.', 400)
+  }
   const extension = input.fileName.toLowerCase().split('.').at(-1)
   if (extension !== 'mp4' && extension !== 'mkv') {
     throw new MediaLibraryError('Choose an MP4 or MKV video.', 400)
@@ -298,7 +308,8 @@ export async function receiveUploadPart(
       providerUploadId: providerUploadID(session),
     })
   } catch (error) {
-    if (error instanceof MultipartUploadError) throw new MediaLibraryError(error.message, 400)
+    if (error instanceof MultipartUploadError)
+      throw new MediaLibraryError('Uploaded parts could not be validated.', 400)
     throw error
   }
 }
@@ -330,7 +341,8 @@ export async function completeUpload(
       providerUploadId: providerUploadID(session),
     })
   } catch (error) {
-    if (error instanceof MultipartUploadError) throw new MediaLibraryError(error.message, 400)
+    if (error instanceof MultipartUploadError)
+      throw new MediaLibraryError('Uploaded parts could not be validated.', 400)
     throw error
   }
 
@@ -339,7 +351,12 @@ export async function completeUpload(
     probe = await providers.storage.probe(stored.objectKey)
   } catch (error) {
     if (error instanceof InvalidMediaError) {
-      return rejectCompletedUpload(payload, session, providers, error.message)
+      return rejectCompletedUpload(
+        payload,
+        session,
+        providers,
+        'The completed video could not be validated.',
+      )
     }
     throw error
   }

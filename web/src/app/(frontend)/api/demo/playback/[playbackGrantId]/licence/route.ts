@@ -1,6 +1,8 @@
 import { parsePlaybackGrantId, type PlaybackGrantToken } from '@/media/identifiers'
 import { acquirePlaybackLicence, PlaybackAuthorizationError } from '@/media/playback'
-import { mediaErrorResponse, withAuthenticatedUploader } from '@/media/request'
+import { mediaErrorResponse, readBoundedBody, withAuthenticatedUploader } from '@/media/request'
+
+const MAX_DRM_CHALLENGE_BYTES = 64 * 1024
 
 export async function POST(
   request: Request,
@@ -14,7 +16,7 @@ export async function POST(
         throw new PlaybackAuthorizationError('Playback authorization is invalid.', 401)
       }
       const result = await acquirePlaybackLicence(payload, member, token, {
-        challenge: new Uint8Array(await request.arrayBuffer()),
+        challenge: await readBoundedBody(request, MAX_DRM_CHALLENGE_BYTES),
         requestedPlaybackGrantId: playbackGrantId,
       })
       return new Response(result.licence, {

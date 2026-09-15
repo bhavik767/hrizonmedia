@@ -2,14 +2,23 @@ import { getPayload } from 'payload'
 
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
+import { OperatorAuthorizationError } from '@/pilot/operations'
 
 import { parseMediaAssetId, parsePlaybackGrantId, type DeliveryToken } from './identifiers'
 import { authorizePlaybackResource, PlaybackAuthorizationError } from './playback'
+import { MediaLibraryError } from './library'
+import {
+  assertDemoMutationOrigin,
+  enforceDemoMutationRateLimit,
+  hardenDemoResponse,
+} from './requestSecurity'
 
 type AuthenticatedMember = {
   member: PilotMember
   payload: Awaited<ReturnType<typeof getPayload>>
 }
+
+export { parseJSONBody, readBoundedBody } from './body'
 
 async function authenticatedMember(
   request: Request,
@@ -38,10 +47,14 @@ export function authenticatedPilotMember(request: Request): Promise<Authenticate
 
 export function mediaErrorResponse(error: unknown): Response {
   if (error instanceof Response) return error
-  if (error instanceof Error && 'status' in error && typeof error.status === 'number') {
+  if (
+    error instanceof MediaLibraryError ||
+    error instanceof PlaybackAuthorizationError ||
+    error instanceof OperatorAuthorizationError
+  ) {
     return Response.json({ error: error.message }, { status: error.status })
   }
-  console.error(error)
+  console.error('A Demo media request failed unexpectedly.')
   return Response.json({ error: 'Unable to complete the media request.' }, { status: 500 })
 }
 
@@ -51,9 +64,12 @@ async function withAuthenticatedMember(
   handler: (context: AuthenticatedMember) => Promise<Response>,
 ): Promise<Response> {
   try {
-    return await handler(await authenticate(request))
+    assertDemoMutationOrigin(request)
+    const context = await authenticate(request)
+    enforceDemoMutationRateLimit(request, context.member)
+    return hardenDemoResponse(await handler(context), request)
   } catch (error) {
-    return mediaErrorResponse(error)
+    return hardenDemoResponse(mediaErrorResponse(error), request)
   }
 }
 

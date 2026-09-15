@@ -14,7 +14,7 @@ describe('Railway environment validation', () => {
 
     expect(result.status).toBe(1)
     expect(result.stderr).toContain(
-      'Missing required production environment variables: ACCESS_KEY_ID, BUCKET, DATABASE_URL, ENDPOINT, PAYLOAD_SECRET, SECRET_ACCESS_KEY, TRANSCODER_CALLBACK_SECRET',
+      'Missing required production environment variables: ACCESS_KEY_ID, BUCKET, DATABASE_URL, ENDPOINT, NEXT_PUBLIC_SERVER_URL, PAYLOAD_SECRET, SECRET_ACCESS_KEY, TRANSCODER_CALLBACK_SECRET',
     )
   })
 
@@ -27,6 +27,7 @@ describe('Railway environment validation', () => {
         DATABASE_URL: 'file:./local.db',
         ENDPOINT: 'https://storage.example.test',
         NODE_ENV: 'production',
+        NEXT_PUBLIC_SERVER_URL: 'https://hrizonmedia.example.test',
         PATH: process.env.PATH,
         PAYLOAD_SECRET: 'payload-secret',
         SECRET_ACCESS_KEY: 'secret-key',
@@ -36,5 +37,30 @@ describe('Railway environment validation', () => {
 
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('DATABASE_URL must use PostgreSQL in production')
+  })
+
+  it('refuses to expose the Demo with fake providers in production', () => {
+    const result = spawnSync(process.execPath, [validator], {
+      encoding: 'utf8',
+      env: {
+        ACCESS_KEY_ID: 'access-key',
+        BUCKET: 'cms-media',
+        DATABASE_URL: 'postgresql://database.example.test/hrizonmedia',
+        ENDPOINT: 'https://storage.example.test',
+        HRIZONMEDIA_DEMO_ENABLED: 'true',
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_SERVER_URL: 'https://hrizonmedia.example.test',
+        PATH: process.env.PATH,
+        PAYLOAD_SECRET: 'payload-secret',
+        RAILWAY_ENVIRONMENT_NAME: 'production',
+        SECRET_ACCESS_KEY: 'secret-key',
+        TRANSCODER_CALLBACK_SECRET: 'callback-secret',
+      },
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain(
+      'The production Demo cannot start with deterministic fake media providers',
+    )
   })
 })

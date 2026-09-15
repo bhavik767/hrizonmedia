@@ -69,7 +69,10 @@ test.describe('encrypted playback contract', () => {
     expect(manifest).toContain('/audio-init.mp4')
     const licenceResponse = await page.request.post(grant.licenceURL, {
       data: Buffer.from('deterministic-widevine-challenge'),
-      headers: { 'X-Playback-Grant': grant.playbackGrantToken },
+      headers: {
+        Origin: new URL(page.url()).origin,
+        'X-Playback-Grant': grant.playbackGrantToken,
+      },
     })
     expect(licenceResponse.status()).toBe(200)
 

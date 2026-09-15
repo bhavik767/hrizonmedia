@@ -2,7 +2,7 @@ import { getPayload, type Payload } from 'payload'
 import { createHmac } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { newProcessingJobId } from '@/media/identifiers'
+import { newProcessingJobId, processingOutputPrefix } from '@/media/identifiers'
 import {
   completeUpload,
   createUploadSession,
@@ -117,6 +117,7 @@ describe('reliable Processing Jobs', () => {
     expect(provider.queue).toHaveBeenCalledWith(
       expect.objectContaining({
         idempotencyKey: expect.stringMatching(/^processing_/),
+        outputPrefix: expect.stringMatching(/^outputs\/processing_[a-f0-9-]+\/$/),
         renditions: [
           { audioCodec: 'aac', height: 360, videoCodec: 'h264', width: 640 },
           { audioCodec: 'aac', height: 480, videoCodec: 'h264', width: 854 },
@@ -558,6 +559,7 @@ describe('reliable Processing Jobs', () => {
     const job = jobs.docs[0]!
     const callbackBody = JSON.stringify({
       callbackId: 'callback-issue-39',
+      outputPrefix: processingOutputPrefix(job.processingJobId),
       providerJobId: job.providerJobId,
       status: 'ready',
     })
@@ -603,13 +605,110 @@ describe('reliable Processing Jobs', () => {
     vi.unstubAllEnvs()
   })
 
+  it('rejects a signed callback whose output prefix escapes its Processing Job', async () => {
+    await upload()
+    const job = (
+      await payload.find({
+        collection: 'processing-jobs',
+        limit: 1,
+        overrideAccess: true,
+        where: {},
+      })
+    ).docs[0]!
+    const callbackBody = JSON.stringify({
+      callbackId: 'callback-escaping-output',
+      outputPrefix: `outputs/${job.processingJobId}/../private/`,
+      providerJobId: job.providerJobId,
+      status: 'ready',
+    })
+    const timestamp = String(Date.now())
+    const secret = 'callback-test-secret'
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    const signature = createHmac('sha256', secret)
+      .update(`${timestamp}.${callbackBody}`)
+      .digest('base64url')
+
+    const response = await processingCallback(
+      new Request('http://localhost/api/internal/transcode/callback', {
+        body: callbackBody,
+        headers: {
+          'content-type': 'application/json',
+          'x-hrizon-signature': signature,
+          'x-hrizon-timestamp': timestamp,
+        },
+        method: 'POST',
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(
+      payload.findByID({
+        collection: 'processing-jobs',
+        id: job.id,
+        overrideAccess: true,
+      }),
+    ).resolves.toMatchObject({ status: 'processing' })
+    vi.unstubAllEnvs()
+  })
+
+  it('rejects reuse of a callback event ID for different signed content', async () => {
+    await upload()
+    const job = (
+      await payload.find({
+        collection: 'processing-jobs',
+        limit: 1,
+        overrideAccess: true,
+        where: {},
+      })
+    ).docs[0]!
+    const timestamp = String(Date.now())
+    const secret = 'callback-test-secret'
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    const request = (status: 'failed' | 'ready') => {
+      const body = JSON.stringify({
+        callbackId: 'callback-content-binding',
+        outputPrefix: processingOutputPrefix(job.processingJobId),
+        providerJobId: job.providerJobId,
+        status,
+      })
+      return new Request('http://localhost/api/internal/transcode/callback', {
+        body,
+        headers: {
+          'content-type': 'application/json',
+          'x-hrizon-signature': createHmac('sha256', secret)
+            .update(`${timestamp}.${body}`)
+            .digest('base64url'),
+          'x-hrizon-timestamp': timestamp,
+        },
+        method: 'POST',
+      })
+    }
+
+    expect((await processingCallback(request('ready'))).status).toBe(204)
+    expect((await processingCallback(request('failed'))).status).toBe(409)
+    await expect(
+      payload.findByID({
+        collection: 'processing-jobs',
+        id: job.id,
+        overrideAccess: true,
+      }),
+    ).resolves.toMatchObject({ status: 'ready' })
+    vi.unstubAllEnvs()
+  })
+
   it('rolls back callback state so a retry can restore missing audit evidence', async () => {
     await upload()
     const job = (
-      await payload.find({ collection: 'processing-jobs', limit: 1, overrideAccess: true, where: {} })
+      await payload.find({
+        collection: 'processing-jobs',
+        limit: 1,
+        overrideAccess: true,
+        where: {},
+      })
     ).docs[0]!
     const callbackBody = JSON.stringify({
       callbackId: 'callback-audit-retry',
+      outputPrefix: processingOutputPrefix(job.processingJobId),
       providerJobId: job.providerJobId,
       status: 'ready',
     })
@@ -630,6 +729,7 @@ describe('reliable Processing Jobs', () => {
         method: 'POST',
       })
     const create = payload.create.bind(payload)
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const createSpy = vi.spyOn(payload, 'create').mockImplementation(async (args) => {
       if (
         args.collection === 'audit-events' &&
@@ -637,12 +737,13 @@ describe('reliable Processing Jobs', () => {
         args.data.action === 'processing_callback_received'
       ) {
         createSpy.mockImplementation(create)
-        throw new Error('audit database unavailable')
+        throw new Error('audit database unavailable callback-secret=must-not-leak')
       }
       return create(args as never)
     })
 
     expect((await processingCallback(request())).status).toBe(500)
+    expect(consoleError.mock.calls.flat().map(String).join(' ')).not.toContain('must-not-leak')
     expect((await processingCallback(request())).status).toBe(204)
     const events = await payload.find({
       collection: 'audit-events',
@@ -650,6 +751,7 @@ describe('reliable Processing Jobs', () => {
       where: { action: { equals: 'processing_callback_received' } },
     })
     expect(events.docs).toHaveLength(1)
+    consoleError.mockRestore()
     vi.unstubAllEnvs()
   })
 
@@ -687,6 +789,79 @@ describe('reliable Processing Jobs', () => {
     expect(events).toEqual([
       expect.objectContaining({ details: { reason: 'authentication_failed' } }),
     ])
+    vi.unstubAllEnvs()
+  })
+
+  it('rejects expired and tampered signed callbacks without changing state', async () => {
+    await upload()
+    const job = (
+      await payload.find({
+        collection: 'processing-jobs',
+        limit: 1,
+        overrideAccess: true,
+        where: {},
+      })
+    ).docs[0]!
+    const secret = 'callback-test-secret'
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    const body = JSON.stringify({
+      callbackId: 'callback-authentication-check',
+      outputPrefix: processingOutputPrefix(job.processingJobId),
+      providerJobId: job.providerJobId,
+      status: 'ready',
+    })
+    const expiredTimestamp = String(Date.now() - 10 * 60 * 1000)
+    const currentTimestamp = String(Date.now())
+    const request = (requestBody: string, timestamp: string, signedBody = requestBody) =>
+      new Request('http://localhost/api/internal/transcode/callback', {
+        body: requestBody,
+        headers: {
+          'content-type': 'application/json',
+          'x-hrizon-signature': createHmac('sha256', secret)
+            .update(`${timestamp}.${signedBody}`)
+            .digest('base64url'),
+          'x-hrizon-timestamp': timestamp,
+        },
+        method: 'POST',
+      })
+
+    expect((await processingCallback(request(body, expiredTimestamp))).status).toBe(401)
+    expect(
+      (
+        await processingCallback(
+          request(body.replace('"ready"', '"failed"'), currentTimestamp, body),
+        )
+      ).status,
+    ).toBe(401)
+    await expect(
+      payload.findByID({
+        collection: 'processing-jobs',
+        id: job.id,
+        overrideAccess: true,
+      }),
+    ).resolves.toMatchObject({ status: 'processing' })
+    vi.unstubAllEnvs()
+  })
+
+  it('rejects a correctly signed JSON null callback with a sanitized validation response', async () => {
+    const body = 'null'
+    const timestamp = String(Date.now())
+    const secret = 'callback-test-secret'
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    const response = await processingCallback(
+      new Request('http://localhost/api/internal/transcode/callback', {
+        body,
+        headers: {
+          'content-type': 'application/json',
+          'x-hrizon-timestamp': timestamp,
+          'x-hrizon-signature': createHmac('sha256', secret)
+            .update(`${timestamp}.${body}`)
+            .digest('base64url'),
+        },
+        method: 'POST',
+      }),
+    )
+    expect(response.status).toBe(400)
     vi.unstubAllEnvs()
   })
 })

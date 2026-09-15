@@ -113,6 +113,7 @@ describe('deterministic media providers', () => {
       idempotencyKey: processingJobId,
       mediaAssetId,
       objectKey: stored.objectKey,
+      outputPrefix: `outputs/${processingJobId}/`,
       renditions: [],
       source: { durationSeconds: 60, height: 1080, width: 1920 },
     })
@@ -120,6 +121,7 @@ describe('deterministic media providers', () => {
       idempotencyKey: processingJobId,
       mediaAssetId,
       objectKey: stored.objectKey,
+      outputPrefix: `outputs/${processingJobId}/`,
       renditions: [],
       source: { durationSeconds: 60, height: 1080, width: 1920 },
     })

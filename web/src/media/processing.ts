@@ -9,7 +9,12 @@ import type { MediaAsset, ProcessingJob } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
 import { getOperationalControls } from '@/pilot/operations'
 
-import type { MediaAssetId, ProcessingJobId, ProviderJobId } from './identifiers'
+import {
+  processingOutputPrefix,
+  type MediaAssetId,
+  type ProcessingJobId,
+  type ProviderJobId,
+} from './identifiers'
 import { PermanentTranscodeError, getFakeProviders } from './providers/fake'
 import type { Rendition, SourceMedia, TranscodeProvider } from './providers/contracts'
 
@@ -271,6 +276,7 @@ async function dispatchQueuedJobs(
           })
         ).mediaAssetId as MediaAssetId,
         objectKey: job.objectKey,
+        outputPrefix: processingOutputPrefix(job.processingJobId),
         renditions: renditionsFor(job),
         source: sourceFor(job),
       })

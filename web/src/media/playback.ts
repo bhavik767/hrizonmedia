@@ -72,8 +72,9 @@ function decodeClaims(
   kind: PlaybackTokenKind,
   now: Date,
 ): PlaybackTokenClaims {
-  const [payload, suppliedSignature] = token.split('.')
-  if (!payload || !suppliedSignature) {
+  const fields = token.split('.')
+  const [payload, suppliedSignature] = fields
+  if (fields.length !== 2 || !payload || !suppliedSignature || token.length > 2048) {
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 401)
   }
   const expectedSignature = createHmac('sha256', signingSecret()).update(payload).digest()
@@ -84,6 +85,7 @@ function decodeClaims(
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 401)
   }
   if (
+    receivedSignature.toString('base64url') !== suppliedSignature ||
     receivedSignature.length !== expectedSignature.length ||
     !timingSafeEqual(receivedSignature, expectedSignature)
   ) {

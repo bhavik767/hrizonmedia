@@ -65,8 +65,34 @@ test.describe('Media Asset tracer bullet', () => {
     await signIn(page, testSecondUploader)
     await expect(page.getByText('Your library is empty.')).toBeVisible()
 
-    const denied = await page.request.get(`/api/demo/assets/${assetID}`)
+    const denied = await page.request.get(`/api/demo/assets/${assetID}`, {
+      headers: { Origin: new URL(page.url()).origin },
+    })
     expect(denied.status()).toBe(404)
+  })
+
+  test('issue 40: rejects a hostile browser origin without CORS access', async ({ page }) => {
+    await signIn(page, testInvitee)
+
+    const missingBrowserHeaders = await page.request.get('/api/demo/assets')
+    expect(missingBrowserHeaders.status()).toBe(401)
+    const sameOrigin = await page.request.get('/api/demo/assets', {
+      headers: { Origin: new URL(page.url()).origin },
+    })
+    expect(sameOrigin.status()).toBe(200)
+
+    const response = await page.request.post('/api/demo/uploads', {
+      data: {
+        fileFingerprint: 'hostile-origin',
+        fileName: 'hostile-origin.mp4',
+        mimeType: 'video/mp4',
+        size: 128,
+      },
+      headers: { origin: 'https://attacker.example' },
+    })
+
+    expect(response.status()).toBe(403)
+    expect(response.headers()['access-control-allow-origin']).toBeUndefined()
   })
 
   test('issue 38: deletes an owned Media Asset and removes it from the library immediately', async ({
@@ -116,7 +142,9 @@ test.describe('Media Asset tracer bullet', () => {
     await expect(asset.getByText('expired', { exact: true })).toBeVisible({ timeout: 45_000 })
     await asset.getByRole('link', { name: 'Inspect asset' }).click()
     await expect(page.getByRole('heading', { name: 'Secure playback' })).toHaveCount(0)
-    const grant = await page.request.post(`/api/demo/assets/${mediaAssetId}/playback-grants`)
+    const grant = await page.request.post(`/api/demo/assets/${mediaAssetId}/playback-grants`, {
+      headers: { Origin: new URL(page.url()).origin },
+    })
     expect(grant.status()).toBe(409)
   })
 

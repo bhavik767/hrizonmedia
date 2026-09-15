@@ -3,6 +3,7 @@ const REQUIRED_PRODUCTION_VARIABLES = [
   'BUCKET',
   'DATABASE_URL',
   'ENDPOINT',
+  'NEXT_PUBLIC_SERVER_URL',
   'PAYLOAD_SECRET',
   'SECRET_ACCESS_KEY',
   'TRANSCODER_CALLBACK_SECRET',
@@ -19,6 +20,30 @@ export function validateEnvironment(environment = process.env) {
 
   if (!/^postgres(?:ql)?:\/\//.test(environment.DATABASE_URL)) {
     throw new Error('DATABASE_URL must use PostgreSQL in production')
+  }
+
+  let publicURL
+  try {
+    publicURL = new URL(environment.NEXT_PUBLIC_SERVER_URL)
+  } catch {
+    throw new Error('NEXT_PUBLIC_SERVER_URL must be a valid HTTPS origin in production')
+  }
+  if (
+    publicURL.protocol !== 'https:' ||
+    publicURL.username ||
+    publicURL.password ||
+    publicURL.pathname !== '/' ||
+    publicURL.search ||
+    publicURL.hash
+  ) {
+    throw new Error('NEXT_PUBLIC_SERVER_URL must be a valid HTTPS origin in production')
+  }
+
+  if (
+    environment.HRIZONMEDIA_DEMO_ENABLED === 'true' &&
+    environment.RAILWAY_ENVIRONMENT_NAME?.toLowerCase() !== 'staging'
+  ) {
+    throw new Error('The production Demo cannot start with deterministic fake media providers')
   }
 }
 

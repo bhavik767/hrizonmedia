@@ -4,11 +4,17 @@ import { getPayload } from 'payload'
 
 import { recordAuditEvent } from '@/audit/events'
 import { applyProcessingCallback } from '@/media/callbacks'
+import { readBoundedBody } from '@/media/body'
 import config from '@/payload.config'
 
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000
 
-function validSignature(body: string, timestamp: string, supplied: string, secret: string): boolean {
+function validSignature(
+  body: string,
+  timestamp: string,
+  supplied: string,
+  secret: string,
+): boolean {
   const expected = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest()
   let received: Buffer
   try {
@@ -16,7 +22,11 @@ function validSignature(body: string, timestamp: string, supplied: string, secre
   } catch {
     return false
   }
-  return received.length === expected.length && timingSafeEqual(received, expected)
+  return (
+    received.toString('base64url') === supplied &&
+    received.length === expected.length &&
+    timingSafeEqual(received, expected)
+  )
 }
 
 async function rejectCallback(
@@ -32,8 +42,8 @@ async function rejectCallback(
       eventKey: `processing-callback-rejected:${randomUUID()}`,
       occurredAt: new Date(),
     })
-  } catch (error) {
-    console.error('Rejected processing callback audit failed.', error)
+  } catch {
+    console.error('Rejected processing callback audit failed.')
   }
   return Response.json({ error: message }, { status })
 }
@@ -47,13 +57,14 @@ export async function POST(request: Request): Promise<Response> {
       'Callback authentication is unavailable.',
     )
   }
-  const contentLength = Number(request.headers.get('content-length') ?? 0)
-  if (contentLength > 16 * 1024) {
-    return rejectCallback('body_too_large', 413, 'Callback body is too large.')
-  }
-  const body = await request.text()
-  if (body.length > 16 * 1024) {
-    return rejectCallback('body_too_large', 413, 'Callback body is too large.')
+  let body: string
+  try {
+    body = Buffer.from(await readBoundedBody(request, 16 * 1024)).toString('utf8')
+  } catch (error) {
+    if (error instanceof Response && error.status === 413) {
+      return rejectCallback('body_too_large', 413, 'Callback body is too large.')
+    }
+    return rejectCallback('invalid_body', 400, 'Callback body is invalid.')
   }
   const timestamp = request.headers.get('x-hrizon-timestamp') ?? ''
   const signature = request.headers.get('x-hrizon-signature') ?? ''
@@ -66,17 +77,28 @@ export async function POST(request: Request): Promise<Response> {
     return rejectCallback('authentication_failed', 401, 'Callback authentication failed.')
   }
 
-  let input: { callbackId?: unknown; providerJobId?: unknown; status?: unknown }
+  let input: {
+    callbackId?: unknown
+    outputPrefix?: unknown
+    providerJobId?: unknown
+    status?: unknown
+  }
   try {
     input = JSON.parse(body)
   } catch {
     return rejectCallback('invalid_body', 400, 'Callback body is invalid.')
   }
   if (
+    typeof input !== 'object' ||
+    input === null ||
+    Array.isArray(input) ||
     typeof input.callbackId !== 'string' ||
-    !input.callbackId.trim() ||
+    !/^[A-Za-z0-9._:-]{1,128}$/.test(input.callbackId) ||
     typeof input.providerJobId !== 'string' ||
-    !input.providerJobId.trim() ||
+    !/^provider_job_[A-Za-z0-9_-]{1,128}$/.test(input.providerJobId) ||
+    typeof input.outputPrefix !== 'string' ||
+    input.outputPrefix.length > 200 ||
+    !/^outputs\/processing_[0-9a-f-]{36}\/$/.test(input.outputPrefix) ||
     (input.status !== 'ready' && input.status !== 'failed')
   ) {
     return rejectCallback('invalid_body', 400, 'Callback body is invalid.')
@@ -87,6 +109,7 @@ export async function POST(request: Request): Promise<Response> {
       await getPayload({ config }),
       {
         callbackId: input.callbackId,
+        outputPrefix: input.outputPrefix,
         providerJobId: input.providerJobId,
         status: input.status,
       },
@@ -102,7 +125,7 @@ export async function POST(request: Request): Promise<Response> {
         { callbackId: input.callbackId, providerJobId: input.providerJobId },
       )
     }
-    console.error(error)
+    console.error('Processing callback application failed.')
     return Response.json({ error: 'Unable to apply processing callback.' }, { status: 500 })
   }
 }

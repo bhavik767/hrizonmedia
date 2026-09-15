@@ -99,8 +99,8 @@ async function reconcileLifecycleEvents(payload: Payload, assetID?: number): Pro
           new Date(event.occurredAt),
           event.actorID,
         )
-      } catch (error) {
-        console.error('Media Asset audit event will be reconciled.', error)
+      } catch {
+        console.error('Media Asset audit event will be reconciled.')
       }
     }
   }
@@ -154,8 +154,8 @@ export async function deleteMediaAsset(
         })
   try {
     await cleanupRevokedAsset(payload, deletedAsset, now, options.providers ?? getFakeProviders())
-  } catch (error) {
-    console.error('Media Asset provider cleanup will be retried.', error)
+  } catch {
+    console.error('Media Asset provider cleanup will be retried.')
   }
   await reconcileLifecycleEvents(payload, asset.id)
 }
@@ -296,8 +296,8 @@ export async function runMediaLifecycle(
     if (asset.sourceDeletedAt) continue
     try {
       await deleteRawSource(payload, asset, now, providers)
-    } catch (error) {
-      console.error('Media Asset source cleanup will be retried.', error)
+    } catch {
+      console.error('Media Asset source cleanup will be retried.')
     }
   }
 
@@ -340,8 +340,8 @@ export async function runMediaLifecycle(
   for (const asset of cleanupPending.docs) {
     try {
       await cleanupRevokedAsset(payload, asset, now, providers)
-    } catch (error) {
-      console.error('Media Asset provider cleanup will be retried.', error)
+    } catch {
+      console.error('Media Asset provider cleanup will be retried.')
     }
   }
   await reconcileLifecycleEvents(payload)
