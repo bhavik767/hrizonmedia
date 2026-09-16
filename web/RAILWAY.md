@@ -41,10 +41,42 @@ optional numeric `recordID`. Monitor `processing_stalled`, `source_cleanup_pendi
 for one minute and on repeated pending cleanup; no raw exception or secret is logged
 by these diagnostics. Inspect Railway process logs for startup failures as well.
 
-Fake source/upload bytes live in memory and disappear on restart. Use only disposable
-fixtures; restart/redeploy requires fresh uploads, and stored records are not proof
-that the fake provider still has their source bytes. No real DRM or performance
-certification is implied by a passing deterministic demonstration.
+When none of the `VIDEO_*` variables below are present, fake source/upload bytes live
+in memory and disappear on restart. Use only disposable fixtures in that mode;
+restart/redeploy requires fresh uploads, and stored records are not proof that the
+fake provider still has their source bytes. No real DRM or performance certification
+is implied by a passing deterministic demonstration.
+
+## Private video storage and delivery
+
+Issue #43 activates real S3 upload/storage and CloudFront delivery as one fail-closed
+configuration. Set all of these variables in Railway staging; setting only some makes
+the service refuse provider initialization instead of falling back to fake storage:
+
+- `VIDEO_S3_ACCESS_KEY_ID`, `VIDEO_S3_SECRET_ACCESS_KEY`, `VIDEO_S3_BUCKET`, and
+  `VIDEO_S3_REGION` belong only to the dedicated private video bucket.
+- `VIDEO_CLOUDFRONT_DOMAIN`, `VIDEO_CLOUDFRONT_KEY_PAIR_ID`, and
+  `VIDEO_CLOUDFRONT_PRIVATE_KEY` belong only to the output distribution/key group.
+  A multiline PEM may be stored normally or with escaped `\n` separators.
+
+Do not substitute the CMS `BUCKET`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, or `ENDPOINT`
+variables. The browser uploads 5 MiB checksummed parts directly to presigned S3 URLs.
+S3 CORS must allow `PUT` from the exact staging origin, allow the checksum request
+header, and expose `ETag` plus `x-amz-checksum-sha256`. Bucket-level public access
+blocking, ACL-disabled ownership, and CloudFront Origin Access Control remain required
+account settings; the application never requests a public ACL.
+
+Sources use `sources/{uploadSessionId}/source.mp4|mkv`. Encrypted outputs use
+`outputs/{processingJobId}/`; because the distribution origin path is `/outputs`,
+viewer URLs begin with `/{processingJobId}/`. CloudFront custom-policy URLs authorize
+only that prefix for 60 seconds. The player obtains renewed signatures from the
+authenticated application before expiry and copies them only to manifest/segment
+requests under the same origin and prefix. Deletion blocks refresh immediately and
+removes every object under the validated output prefix idempotently.
+
+The runtime image includes `ffprobe`; completed private sources are streamed through
+it for bounded server-side container, duration, and dimension verification before a
+Processing Job is queued. Real transcoding and DoveRunner remain issues #44 and #45.
 
 ## Deployed acceptance checks
 

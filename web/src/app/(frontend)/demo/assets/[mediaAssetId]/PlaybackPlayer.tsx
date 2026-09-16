@@ -6,14 +6,24 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 interface PlaybackGrantContract {
+  deliveryExpiresAt: string
+  deliveryToken: string
   distinctiveIdentifier: 'not-allowed'
   expiresAt: string
   keySystem: 'com.widevine.alpha'
   licenceURL: string
   manifestURL: string
   persistentState: 'not-allowed'
+  playbackGrantId: string
   playbackGrantToken: string
+  resourceAuthorization?: ResourceAuthorization
   sessionType: 'temporary'
+}
+
+interface ResourceAuthorization {
+  origin: string
+  pathPrefix: string
+  query: string
 }
 
 const UI_CONFIGURATION = {
@@ -32,6 +42,12 @@ const UI_CONFIGURATION = {
 }
 
 const WATERMARK_POSITIONS = ['top-left', 'top-right', 'center', 'bottom-left'] as const
+
+async function responseJSON<T>(response: Response): Promise<T> {
+  const body = (await response.json()) as T & { error?: string }
+  if (!response.ok) throw new Error(body.error || 'Playback authorization failed.')
+  return body
+}
 
 export function PlaybackPlayer({
   mediaAssetId,
@@ -124,6 +140,61 @@ export function PlaybackPlayer({
         if (type === shaka.net.NetworkingEngine.RequestType.LICENSE) {
           request.headers['X-Playback-Grant'] = grant.playbackGrantToken
         }
+      })
+
+      let delivery: {
+        expiresAt: string
+        manifestURL: string
+        resourceAuthorization?: ResourceAuthorization
+      } = {
+        expiresAt: grant.deliveryExpiresAt,
+        manifestURL: grant.manifestURL,
+        resourceAuthorization: grant.resourceAuthorization,
+      }
+      let refresh: Promise<void> | null = null
+      player.getNetworkingEngine()?.registerRequestFilter(async (type, request) => {
+        if (
+          type !== shaka.net.NetworkingEngine.RequestType.MANIFEST &&
+          type !== shaka.net.NetworkingEngine.RequestType.SEGMENT
+        ) {
+          return
+        }
+        if (Date.now() >= new Date(delivery.expiresAt).getTime() - 15_000) {
+          refresh ??= fetch(
+            `/api/demo/playback/${grant.playbackGrantId}/delivery?asset=${mediaAssetId}&token=${encodeURIComponent(grant.deliveryToken)}`,
+            { cache: 'no-store' },
+          )
+            .then((response) =>
+              responseJSON<{
+                expiresAt: string
+                manifestURL: string
+                resourceAuthorization?: ResourceAuthorization
+              }>(response),
+            )
+            .then((next) => {
+              delivery = next
+            })
+            .finally(() => {
+              refresh = null
+            })
+          await refresh
+        }
+        const authorization = delivery.resourceAuthorization
+        if (!authorization) return
+        const authorizationQuery = new URLSearchParams(authorization.query)
+        request.uris = request.uris.map((uri) => {
+          const resource = new URL(uri, authorization.origin)
+          if (
+            resource.origin !== authorization.origin ||
+            !resource.pathname.startsWith(authorization.pathPrefix)
+          ) {
+            return uri
+          }
+          for (const [name, value] of authorizationQuery) {
+            resource.searchParams.set(name, value)
+          }
+          return resource.toString()
+        })
       })
 
       const configuration = {

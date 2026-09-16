@@ -13,6 +13,10 @@ import type {
   StorageProvider,
   TranscodeProvider,
 } from './contracts'
+import {
+  InvalidMediaError,
+  MultipartUploadError,
+} from './errors'
 
 const FAKE_PART_SIZE = 5 * 1024 * 1024
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
@@ -34,11 +38,6 @@ interface FakeMediaState {
 const fakeMediaStateKey = Symbol.for('hrizonmedia.fake-media-state')
 const sharedGlobal = globalThis as typeof globalThis & { [fakeMediaStateKey]?: FakeMediaState }
 const state = (sharedGlobal[fakeMediaStateKey] ??= { objects: new Map(), uploads: new Map() })
-
-export class InvalidMediaError extends Error {}
-export class MultipartUploadError extends Error {}
-export class PermanentTranscodeError extends Error {}
-export class TransientTranscodeError extends Error {}
 
 function sourceDimensions(bytes: Uint8Array): Pick<SourceMedia, 'height' | 'width'> {
   const marker = new TextDecoder().decode(bytes).match(/HRIZON:(\d+)x(\d+)/)
@@ -208,6 +207,12 @@ export const fakeStorageProvider: StorageProvider & {
 
   async deleteObject(objectKey) {
     state.objects.delete(objectKey)
+  },
+
+  async deletePrefix(prefix) {
+    for (const objectKey of state.objects.keys()) {
+      if (objectKey.startsWith(prefix)) state.objects.delete(objectKey)
+    }
   },
 
   async initiateMultipart({ metadata, uploadSessionId }) {

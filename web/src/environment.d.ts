@@ -13,6 +13,13 @@ declare global {
       REGION?: string
       S3_FORCE_PATH_STYLE?: string
       AWS_S3_URL_STYLE?: string
+      VIDEO_S3_ACCESS_KEY_ID?: string
+      VIDEO_S3_SECRET_ACCESS_KEY?: string
+      VIDEO_S3_BUCKET?: string
+      VIDEO_S3_REGION?: string
+      VIDEO_CLOUDFRONT_DOMAIN?: string
+      VIDEO_CLOUDFRONT_KEY_PAIR_ID?: string
+      VIDEO_CLOUDFRONT_PRIVATE_KEY?: string
     }
   }
 }

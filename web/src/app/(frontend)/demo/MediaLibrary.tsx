@@ -60,6 +60,12 @@ async function sha256(bytes: Blob): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+function base64ToHex(value: string): string {
+  return [...window.atob(value)]
+    .map((character) => character.charCodeAt(0).toString(16).padStart(2, '0'))
+    .join('')
+}
+
 function pendingUploadKey(fingerprint: string): string {
   return `${PENDING_UPLOAD_PREFIX}${fingerprint}`
 }
@@ -81,17 +87,40 @@ function persistPendingUpload(session: UploadSessionResponse, fingerprint: strin
 
 async function uploadPartWithRetry(targetURL: string, bytes: Blob): Promise<CompletedPart> {
   let lastError: Error | null = null
+  const checksumSHA256 = await sha256(bytes)
   for (let attempt = 1; attempt <= MAX_PART_ATTEMPTS; attempt += 1) {
     try {
       const target = await responseJSON<PartUploadTarget>(
-        await fetch(targetURL, { method: 'POST' }),
+        await fetch(targetURL, {
+          body: JSON.stringify({ checksumSHA256, size: bytes.size }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        }),
       )
       const response = await fetch(target.uploadURL, {
         body: bytes,
         headers: target.headers,
         method: 'PUT',
       })
-      if (response.ok || response.status < 500) return responseJSON<CompletedPart>(response)
+      if (response.ok) {
+        if (response.headers.get('content-type')?.includes('application/json')) {
+          return responseJSON<CompletedPart>(response)
+        }
+        const etag = response.headers.get('etag')?.replace(/^"|"$/g, '')
+        const providerChecksum = response.headers.get('x-amz-checksum-sha256')
+        if (!etag || !providerChecksum || base64ToHex(providerChecksum) !== checksumSHA256) {
+          throw new Error('Storage did not return a verifiable upload receipt.')
+        }
+        return {
+          checksumSHA256,
+          etag,
+          partNumber: Number(targetURL.split('/').at(-1)),
+          size: bytes.size,
+        }
+      }
+      if (response.status < 500) {
+        throw new MediaRequestError('Storage rejected an upload part.', response.status)
+      }
       lastError = new Error('A storage part failed temporarily.')
     } catch (error) {
       if (error instanceof MediaRequestError && error.status < 500) throw error

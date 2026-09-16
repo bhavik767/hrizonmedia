@@ -16,7 +16,8 @@ import {
 } from './identifiers'
 import type { CompletedPart } from './multipart'
 import type { MediaProviders, StorageProvider } from './providers/contracts'
-import { getFakeProviders, InvalidMediaError, MultipartUploadError } from './providers/fake'
+import { InvalidMediaError, MultipartUploadError } from './providers/errors'
+import { getMediaProviders } from './providers'
 import { newProcessingJobData, runProcessingCycle, type ProcessingOptions } from './processing'
 import type { MediaAssetDetail, MediaAssetStatus, MediaAssetSummary, UploadMetadata } from './types'
 
@@ -87,6 +88,10 @@ function providerUploadID(session: UploadSession): ProviderUploadId {
   return session.providerUploadId as ProviderUploadId
 }
 
+function providerUploadData(session: UploadSession): string | undefined {
+  return session.providerUploadData ?? undefined
+}
+
 async function terminateUpload(
   payload: Payload,
   session: UploadSession,
@@ -96,7 +101,7 @@ async function terminateUpload(
   actorID?: number,
 ): Promise<void> {
   const occurredAt = new Date()
-  await providers.storage.abortMultipart(providerUploadID(session))
+  await providers.storage.abortMultipart(providerUploadID(session), providerUploadData(session))
   await Promise.all([
     payload.update({
       collection: 'upload-sessions',
@@ -142,7 +147,7 @@ export async function createUploadSession(
   payload: Payload,
   owner: PilotMember,
   input: UploadMetadata,
-  providers: MediaProviders = getFakeProviders(),
+  providers: MediaProviders = getMediaProviders(),
 ) {
   await assertMediaActivityAllowed(payload)
   const metadata = validateMetadata(input)
@@ -179,6 +184,7 @@ export async function createUploadSession(
         owner: owner.id,
         partSize: initiated.partSize,
         providerUploadId: initiated.providerUploadId,
+        providerUploadData: initiated.providerUploadData,
         size: metadata.size,
         status: 'pending',
         uploadSessionId,
@@ -194,7 +200,10 @@ export async function createUploadSession(
     })
     return sessionResponse(session, asset)
   } catch (error) {
-    await providers.storage.abortMultipart(initiated.providerUploadId)
+    await providers.storage.abortMultipart(
+      initiated.providerUploadId,
+      initiated.providerUploadData,
+    )
     if (asset) {
       await payload.delete({ collection: 'media-assets', id: asset.id, overrideAccess: true })
     }
@@ -226,7 +235,7 @@ export async function resumeUploadSession(
   owner: PilotMember,
   uploadSessionId: UploadSessionId,
   fileFingerprint: string,
-  providers: MediaProviders = getFakeProviders(),
+  providers: MediaProviders = getMediaProviders(),
 ) {
   await assertMediaActivityAllowed(payload)
   const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
@@ -243,7 +252,7 @@ export async function resumeUploadSession(
     return sessionResponse(
       session,
       asset,
-      await providers.storage.listParts(providerUploadID(session)),
+      await providers.storage.listParts(providerUploadID(session), providerUploadData(session)),
     )
   } catch (error) {
     if (error instanceof MultipartUploadError) {
@@ -265,16 +274,27 @@ export async function renewUploadPart(
   owner: PilotMember,
   uploadSessionId: UploadSessionId,
   partNumber: number,
-  providers: MediaProviders = getFakeProviders(),
+  part: { checksumSHA256?: string; size?: number } = {},
+  providers: MediaProviders = getMediaProviders(),
 ) {
   await assertMediaActivityAllowed(payload)
   const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
   validatePartNumber(session, partNumber)
-  return providers.storage.createPartUploadTarget({
-    partNumber,
-    providerUploadId: providerUploadID(session),
-    uploadSessionId,
-  })
+  try {
+    return await providers.storage.createPartUploadTarget({
+      checksumSHA256: part.checksumSHA256,
+      partNumber,
+      providerUploadData: providerUploadData(session),
+      providerUploadId: providerUploadID(session),
+      size: part.size,
+      uploadSessionId,
+    })
+  } catch (error) {
+    if (error instanceof MultipartUploadError) {
+      throw new MediaLibraryError('Upload part metadata could not be validated.', 400)
+    }
+    throw error
+  }
 }
 
 export async function receiveUploadPart(
@@ -283,7 +303,7 @@ export async function receiveUploadPart(
   uploadSessionId: UploadSessionId,
   partNumber: number,
   bytes: Uint8Array,
-  providers: MediaProviders = getFakeProviders(),
+  providers: MediaProviders = getMediaProviders(),
 ): Promise<CompletedPart> {
   await assertMediaActivityAllowed(payload)
   const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
@@ -329,7 +349,7 @@ export async function completeUpload(
   owner: PilotMember,
   uploadSessionId: UploadSessionId,
   parts: CompletedPart[],
-  providers: MediaProviders = getFakeProviders(),
+  providers: MediaProviders = getMediaProviders(),
   processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary> {
   await assertMediaActivityAllowed(payload)
@@ -338,6 +358,7 @@ export async function completeUpload(
   try {
     stored = await providers.storage.completeMultipart({
       parts,
+      providerUploadData: providerUploadData(session),
       providerUploadId: providerUploadID(session),
     })
   } catch (error) {
@@ -478,7 +499,7 @@ export async function abortUpload(
   payload: Payload,
   owner: PilotMember,
   uploadSessionId: UploadSessionId,
-  providers: MediaProviders = getFakeProviders(),
+  providers: MediaProviders = getMediaProviders(),
 ): Promise<void> {
   const session = await findOwnedSession(payload, owner.id, uploadSessionId)
   if (
@@ -493,7 +514,7 @@ export async function abortUpload(
 export async function cleanupAbandonedUploads(
   payload: Payload,
   now = new Date(),
-  providers: MediaProviders = getFakeProviders(),
+  providers: MediaProviders = getMediaProviders(),
 ): Promise<number> {
   let cleaned = 0
   while (true) {

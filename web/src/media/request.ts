@@ -109,5 +109,5 @@ export async function authorizePlaybackResourceRequest(input: {
   if (authorized.playbackGrantId !== playbackGrantId) {
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
   }
-  return { mediaAssetId, playbackGrantId, token }
+  return { ...authorized, mediaAssetId, playbackGrantId, token }
 }

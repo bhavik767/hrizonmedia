@@ -63,4 +63,27 @@ describe('Railway environment validation', () => {
       'The production Demo cannot start with deterministic fake media providers',
     )
   })
+
+  it('rejects a partial real storage and delivery configuration', () => {
+    const result = spawnSync(process.execPath, [validator], {
+      encoding: 'utf8',
+      env: {
+        ACCESS_KEY_ID: 'access-key',
+        BUCKET: 'cms-media',
+        DATABASE_URL: 'postgresql://database.example.test/hrizonmedia',
+        ENDPOINT: 'https://storage.example.test',
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_SERVER_URL: 'https://hrizonmedia.example.test',
+        PATH: process.env.PATH,
+        PAYLOAD_SECRET: 'payload-secret',
+        SECRET_ACCESS_KEY: 'secret-key',
+        TRANSCODER_CALLBACK_SECRET: 'callback-secret',
+        VIDEO_S3_BUCKET: 'private-video',
+      },
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('Real media providers are partially configured')
+    expect(result.stderr).toContain('VIDEO_S3_ACCESS_KEY_ID')
+  })
 })

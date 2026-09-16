@@ -1,0 +1,33 @@
+import { getMediaProviders } from '@/media/providers'
+import {
+  authorizePlaybackResourceRequest,
+  mediaErrorResponse,
+  withAuthenticatedUploader,
+} from '@/media/request'
+
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ playbackGrantId: string }> },
+): Promise<Response> {
+  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+    try {
+      const authorization = await authorizePlaybackResourceRequest({
+        member,
+        payload,
+        rawPlaybackGrantId: (await context.params).playbackGrantId,
+        request,
+      })
+      return Response.json(
+        await getMediaProviders().delivery.authorize({
+          expiresAt: new Date(authorization.deliveryExpiresAt),
+          mediaAssetId: authorization.mediaAssetId,
+          playbackGrantId: authorization.playbackGrantId,
+          processingJobId: authorization.processingJobId,
+          token: authorization.token,
+        }),
+      )
+    } catch (error) {
+      return mediaErrorResponse(error)
+    }
+  })
+}

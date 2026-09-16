@@ -1,3 +1,5 @@
+import { readRealMediaProviderConfiguration } from './media-provider-environment.mjs'
+
 const REQUIRED_PRODUCTION_VARIABLES = [
   'ACCESS_KEY_ID',
   'BUCKET',
@@ -17,6 +19,8 @@ export function validateEnvironment(environment = process.env) {
   if (missing.length > 0) {
     throw new Error(`Missing required production environment variables: ${missing.join(', ')}`)
   }
+
+  readRealMediaProviderConfiguration(environment)
 
   if (!/^postgres(?:ql)?:\/\//.test(environment.DATABASE_URL)) {
     throw new Error('DATABASE_URL must use PostgreSQL in production')

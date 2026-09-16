@@ -1220,6 +1220,7 @@ export interface UploadSession {
   size: number;
   fileFingerprint: string;
   providerUploadId: string;
+  providerUploadData?: string | null;
   partSize: number;
   objectKey?: string | null;
   status: 'pending' | 'completed' | 'aborted' | 'expired';
@@ -2155,6 +2156,7 @@ export interface UploadSessionsSelect<T extends boolean = true> {
   size?: T;
   fileFingerprint?: T;
   providerUploadId?: T;
+  providerUploadData?: T;
   partSize?: T;
   objectKey?: T;
   status?: T;

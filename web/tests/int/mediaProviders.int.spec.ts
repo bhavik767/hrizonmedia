@@ -5,9 +5,9 @@ import {
   fakeStorageProvider,
   fakeTranscodeProvider,
   getFakeProviders,
-  InvalidMediaError,
   resetFakeMediaStorage,
 } from '@/media/providers/fake'
+import { InvalidMediaError } from '@/media/providers/errors'
 import { mkvFixture, mp4Fixture } from '../helpers/mediaFixtures'
 
 describe('deterministic media providers', () => {

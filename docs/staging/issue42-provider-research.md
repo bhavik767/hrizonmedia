@@ -20,8 +20,8 @@ integration decisions derived from those sources, not provider promises.
 | Salad attempts | Permit at most three expensive work attempts. Attempts one and two may fail to Salad; on the third terminal failure the worker records failure and returns success so Salad does not intentionally schedule its documented fourth attempt. A redelivery after interruption sees the exhausted attempt budget and exits without work. |
 | Salad callbacks | Do not send Salad webhooks to the existing `x-hrizon-*` receiver. Add a separate Svix-verifying ingress/translator, dedupe on `webhook-id`, and invoke the domain transition internally. Poll `Get Job` as reconciliation because the official docs do not state a webhook delivery retry schedule. |
 | Delete/cancel | Persist a deletion tombstone and revoke the lease first, request Salad cancellation second, and remove canonical plus per-attempt output prefixes. Workers check the tombstone before work and before publishing, so an accepted-but-not-yet-effective cancellation or late callback cannot recreate outputs. |
-| CloudFront access | Keep the existing delivery authorization valid for the maximum two-hour asset plus its five-minute start window, but make CloudFront access a rolling asset-prefix custom-policy signed cookie with a recommended 60-second TTL. An authenticated backend refresh route rechecks the long-lived delivery token and current asset before issuing each cookie; the cookie covers the manifest and segments under only that asset prefix. |
-| CloudFront revocation | Define `revokeAsset` as: deny new app grants and cookie refreshes immediately, delete the S3 asset prefix, and submit/wait for CloudFront invalidation. Do **not** claim instantaneous revocation of a cookie already issued: residual edge access is bounded by the 60-second cookie TTL plus completion of a request already in progress. |
+| CloudFront access | Keep the existing delivery authorization valid for the maximum two-hour asset plus its five-minute start window, but make CloudFront access a rolling asset-prefix custom-policy signed URL with a 60-second TTL. An authenticated backend refresh route rechecks the long-lived delivery token and current asset before issuing opaque query authorization that the player applies only to resources under the same output prefix. |
+| CloudFront revocation | Deny new app grants and signature refreshes immediately and delete the S3 asset prefix. Do **not** claim instantaneous revocation of a URL already issued: residual edge access is bounded by the 60-second signature TTL plus completion of a request already in progress. |
 | DoveRunner packaging | Use the CLI packager's DASH path for the initial Chrome/Edge Widevine proof. Use the existing immutable `drm_${processingJobId}` as the unique packaging/licensing Content ID, deterministic alphanumeric scratch filenames, and at least twice the input size as scratch space. |
 | DoveRunner licensing | Use DoveRunner token-proxy integration, not direct client token delivery or the deprecated callback. `DrmProvider.acquireTemporaryLicence` receives the browser challenge after the backend has rechecked entitlement, creates a token for the exact Content ID, forwards token plus challenge to DoveRunner, and returns the raw licence bytes. Use `response_format=original`. |
 | Temporary streaming licence | Use policy v2 with `persistent:false` and `license_duration:0`. The five minutes limits when playback may start/acquire a licence; the issued nonpersistent streaming licence may finish the viewing session and cannot be retained for offline playback. |
@@ -107,32 +107,29 @@ all edge locations simultaneously, and invalidation has an in-progress state.
 
 The existing application deliberately keeps its delivery token valid for two
 hours and five minutes so a video that starts inside the five-minute playback
-grant can continue to its maximum two-hour duration. A CloudFront cookie with
-that lifetime would make revocation too weak, while a five-minute cookie could
-still break a long playback after expiry. **Decision:** keep the long-lived
-delivery token as a backend-validated bearer and exchange it through
-an authenticated refresh route for an asset-prefix CloudFront cookie with a
-recommended 60-second TTL. Every refresh revalidates the delivery token, stored
-grant, ownership, current asset state and expiry. The player refreshes before
-cookie expiry; the unsigned manifest and segment URLs remain stable.
-
-This rolling-cookie route may need to be added during real-adapter
-implementation, but it does not require changing the `DeliveryProvider`
-`authorize` signature: `authorize` still accepts the long delivery expiry/token
-and returns the manifest URL/authorization expiry, while the HTTP integration
-owns initial cookie issuance and refresh.
+grant can continue to its maximum two-hour duration. Long-lived edge credentials
+would make revocation too weak. The selected distribution exposes its native
+`cloudfront.net` domain, so the Railway application cannot set a valid session
+cookie for that unrelated domain; browsers reject such a `Domain` attribute.
+**Implementation correction:** keep the long-lived delivery token as a
+backend-validated bearer and exchange it through an authenticated refresh route
+for a custom-policy signed URL with a 60-second TTL. Every refresh revalidates the
+delivery token, stored grant, ownership, current asset state and expiry. The
+provider returns an opaque same-origin/path-prefix/query authorization envelope;
+the player propagates it to matching manifest and segment requests without
+knowing CloudFront parameter names.
 
 The provider still cannot promise per-grant instantaneous edge revocation.
-`revokeAsset` must stop new grants and cookie refresh immediately, delete the S3
-asset prefix, and submit/wait for CloudFront invalidation. A cookie already
-issued can authorize new requests only until its at-most-60-second expiry, and
+`revokeAsset` must stop new grants and signed-URL refresh immediately and delete
+the S3 asset prefix. A URL already issued can authorize new requests only until
+its at-most-60-second expiry, and
 a response begun before expiry may finish afterward. Removing a signing key is
 an account-wide emergency operation, not normal per-asset revocation.
 
 Verification still required: unsigned manifest and segment requests return
-403; the cookie grants only one processing prefix; `sources/` is unreachable;
+403; the signed policy grants only one processing prefix; `sources/` is unreachable;
 the refresh route rejects cross-member, deleted, expired and mismatched assets;
-continuous playback survives multiple cookie rotations; stopping refresh
+continuous playback survives multiple signature rotations; stopping refresh
 denies new manifest/range requests within 60 seconds; direct S3 reads fail; and
 asset deletion/invalidation reach `Completed`.
 

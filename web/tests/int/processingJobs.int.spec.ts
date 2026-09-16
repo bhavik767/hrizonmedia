@@ -10,13 +10,8 @@ import {
   receiveUploadPart,
   retryVisibleAssetProcessing,
 } from '@/media/library'
-import {
-  PermanentTranscodeError,
-  TransientTranscodeError,
-  fakeTranscodeProvider,
-  getFakeProviders,
-  resetFakeMediaStorage,
-} from '@/media/providers/fake'
+import { fakeTranscodeProvider, getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
+import { PermanentTranscodeError, TransientTranscodeError } from '@/media/providers/errors'
 import type { TranscodeProvider } from '@/media/providers/contracts'
 import { newProcessingJobData, runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
