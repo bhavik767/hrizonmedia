@@ -4,9 +4,14 @@ import type { Payload } from 'payload'
 
 import type { MediaAsset, PilotMember } from '@/payload-types'
 
-import type { MediaAssetId, ProviderJobId, ProviderUploadId } from './identifiers'
+import {
+  processingOutputPrefix,
+  type MediaAssetId,
+  type ProviderJobId,
+  type ProviderUploadId,
+} from './identifiers'
 import { MediaLibraryError } from './library'
-import { getFakeProviders } from './providers/fake'
+import { getMediaProviders } from './providers'
 import { logMediaDiagnostic } from './diagnostics'
 import type { MediaProviders } from './providers/contracts'
 
@@ -154,7 +159,7 @@ export async function deleteMediaAsset(
           overrideAccess: true,
         })
   try {
-    await cleanupRevokedAsset(payload, deletedAsset, now, options.providers ?? getFakeProviders())
+    await cleanupRevokedAsset(payload, deletedAsset, now, options.providers ?? getMediaProviders())
   } catch {
     logMediaDiagnostic('error', 'media_cleanup_pending', deletedAsset.id)
   }
@@ -198,6 +203,9 @@ async function cleanupRevokedAsset(
         where: { asset: { equals: asset.id } },
       })
       const job = jobs.docs[0]
+      if (job?.processingJobId) {
+        await providers.storage.deletePrefix(processingOutputPrefix(job.processingJobId))
+      }
       await providers.transcode.deleteOutputs({
         mediaAssetId: asset.mediaAssetId as MediaAssetId,
         providerJobId: (job?.providerJobId as ProviderJobId | null) ?? null,
@@ -238,7 +246,10 @@ async function deleteRawSource(
       overrideAccess: true,
     })
   } else if (session?.status === 'pending') {
-    await providers.storage.abortMultipart(session.providerUploadId as ProviderUploadId)
+    await providers.storage.abortMultipart(
+      session.providerUploadId as ProviderUploadId,
+      session.providerUploadData ?? undefined,
+    )
     await payload.update({
       collection: 'upload-sessions',
       data: { status: 'aborted' },
@@ -259,7 +270,7 @@ export async function runMediaLifecycle(
   options: { now?: Date; providers?: MediaProviders } = {},
 ): Promise<void> {
   const now = options.now ?? new Date()
-  const providers = options.providers ?? getFakeProviders()
+  const providers = options.providers ?? getMediaProviders()
   const [successfulJobs, failedJobs] = await Promise.all([
     payload.find({
       collection: 'processing-jobs',

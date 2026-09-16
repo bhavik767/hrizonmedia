@@ -14,9 +14,14 @@ import {
   type MediaAssetId,
   type PlaybackGrantId,
   type PlaybackGrantToken,
+  type ProcessingJobId,
 } from './identifiers'
-import type { DrmPlaybackContract, MediaProviders } from './providers/contracts'
-import { getFakeProviders } from './providers/fake'
+import type {
+  DeliveryAuthorization,
+  DrmPlaybackContract,
+  MediaProviders,
+} from './providers/contracts'
+import { getMediaProviders } from './providers'
 
 const GRANT_LIFETIME_MS = 5 * 60 * 1000
 const MAX_ASSET_DURATION_MS = 2 * 60 * 60 * 1000
@@ -39,6 +44,7 @@ export interface PlaybackGrantResponse extends DrmPlaybackContract {
   manifestURL: string
   playbackGrantId: PlaybackGrantId
   playbackGrantToken: PlaybackGrantToken
+  resourceAuthorization?: DeliveryAuthorization['resourceAuthorization']
 }
 
 export class PlaybackAuthorizationError extends Error {
@@ -164,6 +170,21 @@ async function storedGrant(payload: Payload, claims: PlaybackTokenClaims): Promi
   return grant
 }
 
+async function assetProcessingJobId(
+  payload: Payload,
+  assetID: number,
+): Promise<ProcessingJobId | undefined> {
+  const jobs = await payload.find({
+    collection: 'processing-jobs',
+    depth: 0,
+    limit: 1,
+    overrideAccess: true,
+    where: { asset: { equals: assetID } },
+  })
+  const processingJobId = jobs.docs[0]?.processingJobId
+  return processingJobId ? (processingJobId as ProcessingJobId) : undefined
+}
+
 export async function createPlaybackGrant(
   payload: Payload,
   member: PilotMember,
@@ -172,7 +193,7 @@ export async function createPlaybackGrant(
 ): Promise<PlaybackGrantResponse> {
   await assertMediaActivityAllowed(payload)
   const now = options.now ?? new Date()
-  const providers = options.providers ?? getFakeProviders()
+  const providers = options.providers ?? getMediaProviders()
   const owner = await activeUploader(payload, member)
   const asset = await ownedAsset(payload, owner, mediaAssetId)
   assertPlayable(asset, now)
@@ -205,11 +226,13 @@ export async function createPlaybackGrant(
     kind: 'delivery',
     owner: owner.id,
   }) as DeliveryToken
+  const processingJobId = await assetProcessingJobId(payload, asset.id)
   const [delivery, drm] = await Promise.all([
     providers.delivery.authorize({
       expiresAt: deliveryExpiresAt,
       mediaAssetId,
       playbackGrantId,
+      processingJobId,
       token: deliveryToken,
     }),
     providers.drm.createPlaybackContract({ playbackGrantId }),
@@ -229,6 +252,7 @@ export async function createPlaybackGrant(
     manifestURL: delivery.manifestURL,
     playbackGrantId,
     playbackGrantToken,
+    resourceAuthorization: delivery.resourceAuthorization,
   }
 }
 
@@ -245,7 +269,7 @@ export async function acquirePlaybackLicence(
 ) {
   await assertMediaActivityAllowed(payload)
   const now = options.now ?? new Date()
-  const providers = options.providers ?? getFakeProviders()
+  const providers = options.providers ?? getMediaProviders()
   const owner = await activeUploader(payload, member)
   const claims = decodeClaims(token, 'grant', now)
   if (options.requestedPlaybackGrantId && claims.grant !== options.requestedPlaybackGrantId) {
@@ -300,5 +324,10 @@ export async function authorizePlaybackResource(
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
   }
   assertPlayable(asset, now)
-  return { mediaAssetId: claims.asset, playbackGrantId: claims.grant }
+  return {
+    deliveryExpiresAt: grant.deliveryExpiresAt,
+    mediaAssetId: claims.asset,
+    playbackGrantId: claims.grant,
+    processingJobId: await assetProcessingJobId(payload, asset.id),
+  }
 }

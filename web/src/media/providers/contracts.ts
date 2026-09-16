@@ -4,6 +4,7 @@ import type {
   DeliveryToken,
   MediaAssetId,
   PlaybackGrantId,
+  ProcessingJobId,
   ProviderJobId,
   ProviderUploadId,
   UploadSessionId,
@@ -13,6 +14,7 @@ import type { UploadMetadata } from '../types'
 
 export interface MultipartUpload {
   partSize: number
+  providerUploadData?: string
   providerUploadId: ProviderUploadId
 }
 
@@ -42,22 +44,27 @@ export interface MediaProbe {
 }
 
 export interface StorageProvider {
-  abortMultipart(providerUploadId: ProviderUploadId): Promise<void>
+  abortMultipart(providerUploadId: ProviderUploadId, providerUploadData?: string): Promise<void>
   completeMultipart(input: {
     parts: CompletedPart[]
+    providerUploadData?: string
     providerUploadId: ProviderUploadId
   }): Promise<StoredUpload>
   createPartUploadTarget(input: {
+    checksumSHA256?: string
     partNumber: number
+    providerUploadData?: string
     providerUploadId: ProviderUploadId
+    size?: number
     uploadSessionId: UploadSessionId
   }): Promise<PartUploadTarget>
   deleteObject(objectKey: string): Promise<void>
+  deletePrefix(prefix: string): Promise<void>
   initiateMultipart(input: {
     metadata: UploadMetadata
     uploadSessionId: UploadSessionId
   }): Promise<MultipartUpload>
-  listParts(providerUploadId: ProviderUploadId): Promise<CompletedPart[]>
+  listParts(providerUploadId: ProviderUploadId, providerUploadData?: string): Promise<CompletedPart[]>
   probe(objectKey: string): Promise<MediaProbe>
 }
 
@@ -85,6 +92,11 @@ export interface TranscodeProvider {
 export interface DeliveryAuthorization {
   expiresAt: string
   manifestURL: string
+  resourceAuthorization?: {
+    origin: string
+    pathPrefix: string
+    query: string
+  }
 }
 
 export interface DeliveryProvider {
@@ -92,6 +104,7 @@ export interface DeliveryProvider {
     expiresAt: Date
     mediaAssetId: MediaAssetId
     playbackGrantId: PlaybackGrantId
+    processingJobId?: ProcessingJobId
     token: DeliveryToken
   }): Promise<DeliveryAuthorization>
   revokeAsset(mediaAssetId: MediaAssetId): Promise<void>

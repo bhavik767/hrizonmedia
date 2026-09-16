@@ -15,7 +15,8 @@ import {
   type ProcessingJobId,
   type ProviderJobId,
 } from './identifiers'
-import { PermanentTranscodeError, getFakeProviders } from './providers/fake'
+import { PermanentTranscodeError } from './providers/errors'
+import { getMediaProviders } from './providers'
 import { logMediaDiagnostic } from './diagnostics'
 import type { Rendition, SourceMedia, TranscodeProvider } from './providers/contracts'
 
@@ -348,7 +349,7 @@ export async function runProcessingCycle(
   options: ProcessingOptions = {},
 ): Promise<void> {
   const now = options.now ?? new Date()
-  const provider = options.provider ?? getFakeProviders().transcode
+  const provider = options.provider ?? getMediaProviders().transcode
   const controls = await getOperationalControls(payload)
   if (controls.killSwitchEnabled) return
   await recoverExpiredJobs(payload, now, {

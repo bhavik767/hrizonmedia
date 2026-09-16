@@ -30,6 +30,9 @@
     "validate:env": "node src/config/validate-environment.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1131.0",
+    "@aws-sdk/cloudfront-signer": "3.1125.0",
+    "@aws-sdk/s3-request-presigner": "3.1131.0",
     "@fontsource-variable/manrope": "^5.2.8",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/ibm-plex-sans": "^5.2.7",
@@ -97,6 +100,6 @@
     "vitest": "4.0.18"
   },
   "engines": {
-    "node": "^18.20.2 || >=20.9.0"
+    "node": ">=20.9.0"
   }
 }

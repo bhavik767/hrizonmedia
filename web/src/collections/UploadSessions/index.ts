@@ -31,6 +31,7 @@ export const UploadSessions: CollectionConfig = {
     { name: 'size', type: 'number', required: true },
     { name: 'fileFingerprint', type: 'text', required: true },
     { name: 'providerUploadId', type: 'text', required: true, unique: true, index: true },
+    { name: 'providerUploadData', type: 'text' },
     { name: 'partSize', type: 'number', required: true },
     { name: 'objectKey', type: 'text' },
     {

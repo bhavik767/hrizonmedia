@@ -1,6 +1,6 @@
 import { parseUploadSessionId } from '@/media/identifiers'
 import { renewUploadPart } from '@/media/library'
-import { withAuthenticatedUploader } from '@/media/request'
+import { parseJSONBody, withAuthenticatedUploader } from '@/media/request'
 
 export async function POST(
   request: Request,
@@ -14,6 +14,21 @@ export async function POST(
     if (!Number.isSafeInteger(parsedPartNumber) || parsedPartNumber < 1) {
       return Response.json({ error: 'Invalid upload part number.' }, { status: 400 })
     }
-    return Response.json(await renewUploadPart(payload, member, parsedID, parsedPartNumber))
+    let part: { checksumSHA256?: string; size?: number } = {}
+    if (request.headers.get('content-type')) {
+      part = await parseJSONBody(request)
+      if (
+        typeof part.checksumSHA256 !== 'string' ||
+        !/^[0-9a-f]{64}$/.test(part.checksumSHA256) ||
+        !Number.isSafeInteger(part.size) ||
+        part.size! <= 0 ||
+        part.size! > 5 * 1024 * 1024
+      ) {
+        return Response.json({ error: 'Upload part metadata is invalid.' }, { status: 400 })
+      }
+    }
+    return Response.json(
+      await renewUploadPart(payload, member, parsedID, parsedPartNumber, part),
+    )
   })
 }

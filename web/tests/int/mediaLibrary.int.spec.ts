@@ -13,9 +13,9 @@ import {
 } from '@/media/library'
 import {
   getFakeProviders,
-  MultipartUploadError,
   resetFakeMediaStorage,
 } from '@/media/providers/fake'
+import { MultipartUploadError } from '@/media/providers/errors'
 import { runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
@@ -118,6 +118,39 @@ describe('Media Asset library persistence', () => {
     await expect(
       getVisibleAsset(payload, secondUploader, session.asset.mediaAssetId),
     ).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('persists provider-native multipart state separately from the opaque provider ID', async () => {
+    const fixture = mp4Fixture()
+    const providers = getFakeProviders()
+    const initiateMultipart = providers.storage.initiateMultipart
+    providers.storage = {
+      ...providers.storage,
+      async initiateMultipart(input) {
+        return {
+          ...(await initiateMultipart(input)),
+          providerUploadData: 'persisted-native-provider-state',
+        }
+      },
+    }
+
+    const session = await createUploadSession(
+      payload,
+      firstUploader,
+      metadataFor(fixture),
+      providers,
+    )
+    const stored = await payload.find({
+      collection: 'upload-sessions',
+      limit: 1,
+      overrideAccess: true,
+      where: { uploadSessionId: { equals: session.uploadSessionId } },
+    })
+
+    expect(stored.docs[0]).toMatchObject({
+      providerUploadData: 'persisted-native-provider-state',
+      providerUploadId: expect.stringMatching(/^provider_upload_/),
+    })
   })
 
   it('rejects completion after the persisted Upload Session expires', async () => {
