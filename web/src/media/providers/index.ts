@@ -5,7 +5,8 @@ import { readRealMediaProviderConfiguration } from '@/config/media-provider-envi
 import type { MediaProviders } from './contracts'
 import { createCloudFrontDeliveryProvider } from './cloudfront'
 import { getFakeProviders } from './fake'
-import { createS3StorageProvider } from './s3'
+import { createS3OutputVerifier, createS3StorageProvider } from './s3'
+import { createSaladTranscodeProvider } from './salad'
 
 export function getMediaProviders(environment: NodeJS.ProcessEnv = process.env): MediaProviders {
   const configuration = readRealMediaProviderConfiguration(environment)
@@ -23,5 +24,22 @@ export function getMediaProviders(environment: NodeJS.ProcessEnv = process.env):
     keyPairId: configuration.cloudFrontKeyPairId,
     privateKey: configuration.cloudFrontPrivateKey,
   })
+  providers.transcode = createSaladTranscodeProvider(
+    {
+      apiKey: configuration.saladApiKey,
+      organizationName: configuration.saladOrganizationName,
+      projectName: configuration.saladProjectName,
+      queueName: configuration.saladQueueName,
+      webhookURL: configuration.saladWebhookURL,
+    },
+    {
+      verifyOutputs: createS3OutputVerifier({
+        accessKeyId: configuration.s3AccessKeyId,
+        bucket: configuration.s3Bucket,
+        region: configuration.s3Region,
+        secretAccessKey: configuration.s3SecretAccessKey,
+      }),
+    },
+  )
   return providers
 }

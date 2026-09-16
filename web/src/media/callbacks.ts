@@ -5,7 +5,11 @@ import { createLocalReq, type Payload } from 'payload'
 import { recordAuditEvent } from '@/audit/events'
 
 import { processingOutputPrefix } from './identifiers'
-import { failProcessingJob, setProcessingAssetStatus } from './processing'
+import {
+  failProcessingJob,
+  retryOrFailProcessingJob,
+  setProcessingAssetStatus,
+} from './processing'
 
 function relationID(value: number | { id: number }): number {
   return typeof value === 'number' ? value : value.id
@@ -17,6 +21,7 @@ export async function applyProcessingCallback(
     callbackId: string
     outputPrefix: string
     providerJobId: string
+    retryFailure?: boolean
     status: 'failed' | 'ready'
   },
   now = new Date(),
@@ -78,7 +83,11 @@ export async function applyProcessingCallback(
       })
       await setProcessingAssetStatus(payload, job, 'ready', now, req)
     } else {
-      await failProcessingJob(payload, job, now, 'provider_callback_failed', req)
+      if (input.retryFailure) {
+        await retryOrFailProcessingJob(payload, job, now, 'provider_callback_failed', req)
+      } else {
+        await failProcessingJob(payload, job, now, 'provider_callback_failed', req)
+      }
     }
     await recordAuditEvent(payload, {
       action: 'processing_callback_received',

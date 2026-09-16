@@ -165,9 +165,10 @@ async function scheduleRetry(
   now: Date,
   code: string,
   delay = true,
+  req?: PayloadRequest,
 ) {
   if (job.attempts >= MAX_ATTEMPTS) {
-    await failProcessingJob(payload, job, now, code)
+    await failProcessingJob(payload, job, now, code, req)
     return
   }
   await payload.update({
@@ -186,8 +187,19 @@ async function scheduleRetry(
     },
     id: job.id,
     overrideAccess: true,
+    req,
   })
-  await setProcessingAssetStatus(payload, job, 'queued', now)
+  await setProcessingAssetStatus(payload, job, 'queued', now, req)
+}
+
+export async function retryOrFailProcessingJob(
+  payload: Payload,
+  job: ProcessingJob,
+  now: Date,
+  code: string,
+  req?: PayloadRequest,
+) {
+  await scheduleRetry(payload, job, now, code, true, req)
 }
 
 async function recoverExpiredJobs(payload: Payload, now: Date, where: Where) {

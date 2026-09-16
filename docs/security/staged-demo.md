@@ -27,6 +27,14 @@ second state change or Audit Event. Reusing its ID for different content returns
 409. Expired or tampered authentication, unknown jobs, invalid state transitions,
 and noncanonical or escaping output prefixes are rejected.
 
+SaladCloud's native queue webhook terminates separately at
+`/api/internal/salad/webhook`. It uses the provider's Svix headers and
+`SALAD_WEBHOOK_SECRET`, accepts only signed terminal queue events whose embedded
+Processing Job ID and exact output prefix agree, and translates them into the same
+idempotent domain transition. Native failure events requeue within the application's
+three-attempt budget. Native success is accepted only after the Salad status adapter
+has verified the canonical S3 completion marker and manifest.
+
 ## Browser mutations
 
 Demo routes and server actions check browser origins and rate-limit mutations.
