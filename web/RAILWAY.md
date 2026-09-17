@@ -98,6 +98,11 @@ S3 contains `manifest.mpd` and a matching, worker-written `completion.json` mark
 The existing `/api/internal/transcode/callback` remains the authenticated callback
 contract for an application-owned worker/translator.
 
+Follow the one-replica bootstrap and functional sentinel procedure in
+[`transcoder/README.md`](transcoder/README.md) before allowing a new Salad group to
+scale to zero. A created group or queue-membership response alone is not deployment
+evidence.
+
 ## DoveRunner Widevine licensing
 
 Issue #45 enables the real DRM adapter only with the complete provider set above
