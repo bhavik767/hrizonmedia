@@ -1,11 +1,24 @@
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
 const validator = path.resolve(process.cwd(), 'src/config/validate-environment.mjs')
+const dockerfile = path.resolve(process.cwd(), 'Dockerfile')
 
 describe('Railway environment validation', () => {
+  it('packages the validator and its media-provider dependency in the production image', () => {
+    const dockerfileContents = readFileSync(dockerfile, 'utf8')
+
+    expect(dockerfileContents).toContain(
+      'COPY --from=builder --chown=nextjs:nodejs /app/src/config/validate-environment.mjs ./validate-environment.mjs',
+    )
+    expect(dockerfileContents).toContain(
+      'COPY --from=builder --chown=nextjs:nodejs /app/src/config/media-provider-environment.mjs ./media-provider-environment.mjs',
+    )
+  })
+
   it('stops production startup with a useful list of missing variables', () => {
     const result = spawnSync(process.execPath, [validator], {
       encoding: 'utf8',
