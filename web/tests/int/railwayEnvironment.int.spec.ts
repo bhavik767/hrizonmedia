@@ -115,5 +115,8 @@ describe('Railway environment validation', () => {
     expect(result.stderr).toContain('SALAD_API_KEY')
     expect(result.stderr).toContain('SALAD_QUEUE_NAME')
     expect(result.stderr).toContain('SALAD_WEBHOOK_SECRET')
+    expect(result.stderr).toContain('DOVERUNNER_SITE_ID')
+    expect(result.stderr).toContain('DOVERUNNER_SITE_KEY')
+    expect(result.stderr).toContain('DOVERUNNER_ACCESS_KEY')
   })
 })

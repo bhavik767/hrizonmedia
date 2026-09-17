@@ -98,6 +98,24 @@ S3 contains `manifest.mpd` and a matching, worker-written `completion.json` mark
 The existing `/api/internal/transcode/callback` remains the authenticated callback
 contract for an application-owned worker/translator.
 
+## DoveRunner Widevine licensing
+
+Issue #45 enables the real DRM adapter only with the complete provider set above
+plus `DOVERUNNER_SITE_ID`, `DOVERUNNER_SITE_KEY`, and `DOVERUNNER_ACCESS_KEY` in
+the staging web service. These values are server-only. Keep `DOVERUNNER_ENC_TOKEN`
+only in the Salad worker, never in the web service or browser bundle. Partial
+configuration fails closed rather than returning deterministic licences.
+
+The application is a token proxy: it reauthorizes the uploader and the five-minute
+Playback Grant before creating a DoveRunner token for one DRM Content ID, forwards
+the browser challenge with `response_format=original`, and returns only raw licence
+bytes. Provider tokens, site/access keys, and licence data must never be copied to
+Railway logs or issue evidence. The policy disables persistent/offline licences and
+allows an already-issued streaming session to finish. See
+[`issue45-doverunner-drm-verification.md`](../docs/staging/issue45-doverunner-drm-verification.md)
+for the required non-secret Chrome, Edge, FairPlay, and PlayReady evidence; do not
+claim Multi-DRM until every listed verification passes.
+
 ## Deployed acceptance checks
 
 Use a dedicated disposable staging test environment: browser fixture helpers delete
