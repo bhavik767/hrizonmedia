@@ -70,7 +70,11 @@ describe('S3 storage provider', () => {
     const uploadSessionId = newUploadSessionId()
     const { client, send } = commandSender([{ UploadId: 'native-upload-id' }])
     const presign = vi.fn(
-      async (_client: unknown, _command: UploadPartCommand, _options: { expiresIn: number }) =>
+      async (
+        _client: unknown,
+        _command: UploadPartCommand,
+        _options: { expiresIn: number; unhoistableHeaders?: Set<string> },
+      ) =>
         'https://bucket.example/upload-part',
     )
     const provider = createS3StorageProvider(
