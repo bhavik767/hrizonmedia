@@ -69,7 +69,7 @@ interface S3Dependencies {
   presign?: (
     client: CommandClient,
     command: UploadPartCommand,
-    options: { expiresIn: number },
+    options: { expiresIn: number; unhoistableHeaders?: Set<string> },
   ) => Promise<string>
   probe?: (client: CommandClient, bucket: string, key: string) => Promise<MediaProbe>
 }
@@ -360,11 +360,13 @@ export function createS3StorageProvider(
         UploadId: descriptor.nativeUploadId,
       })
       return {
-        // ChecksumSHA256 is encoded into the presigned query string by the
-        // AWS SDK. Sending it again as an unsigned request header makes S3
-        // reject the request with "There were headers present ... not signed".
-        headers: {},
-        uploadURL: await presign(client, command, { expiresIn: 10 * 60 }),
+        // Keep the checksum as a signed header. S3 requires the part-level
+        // checksum header when the multipart upload uses SHA-256 checksums.
+        headers: { 'x-amz-checksum-sha256': checksum },
+        uploadURL: await presign(client, command, {
+          expiresIn: 10 * 60,
+          unhoistableHeaders: new Set(['x-amz-checksum-sha256']),
+        }),
       }
     },
 

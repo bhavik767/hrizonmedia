@@ -111,7 +111,13 @@ describe('S3 storage provider', () => {
       PartNumber: 1,
       UploadId: 'native-upload-id',
     })
-    expect(target.headers).not.toHaveProperty('x-amz-checksum-sha256')
+    expect(target.headers).toMatchObject({
+      'x-amz-checksum-sha256': Buffer.from(checksumSHA256, 'hex').toString('base64'),
+    })
+    expect(presign.mock.calls[0]![2]).toMatchObject({ expiresIn: 10 * 60 })
+    expect(presign.mock.calls[0]![2]?.unhoistableHeaders).toEqual(
+      new Set(['x-amz-checksum-sha256']),
+    )
   })
 
   it('exhausts part pagination and rejects completion receipts that differ from storage', async () => {
