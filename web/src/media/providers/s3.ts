@@ -360,7 +360,10 @@ export function createS3StorageProvider(
         UploadId: descriptor.nativeUploadId,
       })
       return {
-        headers: { 'x-amz-checksum-sha256': checksum },
+        // ChecksumSHA256 is encoded into the presigned query string by the
+        // AWS SDK. Sending it again as an unsigned request header makes S3
+        // reject the request with "There were headers present ... not signed".
+        headers: {},
         uploadURL: await presign(client, command, { expiresIn: 10 * 60 }),
       }
     },
