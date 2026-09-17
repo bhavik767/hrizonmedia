@@ -93,7 +93,7 @@ describe('S3 storage provider', () => {
     expect(create.input).not.toHaveProperty('ACL')
 
     const checksumSHA256 = 'ab'.repeat(32)
-    await provider.createPartUploadTarget({
+    const target = await provider.createPartUploadTarget({
       checksumSHA256,
       partNumber: 1,
       providerUploadData: initiated.providerUploadData,
@@ -111,6 +111,7 @@ describe('S3 storage provider', () => {
       PartNumber: 1,
       UploadId: 'native-upload-id',
     })
+    expect(target.headers).not.toHaveProperty('x-amz-checksum-sha256')
   })
 
   it('exhausts part pagination and rejects completion receipts that differ from storage', async () => {
