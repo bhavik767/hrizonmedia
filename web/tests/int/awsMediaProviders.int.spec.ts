@@ -6,6 +6,7 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectsCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   UploadPartCommand,
@@ -16,7 +17,7 @@ import { newMediaAssetId, newProcessingJobId, newUploadSessionId } from '@/media
 import { createCloudFrontDeliveryProvider } from '@/media/providers/cloudfront'
 import { MultipartUploadError } from '@/media/providers/errors'
 import { getMediaProviders } from '@/media/providers'
-import { createS3StorageProvider } from '@/media/providers/s3'
+import { createS3OutputVerifier, createS3StorageProvider } from '@/media/providers/s3'
 
 const metadata = {
   fileFingerprint: 'lesson.mp4:5242881:fingerprint',
@@ -31,6 +32,40 @@ function commandSender(responses: unknown[]) {
 }
 
 describe('S3 storage provider', () => {
+  it('accepts canonical outputs only when the worker completion marker matches every rendition', async () => {
+    const processingJobId = newProcessingJobId()
+    const outputPrefix = `outputs/${processingJobId}/`
+    const renditions = [
+      { audioCodec: 'aac' as const, height: 360 as const, videoCodec: 'h264' as const, width: 640 },
+      { audioCodec: 'aac' as const, height: 480 as const, videoCodec: 'h264' as const, width: 854 },
+    ]
+    const { client, send } = commandSender([
+      {
+        Body: {
+          transformToString: async () => JSON.stringify({ attempt: 1, outputPrefix, renditions, version: 1 }),
+        },
+        ContentLength: 512,
+      },
+      {
+        Body: { transformToString: async () => '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><Representation codecs="avc1.64001f" height="360"/><Representation codecs="avc1.640028" height="480"/><Representation codecs="mp4a.40.2"/></MPD>' },
+        ContentLength: 1024,
+        ContentType: 'application/dash+xml',
+      },
+      { Contents: [{ Key: `${outputPrefix}video-init.mp4` }, { Key: `${outputPrefix}video-1.m4s` }] },
+    ])
+    const verify = createS3OutputVerifier(
+      { accessKeyId: 'access', bucket: 'private-bucket', region: 'ap-south-1', secretAccessKey: 'secret' },
+      { client },
+    )
+
+    await expect(verify({ attempt: 1, outputPrefix, renditions })).resolves.toBeUndefined()
+    expect(send.mock.calls[0]![0]).toBeInstanceOf(GetObjectCommand)
+    expect((send.mock.calls[0]![0] as GetObjectCommand).input.Key).toBe(`${outputPrefix}completion.json`)
+    expect(send.mock.calls[1]![0]).toBeInstanceOf(GetObjectCommand)
+    expect((send.mock.calls[1]![0] as GetObjectCommand).input.Key).toBe(`${outputPrefix}manifest.mpd`)
+    expect(send.mock.calls[2]![0]).toBeInstanceOf(ListObjectsV2Command)
+  })
+
   it('creates a private checksummed multipart upload and signs an exact part receipt', async () => {
     const uploadSessionId = newUploadSessionId()
     const { client, send } = commandSender([{ UploadId: 'native-upload-id' }])

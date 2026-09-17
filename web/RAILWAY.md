@@ -76,7 +76,27 @@ removes every object under the validated output prefix idempotently.
 
 The runtime image includes `ffprobe`; completed private sources are streamed through
 it for bounded server-side container, duration, and dimension verification before a
-Processing Job is queued. Real transcoding and DoveRunner remain issues #44 and #45.
+Processing Job is queued.
+
+## Real transcoding
+
+Issue #44 activates SaladCloud dispatch only when the storage/delivery variables
+above and all of `SALAD_API_KEY`, `SALAD_ORGANIZATION_NAME`, `SALAD_PROJECT_NAME`,
+`SALAD_QUEUE_NAME`, and `SALAD_WEBHOOK_SECRET` are present. Partial configuration
+fails closed. The queue worker receives only the verified `sources/{uploadSessionId}`
+key, canonical `outputs/{processingJobId}/` prefix, source probe, approved H.264/AAC
+rendition ladder, and distinct DRM Content ID. Salad's native UUID is stored as the
+Provider Job ID and reconciled by polling.
+
+Configure the queue completion webhook as
+`$NEXT_PUBLIC_SERVER_URL/api/internal/salad/webhook`. This ingress verifies Salad's
+Svix `webhook-id`, `webhook-timestamp`, and `webhook-signature` headers using
+`SALAD_WEBHOOK_SECRET`, binds the signed job input to the known output prefix, and
+deduplicates the event before applying a state transition. Failed native jobs consume
+the application's three-attempt budget; a provider success becomes ready only after
+S3 contains `manifest.mpd` and a matching, worker-written `completion.json` marker.
+The existing `/api/internal/transcode/callback` remains the authenticated callback
+contract for an application-owned worker/translator.
 
 ## Deployed acceptance checks
 

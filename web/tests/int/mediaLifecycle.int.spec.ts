@@ -120,6 +120,7 @@ describe('Media Asset lifecycle', () => {
     const asset = await createReadyAsset(owner)
     const readyAt = new Date('2026-09-14T12:00:00.000Z')
     const objectKey = 'private/raw/retained-lesson.mp4'
+    const processingJobId = newProcessingJobId()
     await payload.create({
       collection: 'upload-sessions',
       data: {
@@ -147,7 +148,7 @@ describe('Media Asset lifecycle', () => {
         nextAttemptAt: readyAt.toISOString(),
         objectKey,
         owner: owner.id,
-        processingJobId: newProcessingJobId(),
+        processingJobId,
         queuedAt: readyAt.toISOString(),
         readyAt: readyAt.toISOString(),
         renditions: [],
@@ -248,6 +249,7 @@ describe('Media Asset lifecycle', () => {
       id: asset.id,
       overrideAccess: true,
     })
+    const processingJobId = newProcessingJobId()
     await payload.create({
       collection: 'processing-jobs',
       data: {
@@ -257,7 +259,7 @@ describe('Media Asset lifecycle', () => {
         nextAttemptAt: readyAt.toISOString(),
         objectKey: 'private/raw/already-deleted.mp4',
         owner: owner.id,
-        processingJobId: newProcessingJobId(),
+        processingJobId,
         providerJobId,
         queuedAt: readyAt.toISOString(),
         readyAt: readyAt.toISOString(),
@@ -283,6 +285,7 @@ describe('Media Asset lifecycle', () => {
     expect(deleteOutputs).toHaveBeenCalledOnce()
     expect(deleteOutputs).toHaveBeenCalledWith({
       mediaAssetId: asset.mediaAssetId,
+      processingJobId,
       providerJobId,
     })
     await expect(

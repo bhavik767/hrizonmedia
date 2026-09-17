@@ -6,16 +6,18 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   ListPartsCommand,
+  PutObjectCommand,
   S3Client,
   UploadPartCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 import type { CompletedPart } from '../multipart'
-import type { MediaProbe, StorageProvider } from './contracts'
+import type { MediaProbe, Rendition, StorageProvider } from './contracts'
 import { probeS3Object } from './ffprobe'
 import { InvalidMediaError, MultipartUploadError } from './errors'
 import {
@@ -29,7 +31,7 @@ import {
 const PART_SIZE = 5 * 1024 * 1024
 const MAX_PARTS = 10_000
 
-interface S3Configuration {
+export interface S3Configuration {
   accessKeyId: string
   bucket: string
   region: string
@@ -41,7 +43,10 @@ interface CommandClient {
 }
 
 interface S3CommandResult {
-  Body?: { pipe?: (destination: NodeJS.WritableStream) => unknown }
+  Body?: {
+    pipe?: (destination: NodeJS.WritableStream) => unknown
+    transformToString?: () => Promise<string>
+  }
   ChecksumSHA256?: string
   ContentLength?: number
   ContentType?: string
@@ -67,6 +72,113 @@ interface S3Dependencies {
     options: { expiresIn: number },
   ) => Promise<string>
   probe?: (client: CommandClient, bucket: string, key: string) => Promise<MediaProbe>
+}
+
+function createS3Client(configuration: S3Configuration): CommandClient {
+  return new S3Client({
+    credentials: {
+      accessKeyId: configuration.accessKeyId,
+      secretAccessKey: configuration.secretAccessKey,
+    },
+    region: configuration.region,
+  }) as unknown as CommandClient
+}
+
+export function createS3OutputVerifier(
+  configuration: S3Configuration,
+  dependencies: Pick<S3Dependencies, 'client'> = {},
+) {
+  const client =
+    dependencies.client ??
+    createS3Client(configuration)
+
+  return async (input: { attempt: number; outputPrefix: string; renditions: Rendition[] }): Promise<void> => {
+    validateOutputPrefix(input.outputPrefix)
+    const completion = await client.send(
+      new GetObjectCommand({
+        Bucket: configuration.bucket,
+        Key: `${input.outputPrefix}completion.json`,
+      }),
+    )
+    if (
+      !completion.Body?.transformToString ||
+      !completion.ContentLength ||
+      completion.ContentLength > 16 * 1024
+    ) {
+      throw new Error('Transcoder completion marker is invalid.')
+    }
+    let marker: unknown
+    try {
+      marker = JSON.parse(await completion.Body.transformToString())
+    } catch (error) {
+      throw new Error('Transcoder completion marker is invalid.', { cause: error })
+    }
+    if (
+      typeof marker !== 'object' ||
+      marker === null ||
+      (marker as { version?: unknown }).version !== 1 ||
+      (marker as { attempt?: unknown }).attempt !== input.attempt ||
+      (marker as { outputPrefix?: unknown }).outputPrefix !== input.outputPrefix ||
+      JSON.stringify((marker as { renditions?: unknown }).renditions) !==
+        JSON.stringify(input.renditions)
+    ) {
+      throw new Error('Transcoder completion marker does not match the Processing Job.')
+    }
+    const manifest = await client.send(
+      new GetObjectCommand({
+        Bucket: configuration.bucket,
+        Key: `${input.outputPrefix}manifest.mpd`,
+      }),
+    )
+    if (
+      manifest.ContentType !== 'application/dash+xml' ||
+      !manifest.ContentLength ||
+      manifest.ContentLength > 1024 * 1024 ||
+      !manifest.Body?.transformToString
+    ) {
+      throw new Error('Transcoder manifest is missing or invalid.')
+    }
+    const manifestText = await manifest.Body.transformToString()
+    if (
+      !/codecs=["'][^"']*avc1/i.test(manifestText) ||
+      !/codecs=["'][^"']*mp4a/i.test(manifestText) ||
+      !/edef8ba9-79d6-4ace-a3c8-27dcd51d21ed/i.test(manifestText) ||
+      input.renditions.some(({ height }) => !new RegExp(`height=["']${height}["']`).test(manifestText))
+    ) {
+      throw new Error('Transcoder manifest does not contain the approved encrypted ladder.')
+    }
+    const listed = await client.send(
+      new ListObjectsV2Command({ Bucket: configuration.bucket, Prefix: input.outputPrefix }),
+    )
+    const keys = (listed.Contents ?? []).flatMap(({ Key }) => (Key ? [Key] : []))
+    if (
+      !keys.some((key) => key.endsWith('.mp4')) ||
+      !keys.some((key) => key.endsWith('.m4s')) ||
+      keys.some((key) => !key.startsWith(input.outputPrefix))
+    ) {
+      throw new Error('Transcoder segments are missing or outside the canonical output prefix.')
+    }
+  }
+}
+
+export function createS3TranscodeTombstone(
+  configuration: S3Configuration,
+  dependencies: Pick<S3Dependencies, 'client'> = {},
+) {
+  const client = dependencies.client ?? createS3Client(configuration)
+  return async (processingJobId: string): Promise<void> => {
+    if (!/^processing_[0-9a-f-]{36}$/.test(processingJobId)) {
+      throw new Error('Processing Job ID is invalid.')
+    }
+    await client.send(
+      new PutObjectCommand({
+        Body: '{}',
+        Bucket: configuration.bucket,
+        ContentType: 'application/json',
+        Key: `transcode-tombstones/${processingJobId}`,
+      }),
+    )
+  }
 }
 
 function normalizeETag(value: string | undefined): string {
@@ -98,13 +210,7 @@ export function createS3StorageProvider(
 ): StorageProvider {
   const client =
     dependencies.client ??
-    (new S3Client({
-      credentials: {
-        accessKeyId: configuration.accessKeyId,
-        secretAccessKey: configuration.secretAccessKey,
-      },
-      region: configuration.region,
-    }) as unknown as CommandClient)
+    createS3Client(configuration)
   const presign =
     dependencies.presign ??
     ((signingClient: CommandClient, command: UploadPartCommand, options: { expiresIn: number }) =>

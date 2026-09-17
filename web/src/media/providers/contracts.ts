@@ -71,9 +71,11 @@ export interface StorageProvider {
 export interface TranscodeProvider {
   deleteOutputs(input: {
     mediaAssetId: MediaAssetId
+    processingJobId?: ProcessingJobId
     providerJobId: ProviderJobId | null
   }): Promise<void>
   queue(input: {
+    attempt: number
     idempotencyKey: string
     mediaAssetId: MediaAssetId
     objectKey: string
