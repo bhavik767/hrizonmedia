@@ -11,6 +11,9 @@ export const REAL_MEDIA_PROVIDER_VARIABLES = [
   'SALAD_PROJECT_NAME',
   'SALAD_QUEUE_NAME',
   'SALAD_WEBHOOK_SECRET',
+  'DOVERUNNER_SITE_ID',
+  'DOVERUNNER_SITE_KEY',
+  'DOVERUNNER_ACCESS_KEY',
 ]
 
 /**
@@ -28,6 +31,9 @@ export const REAL_MEDIA_PROVIDER_VARIABLES = [
  *   saladProjectName: string,
  *   saladQueueName: string,
  *   saladWebhookURL: string,
+ *   doveRunnerAccessKey: string,
+ *   doveRunnerSiteId: string,
+ *   doveRunnerSiteKey: string,
  * }}
  */
 export function readRealMediaProviderConfiguration(environment) {
@@ -49,6 +55,9 @@ export function readRealMediaProviderConfiguration(environment) {
     saladOrganizationName: environment.SALAD_ORGANIZATION_NAME.trim(),
     saladProjectName: environment.SALAD_PROJECT_NAME.trim(),
     saladQueueName: environment.SALAD_QUEUE_NAME.trim(),
+    doveRunnerAccessKey: environment.DOVERUNNER_ACCESS_KEY.trim(),
+    doveRunnerSiteId: environment.DOVERUNNER_SITE_ID.trim(),
+    doveRunnerSiteKey: environment.DOVERUNNER_SITE_KEY.trim(),
     saladWebhookURL: new URL(
       '/api/internal/salad/webhook',
       environment.NEXT_PUBLIC_SERVER_URL.trim(),

@@ -4,6 +4,7 @@ import { readRealMediaProviderConfiguration } from '@/config/media-provider-envi
 
 import type { MediaProviders } from './contracts'
 import { createCloudFrontDeliveryProvider } from './cloudfront'
+import { createDoveRunnerDrmProvider } from './doverunner'
 import { getFakeProviders } from './fake'
 import {
   createS3OutputVerifier,
@@ -15,41 +16,37 @@ import { createSaladTranscodeProvider } from './salad'
 export function getMediaProviders(environment: NodeJS.ProcessEnv = process.env): MediaProviders {
   const configuration = readRealMediaProviderConfiguration(environment)
   if (!configuration) return getFakeProviders(environment)
-
-  const providers: MediaProviders = getFakeProviders(environment)
-  providers.storage = createS3StorageProvider({
+  const s3Configuration = {
     accessKeyId: configuration.s3AccessKeyId,
     bucket: configuration.s3Bucket,
     region: configuration.s3Region,
     secretAccessKey: configuration.s3SecretAccessKey,
-  })
-  providers.delivery = createCloudFrontDeliveryProvider({
-    domain: configuration.cloudFrontDomain,
-    keyPairId: configuration.cloudFrontKeyPairId,
-    privateKey: configuration.cloudFrontPrivateKey,
-  })
-  providers.transcode = createSaladTranscodeProvider(
-    {
-      apiKey: configuration.saladApiKey,
-      organizationName: configuration.saladOrganizationName,
-      projectName: configuration.saladProjectName,
-      queueName: configuration.saladQueueName,
-      webhookURL: configuration.saladWebhookURL,
-    },
-    {
-      tombstone: createS3TranscodeTombstone({
-        accessKeyId: configuration.s3AccessKeyId,
-        bucket: configuration.s3Bucket,
-        region: configuration.s3Region,
-        secretAccessKey: configuration.s3SecretAccessKey,
-      }),
-      verifyOutputs: createS3OutputVerifier({
-        accessKeyId: configuration.s3AccessKeyId,
-        bucket: configuration.s3Bucket,
-        region: configuration.s3Region,
-        secretAccessKey: configuration.s3SecretAccessKey,
-      }),
-    },
-  )
-  return providers
+  }
+
+  return {
+    delivery: createCloudFrontDeliveryProvider({
+      domain: configuration.cloudFrontDomain,
+      keyPairId: configuration.cloudFrontKeyPairId,
+      privateKey: configuration.cloudFrontPrivateKey,
+    }),
+    drm: createDoveRunnerDrmProvider({
+      accessKey: configuration.doveRunnerAccessKey,
+      siteId: configuration.doveRunnerSiteId,
+      siteKey: configuration.doveRunnerSiteKey,
+    }),
+    storage: createS3StorageProvider(s3Configuration),
+    transcode: createSaladTranscodeProvider(
+      {
+        apiKey: configuration.saladApiKey,
+        organizationName: configuration.saladOrganizationName,
+        projectName: configuration.saladProjectName,
+        queueName: configuration.saladQueueName,
+        webhookURL: configuration.saladWebhookURL,
+      },
+      {
+        tombstone: createS3TranscodeTombstone(s3Configuration),
+        verifyOutputs: createS3OutputVerifier(s3Configuration),
+      },
+    ),
+  }
 }
