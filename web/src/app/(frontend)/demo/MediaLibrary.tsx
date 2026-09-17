@@ -157,12 +157,28 @@ export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
     })
   }, [refresh])
 
+  const hasActiveProcessing = assets.some(({ status }) => status === 'queued' || status === 'processing')
+
   useEffect(() => {
-    if (uploading) return
-    if (!assets.some(({ status }) => status === 'queued' || status === 'processing')) return
-    const timer = window.setInterval(() => void refresh().catch(() => undefined), 250)
-    return () => window.clearInterval(timer)
-  }, [assets, refresh, uploading])
+    if (uploading || !hasActiveProcessing) return
+
+    let cancelled = false
+    let timer: number | undefined
+    const poll = async () => {
+      try {
+        await refresh()
+      } catch {
+        // The next poll can recover from a transient request failure.
+      }
+      if (!cancelled) timer = window.setTimeout(() => void poll(), 2_000)
+    }
+    timer = window.setTimeout(() => void poll(), 2_000)
+
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [hasActiveProcessing, refresh, uploading])
 
   async function upload(formData: FormData) {
     const file = formData.get('file')

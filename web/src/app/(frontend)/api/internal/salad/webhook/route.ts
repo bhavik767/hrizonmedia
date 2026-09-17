@@ -15,6 +15,7 @@ const NATIVE_JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{
 const PROCESSING_JOB_ID = /^processing_[0-9a-f-]{36}$/
 
 async function reject(reason: string, status: number, message: string): Promise<Response> {
+  console.error(`Salad webhook rejected: ${reason}`)
   try {
     await recordAuditEvent(await getPayload({ config }), {
       action: 'processing_callback_rejected',
@@ -47,18 +48,18 @@ function readEvent(value: unknown) {
     !['cancelled', 'failed', 'succeeded'].includes(String(event.status)) ||
     typeof input !== 'object' ||
     input === null ||
-    typeof metadata !== 'object' ||
-    metadata === null
+    (metadata !== undefined &&
+      (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)))
   ) {
     return null
   }
   const jobInput = input as Record<string, unknown>
-  const jobMetadata = metadata as Record<string, unknown>
+  const jobMetadata = metadata as Record<string, unknown> | undefined
   if (
     typeof jobInput.processingJobId !== 'string' ||
     !PROCESSING_JOB_ID.test(jobInput.processingJobId) ||
     jobInput.outputPrefix !== `outputs/${jobInput.processingJobId}/` ||
-    jobMetadata.processingJobId !== jobInput.processingJobId
+    (jobMetadata !== undefined && jobMetadata.processingJobId !== jobInput.processingJobId)
   ) {
     return null
   }
