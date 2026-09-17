@@ -5,7 +5,11 @@ import { createLocalReq, type Payload } from 'payload'
 import { recordAuditEvent } from '@/audit/events'
 
 import { processingOutputPrefix } from './identifiers'
-import { failProcessingJob, setProcessingAssetStatus } from './processing'
+import {
+  failProcessingJob,
+  retryOrFailProcessingJob,
+  setProcessingAssetStatus,
+} from './processing'
 
 function relationID(value: number | { id: number }): number {
   return typeof value === 'number' ? value : value.id
@@ -17,10 +21,11 @@ export async function applyProcessingCallback(
     callbackId: string
     outputPrefix: string
     providerJobId: string
+    retryFailure?: boolean
     status: 'failed' | 'ready'
   },
   now = new Date(),
-): Promise<void> {
+): Promise<'applied' | 'duplicate' | 'ignored'> {
   const transactionID = await payload.db.beginTransaction()
   if (transactionID === null) throw new Error('Processing callbacks require transactions.')
   const req = await createLocalReq({ req: { transactionID } }, payload)
@@ -49,7 +54,7 @@ export async function applyProcessingCallback(
         throw Object.assign(new Error('Callback event ID has already been used.'), { status: 409 })
       }
       await payload.db.commitTransaction(transactionID)
-      return
+      return 'duplicate'
     }
     const jobs = await payload.find({
       collection: 'processing-jobs',
@@ -63,6 +68,25 @@ export async function applyProcessingCallback(
     if (!job) throw Object.assign(new Error('Processing Job not found.'), { status: 404 })
     if (input.outputPrefix !== processingOutputPrefix(job.processingJobId)) {
       throw Object.assign(new Error('Callback output prefix is invalid.'), { status: 400 })
+    }
+    const asset = await payload.findByID({
+      collection: 'media-assets',
+      depth: 0,
+      id: relationID(job.asset),
+      overrideAccess: true,
+      req,
+    })
+    if (asset.status === 'deleted' || asset.status === 'expired') {
+      await recordAuditEvent(payload, {
+        action: 'processing_callback_received',
+        assetID: relationID(job.asset),
+        details: { ...input, ignored: true },
+        eventKey: `processing-callback:${input.callbackId}`,
+        occurredAt: now,
+        req,
+      })
+      await payload.db.commitTransaction(transactionID)
+      return 'ignored'
     }
     if (job.status !== 'processing') {
       throw Object.assign(new Error('Processing Job is not awaiting a callback.'), { status: 409 })
@@ -78,7 +102,11 @@ export async function applyProcessingCallback(
       })
       await setProcessingAssetStatus(payload, job, 'ready', now, req)
     } else {
-      await failProcessingJob(payload, job, now, 'provider_callback_failed', req)
+      if (input.retryFailure) {
+        await retryOrFailProcessingJob(payload, job, now, 'provider_callback_failed', req)
+      } else {
+        await failProcessingJob(payload, job, now, 'provider_callback_failed', req)
+      }
     }
     await recordAuditEvent(payload, {
       action: 'processing_callback_received',
@@ -93,6 +121,7 @@ export async function applyProcessingCallback(
       req,
     })
     await payload.db.commitTransaction(transactionID)
+    return 'applied'
   } catch (error) {
     await payload.db.rollbackTransaction(transactionID)
     throw error

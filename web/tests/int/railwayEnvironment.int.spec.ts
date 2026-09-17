@@ -86,4 +86,34 @@ describe('Railway environment validation', () => {
     expect(result.stderr).toContain('Real media providers are partially configured')
     expect(result.stderr).toContain('VIDEO_S3_ACCESS_KEY_ID')
   })
+
+  it('requires the Salad queue and webhook configuration with the real media providers', () => {
+    const result = spawnSync(process.execPath, [validator], {
+      encoding: 'utf8',
+      env: {
+        ACCESS_KEY_ID: 'access-key',
+        BUCKET: 'cms-media',
+        DATABASE_URL: 'postgresql://database.example.test/hrizonmedia',
+        ENDPOINT: 'https://storage.example.test',
+        NODE_ENV: 'production',
+        NEXT_PUBLIC_SERVER_URL: 'https://hrizonmedia.example.test',
+        PATH: process.env.PATH,
+        PAYLOAD_SECRET: 'payload-secret',
+        SECRET_ACCESS_KEY: 'secret-key',
+        TRANSCODER_CALLBACK_SECRET: 'callback-secret',
+        VIDEO_CLOUDFRONT_DOMAIN: 'media.example.test',
+        VIDEO_CLOUDFRONT_KEY_PAIR_ID: 'key-pair',
+        VIDEO_CLOUDFRONT_PRIVATE_KEY: 'private-key',
+        VIDEO_S3_ACCESS_KEY_ID: 'video-access',
+        VIDEO_S3_BUCKET: 'private-video',
+        VIDEO_S3_REGION: 'ap-south-1',
+        VIDEO_S3_SECRET_ACCESS_KEY: 'video-secret',
+      },
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('SALAD_API_KEY')
+    expect(result.stderr).toContain('SALAD_QUEUE_NAME')
+    expect(result.stderr).toContain('SALAD_WEBHOOK_SECRET')
+  })
 })

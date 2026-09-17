@@ -6,6 +6,11 @@ export const REAL_MEDIA_PROVIDER_VARIABLES = [
   'VIDEO_CLOUDFRONT_DOMAIN',
   'VIDEO_CLOUDFRONT_KEY_PAIR_ID',
   'VIDEO_CLOUDFRONT_PRIVATE_KEY',
+  'SALAD_API_KEY',
+  'SALAD_ORGANIZATION_NAME',
+  'SALAD_PROJECT_NAME',
+  'SALAD_QUEUE_NAME',
+  'SALAD_WEBHOOK_SECRET',
 ]
 
 /**
@@ -18,6 +23,11 @@ export const REAL_MEDIA_PROVIDER_VARIABLES = [
  *   s3Bucket: string,
  *   s3Region: string,
  *   s3SecretAccessKey: string,
+ *   saladApiKey: string,
+ *   saladOrganizationName: string,
+ *   saladProjectName: string,
+ *   saladQueueName: string,
+ *   saladWebhookURL: string,
  * }}
  */
 export function readRealMediaProviderConfiguration(environment) {
@@ -35,5 +45,13 @@ export function readRealMediaProviderConfiguration(environment) {
     s3Bucket: environment.VIDEO_S3_BUCKET.trim(),
     s3Region: environment.VIDEO_S3_REGION.trim(),
     s3SecretAccessKey: environment.VIDEO_S3_SECRET_ACCESS_KEY.trim(),
+    saladApiKey: environment.SALAD_API_KEY.trim(),
+    saladOrganizationName: environment.SALAD_ORGANIZATION_NAME.trim(),
+    saladProjectName: environment.SALAD_PROJECT_NAME.trim(),
+    saladQueueName: environment.SALAD_QUEUE_NAME.trim(),
+    saladWebhookURL: new URL(
+      '/api/internal/salad/webhook',
+      environment.NEXT_PUBLIC_SERVER_URL.trim(),
+    ).toString(),
   }
 }

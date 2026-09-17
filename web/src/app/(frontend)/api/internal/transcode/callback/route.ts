@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 
 import { recordAuditEvent } from '@/audit/events'
 import { applyProcessingCallback } from '@/media/callbacks'
+import { getMediaProviders } from '@/media/providers'
 import { readBoundedBody } from '@/media/body'
 import config from '@/payload.config'
 
@@ -80,6 +81,7 @@ export async function POST(request: Request): Promise<Response> {
   let input: {
     callbackId?: unknown
     outputPrefix?: unknown
+    processingJobId?: unknown
     providerJobId?: unknown
     status?: unknown
   }
@@ -94,8 +96,12 @@ export async function POST(request: Request): Promise<Response> {
     Array.isArray(input) ||
     typeof input.callbackId !== 'string' ||
     !/^[A-Za-z0-9._:-]{1,128}$/.test(input.callbackId) ||
-    typeof input.providerJobId !== 'string' ||
-    !/^provider_job_[A-Za-z0-9_-]{1,128}$/.test(input.providerJobId) ||
+    !(
+      (typeof input.providerJobId === 'string' &&
+        /^provider_job_[A-Za-z0-9_-]{1,128}$/.test(input.providerJobId)) ||
+      (typeof input.processingJobId === 'string' &&
+        /^processing_[0-9a-f-]{36}$/.test(input.processingJobId))
+    ) ||
     typeof input.outputPrefix !== 'string' ||
     input.outputPrefix.length > 200 ||
     !/^outputs\/processing_[0-9a-f-]{36}\/$/.test(input.outputPrefix) ||
@@ -105,16 +111,30 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    await applyProcessingCallback(
-      await getPayload({ config }),
+    const payload = await getPayload({ config })
+    let providerJobId = input.providerJobId as string | undefined
+    if (!providerJobId) {
+      const jobs = await payload.find({
+        collection: 'processing-jobs',
+        depth: 0,
+        limit: 1,
+        overrideAccess: true,
+        where: { processingJobId: { equals: input.processingJobId as string } },
+      })
+      providerJobId = jobs.docs[0]?.providerJobId ?? undefined
+    }
+    if (!providerJobId) return rejectCallback('job_not_found', 404, 'Processing Job not found.')
+    const result = await applyProcessingCallback(
+      payload,
       {
         callbackId: input.callbackId,
         outputPrefix: input.outputPrefix,
-        providerJobId: input.providerJobId,
+        providerJobId,
         status: input.status,
       },
       new Date(timestampMs),
     )
+    if (result === 'ignored') await getMediaProviders().storage.deletePrefix(input.outputPrefix)
     return new Response(null, { status: 204 })
   } catch (error) {
     if (error instanceof Error && 'status' in error && typeof error.status === 'number') {

@@ -110,6 +110,7 @@ describe('deterministic media providers', () => {
       providerUploadId: initiated.providerUploadId,
     })
     const providerJobId = await fakeTranscodeProvider.queue({
+      attempt: 1,
       idempotencyKey: processingJobId,
       mediaAssetId,
       objectKey: stored.objectKey,
@@ -118,6 +119,7 @@ describe('deterministic media providers', () => {
       source: { durationSeconds: 60, height: 1080, width: 1920 },
     })
     const repeatedProviderJobId = await fakeTranscodeProvider.queue({
+      attempt: 1,
       idempotencyKey: processingJobId,
       mediaAssetId,
       objectKey: stored.objectKey,
