@@ -5,7 +5,11 @@ import { readRealMediaProviderConfiguration } from '@/config/media-provider-envi
 import type { MediaProviders } from './contracts'
 import { createCloudFrontDeliveryProvider } from './cloudfront'
 import { getFakeProviders } from './fake'
-import { createS3OutputVerifier, createS3StorageProvider } from './s3'
+import {
+  createS3OutputVerifier,
+  createS3StorageProvider,
+  createS3TranscodeTombstone,
+} from './s3'
 import { createSaladTranscodeProvider } from './salad'
 
 export function getMediaProviders(environment: NodeJS.ProcessEnv = process.env): MediaProviders {
@@ -33,6 +37,12 @@ export function getMediaProviders(environment: NodeJS.ProcessEnv = process.env):
       webhookURL: configuration.saladWebhookURL,
     },
     {
+      tombstone: createS3TranscodeTombstone({
+        accessKeyId: configuration.s3AccessKeyId,
+        bucket: configuration.s3Bucket,
+        region: configuration.s3Region,
+        secretAccessKey: configuration.s3SecretAccessKey,
+      }),
       verifyOutputs: createS3OutputVerifier({
         accessKeyId: configuration.s3AccessKeyId,
         bucket: configuration.s3Bucket,

@@ -3,6 +3,7 @@ import { Webhook } from 'svix'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { POST as saladWebhook } from '@/app/(frontend)/api/internal/salad/webhook/route'
+import { applyProcessingCallback } from '@/media/callbacks'
 import { newMediaAssetId, newProcessingJobId, processingOutputPrefix } from '@/media/identifiers'
 import config from '@/payload.config'
 
@@ -18,7 +19,7 @@ async function clean() {
   await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
 }
 
-async function processingJob() {
+async function createProcessingJobFixture() {
   const owner = await payload.create({
     collection: 'pilot-members',
     data: {
@@ -99,7 +100,7 @@ describe('SaladCloud native webhook', () => {
   })
 
   it('authenticates and deduplicates a failure while preserving the app retry budget', async () => {
-    const { job, processingJobId } = await processingJob()
+    const { job, processingJobId } = await createProcessingJobFixture()
     const body = JSON.stringify({
       id: nativeJobId,
       input: { outputPrefix: processingOutputPrefix(processingJobId), processingJobId },
@@ -121,7 +122,7 @@ describe('SaladCloud native webhook', () => {
   })
 
   it('rejects a tampered native webhook without changing the Processing Job', async () => {
-    const { job, processingJobId } = await processingJob()
+    const { job, processingJobId } = await createProcessingJobFixture()
     const signed = JSON.stringify({
       id: nativeJobId,
       input: { outputPrefix: processingOutputPrefix(processingJobId), processingJobId },
@@ -142,5 +143,28 @@ describe('SaladCloud native webhook', () => {
     await expect(
       payload.findByID({ collection: 'processing-jobs', id: job.id, overrideAccess: true }),
     ).resolves.toMatchObject({ providerJobId: `provider_job_${nativeJobId}`, status: 'processing' })
+  })
+
+  it('ignores a late successful callback after deletion instead of resurrecting the asset', async () => {
+    const { job, processingJobId } = await createProcessingJobFixture()
+    const assetID = typeof job.asset === 'number' ? job.asset : job.asset.id
+    await payload.update({
+      collection: 'media-assets',
+      data: { deletedAt: now.toISOString(), status: 'deleted', statusChangedAt: now.toISOString() },
+      id: assetID,
+      overrideAccess: true,
+    })
+
+    await expect(
+      applyProcessingCallback(payload, {
+        callbackId: 'late-ready-after-delete',
+        outputPrefix: processingOutputPrefix(processingJobId),
+        providerJobId: `provider_job_${nativeJobId}`,
+        status: 'ready',
+      }),
+    ).resolves.toBe('ignored')
+    await expect(
+      payload.findByID({ collection: 'media-assets', id: assetID, overrideAccess: true }),
+    ).resolves.toMatchObject({ status: 'deleted' })
   })
 })

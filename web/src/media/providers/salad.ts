@@ -19,6 +19,7 @@ export interface SaladTranscodeConfiguration {
 }
 
 export interface SaladOutputVerification {
+  attempt: number
   outputPrefix: string
   renditions: Rendition[]
 }
@@ -36,6 +37,7 @@ interface SaladJob {
 
 interface SaladDependencies {
   fetch?: typeof globalThis.fetch
+  tombstone(processingJobId: string): Promise<void>
   verifyOutputs(input: SaladOutputVerification): Promise<void>
 }
 
@@ -80,6 +82,9 @@ function validatedInput(input: Parameters<TranscodeProvider['queue']>[0]) {
   const expected = expectedRenditions(input.source)
   if (
     !PROCESSING_JOB_ID.test(input.idempotencyKey) ||
+    !Number.isInteger(input.attempt) ||
+    input.attempt < 1 ||
+    input.attempt > 3 ||
     !MEDIA_ASSET_ID.test(input.mediaAssetId) ||
     !SOURCE_OBJECT_KEY.test(input.objectKey) ||
     input.outputPrefix !== `outputs/${input.idempotencyKey}/` ||
@@ -89,6 +94,7 @@ function validatedInput(input: Parameters<TranscodeProvider['queue']>[0]) {
     throw new PermanentTranscodeError('Transcode job metadata is invalid.')
   }
   return {
+    attempt: input.attempt,
     drmContentId: `drm_${input.idempotencyKey}`,
     mediaAssetId: input.mediaAssetId,
     objectKey: input.objectKey,
@@ -163,7 +169,8 @@ export function createSaladTranscodeProvider(
   }
 
   return {
-    async deleteOutputs({ providerJobId: id }) {
+    async deleteOutputs({ processingJobId, providerJobId: id }) {
+      if (processingJobId) await dependencies.tombstone(processingJobId)
       if (!id) return
       const response = await fetcher(`${queueURL}/${nativeJobId(id)}`, {
         headers,
@@ -208,6 +215,7 @@ export function createSaladTranscodeProvider(
       const input = readCompletedInput(job.input)
       try {
         await dependencies.verifyOutputs({
+          attempt: input.attempt,
           outputPrefix: input.outputPrefix,
           renditions: input.renditions,
         })

@@ -283,6 +283,7 @@ async function dispatchQueuedJobs(
 
     try {
       const providerJobId = await provider.queue({
+        attempt: job.attempts,
         idempotencyKey: job.processingJobId,
         mediaAssetId: (
           await payload.findByID({

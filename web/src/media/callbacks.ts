@@ -25,7 +25,7 @@ export async function applyProcessingCallback(
     status: 'failed' | 'ready'
   },
   now = new Date(),
-): Promise<void> {
+): Promise<'applied' | 'duplicate' | 'ignored'> {
   const transactionID = await payload.db.beginTransaction()
   if (transactionID === null) throw new Error('Processing callbacks require transactions.')
   const req = await createLocalReq({ req: { transactionID } }, payload)
@@ -54,7 +54,7 @@ export async function applyProcessingCallback(
         throw Object.assign(new Error('Callback event ID has already been used.'), { status: 409 })
       }
       await payload.db.commitTransaction(transactionID)
-      return
+      return 'duplicate'
     }
     const jobs = await payload.find({
       collection: 'processing-jobs',
@@ -68,6 +68,25 @@ export async function applyProcessingCallback(
     if (!job) throw Object.assign(new Error('Processing Job not found.'), { status: 404 })
     if (input.outputPrefix !== processingOutputPrefix(job.processingJobId)) {
       throw Object.assign(new Error('Callback output prefix is invalid.'), { status: 400 })
+    }
+    const asset = await payload.findByID({
+      collection: 'media-assets',
+      depth: 0,
+      id: relationID(job.asset),
+      overrideAccess: true,
+      req,
+    })
+    if (asset.status === 'deleted' || asset.status === 'expired') {
+      await recordAuditEvent(payload, {
+        action: 'processing_callback_received',
+        assetID: relationID(job.asset),
+        details: { ...input, ignored: true },
+        eventKey: `processing-callback:${input.callbackId}`,
+        occurredAt: now,
+        req,
+      })
+      await payload.db.commitTransaction(transactionID)
+      return 'ignored'
     }
     if (job.status !== 'processing') {
       throw Object.assign(new Error('Processing Job is not awaiting a callback.'), { status: 409 })
@@ -102,6 +121,7 @@ export async function applyProcessingCallback(
       req,
     })
     await payload.db.commitTransaction(transactionID)
+    return 'applied'
   } catch (error) {
     await payload.db.rollbackTransaction(transactionID)
     throw error

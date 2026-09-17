@@ -123,13 +123,14 @@ export async function POST(request: Request): Promise<Response> {
       })
       if (status !== 'ready') return reject('outputs_not_ready', 409, 'Processing outputs are not ready.')
     }
-    await applyProcessingCallback(payload, {
+    const result = await applyProcessingCallback(payload, {
       callbackId: `salad:${headers['webhook-id']}`,
       outputPrefix: event.outputPrefix,
       providerJobId,
       retryFailure: event.status !== 'succeeded',
       status: event.status === 'succeeded' ? 'ready' : 'failed',
     })
+    if (result === 'ignored') await getMediaProviders().storage.deletePrefix(event.outputPrefix)
     return new Response(null, { status: 204 })
   } catch (error) {
     if (error instanceof TransientTranscodeError) {

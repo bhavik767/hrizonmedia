@@ -27,7 +27,7 @@ function provider(fetch: typeof globalThis.fetch, verifyOutputs = vi.fn(async ()
         queueName: 'video-transcoding',
         webhookURL: 'https://staging.example.test/api/internal/salad/webhook',
       },
-      { fetch, verifyOutputs },
+      { fetch, tombstone: vi.fn(async () => undefined), verifyOutputs },
     ),
     verifyOutputs,
   }
@@ -44,6 +44,7 @@ describe('SaladCloud transcode provider', () => {
 
     await expect(
       transcode.queue({
+        attempt: 1,
         idempotencyKey: processingJobId,
         mediaAssetId,
         objectKey: 'sources/upload_00000000-0000-4000-8000-000000000000/source.mp4',
@@ -64,6 +65,7 @@ describe('SaladCloud transcode provider', () => {
     })
     expect(JSON.parse(String(init?.body))).toEqual({
       input: {
+        attempt: 1,
         drmContentId: `drm_${processingJobId}`,
         mediaAssetId,
         objectKey: 'sources/upload_00000000-0000-4000-8000-000000000000/source.mp4',
@@ -84,6 +86,7 @@ describe('SaladCloud transcode provider', () => {
 
     await expect(
       transcode.queue({
+        attempt: 1,
         idempotencyKey: processingJobId,
         mediaAssetId: newMediaAssetId(),
         objectKey: '../private/source.mp4',
@@ -101,7 +104,7 @@ describe('SaladCloud transcode provider', () => {
     const fetch = vi.fn(async () =>
       Response.json({
         id: nativeJobId,
-        input: { outputPrefix, processingJobId, renditions, source },
+        input: { attempt: 1, outputPrefix, processingJobId, renditions, source },
         status: 'succeeded',
       }),
     )
@@ -115,7 +118,7 @@ describe('SaladCloud transcode provider', () => {
         startedAt: new Date(),
       }),
     ).resolves.toBe('ready')
-    expect(verifyOutputs).toHaveBeenCalledWith({ outputPrefix, renditions })
+    expect(verifyOutputs).toHaveBeenCalledWith({ attempt: 1, outputPrefix, renditions })
 
     verifyOutputs.mockRejectedValueOnce(new Error('manifest missing'))
     await expect(

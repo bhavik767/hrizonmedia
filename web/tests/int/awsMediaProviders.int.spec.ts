@@ -42,22 +42,28 @@ describe('S3 storage provider', () => {
     const { client, send } = commandSender([
       {
         Body: {
-          transformToString: async () => JSON.stringify({ outputPrefix, renditions, version: 1 }),
+          transformToString: async () => JSON.stringify({ attempt: 1, outputPrefix, renditions, version: 1 }),
         },
         ContentLength: 512,
       },
-      { ContentLength: 1024, ContentType: 'application/dash+xml' },
+      {
+        Body: { transformToString: async () => '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><Representation codecs="avc1.64001f" height="360"/><Representation codecs="avc1.640028" height="480"/><Representation codecs="mp4a.40.2"/></MPD>' },
+        ContentLength: 1024,
+        ContentType: 'application/dash+xml',
+      },
+      { Contents: [{ Key: `${outputPrefix}video-init.mp4` }, { Key: `${outputPrefix}video-1.m4s` }] },
     ])
     const verify = createS3OutputVerifier(
       { accessKeyId: 'access', bucket: 'private-bucket', region: 'ap-south-1', secretAccessKey: 'secret' },
       { client },
     )
 
-    await expect(verify({ outputPrefix, renditions })).resolves.toBeUndefined()
+    await expect(verify({ attempt: 1, outputPrefix, renditions })).resolves.toBeUndefined()
     expect(send.mock.calls[0]![0]).toBeInstanceOf(GetObjectCommand)
     expect((send.mock.calls[0]![0] as GetObjectCommand).input.Key).toBe(`${outputPrefix}completion.json`)
-    expect(send.mock.calls[1]![0]).toBeInstanceOf(HeadObjectCommand)
-    expect((send.mock.calls[1]![0] as HeadObjectCommand).input.Key).toBe(`${outputPrefix}manifest.mpd`)
+    expect(send.mock.calls[1]![0]).toBeInstanceOf(GetObjectCommand)
+    expect((send.mock.calls[1]![0] as GetObjectCommand).input.Key).toBe(`${outputPrefix}manifest.mpd`)
+    expect(send.mock.calls[2]![0]).toBeInstanceOf(ListObjectsV2Command)
   })
 
   it('creates a private checksummed multipart upload and signs an exact part receipt', async () => {

@@ -7,6 +7,7 @@ import type { MediaAsset, PilotMember } from '@/payload-types'
 import {
   processingOutputPrefix,
   type MediaAssetId,
+  type ProcessingJobId,
   type ProviderJobId,
   type ProviderUploadId,
 } from './identifiers'
@@ -203,13 +204,14 @@ async function cleanupRevokedAsset(
         where: { asset: { equals: asset.id } },
       })
       const job = jobs.docs[0]
+      await providers.transcode.deleteOutputs({
+        mediaAssetId: asset.mediaAssetId as MediaAssetId,
+        processingJobId: job?.processingJobId as ProcessingJobId | undefined,
+        providerJobId: (job?.providerJobId as ProviderJobId | null) ?? null,
+      })
       if (job?.processingJobId) {
         await providers.storage.deletePrefix(processingOutputPrefix(job.processingJobId))
       }
-      await providers.transcode.deleteOutputs({
-        mediaAssetId: asset.mediaAssetId as MediaAssetId,
-        providerJobId: (job?.providerJobId as ProviderJobId | null) ?? null,
-      })
       await payload.update({
         collection: 'media-assets',
         data: { outputsDeletedAt: now.toISOString() },

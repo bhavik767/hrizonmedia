@@ -27,7 +27,6 @@ export const REAL_MEDIA_PROVIDER_VARIABLES = [
  *   saladOrganizationName: string,
  *   saladProjectName: string,
  *   saladQueueName: string,
- *   saladWebhookSecret: string,
  *   saladWebhookURL: string,
  * }}
  */
@@ -50,7 +49,6 @@ export function readRealMediaProviderConfiguration(environment) {
     saladOrganizationName: environment.SALAD_ORGANIZATION_NAME.trim(),
     saladProjectName: environment.SALAD_PROJECT_NAME.trim(),
     saladQueueName: environment.SALAD_QUEUE_NAME.trim(),
-    saladWebhookSecret: environment.SALAD_WEBHOOK_SECRET.trim(),
     saladWebhookURL: new URL(
       '/api/internal/salad/webhook',
       environment.NEXT_PUBLIC_SERVER_URL.trim(),
