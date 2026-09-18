@@ -3,7 +3,9 @@
 
 FROM golang:1.25-bookworm AS queue-worker
 
-ARG SALAD_QUEUE_WORKER_REF=73d7a3c80a73f26339194e024cb47c8501c67f75
+# Use the current released queue worker. The previous pinned revision can
+# terminate its gRPC job stream with RST_STREAM/INTERNAL_ERROR on Salad.
+ARG SALAD_QUEUE_WORKER_REF=v0.7.0
 
 RUN git clone https://github.com/SaladTechnologies/salad-cloud-job-queue-worker.git /src \
   && cd /src \
