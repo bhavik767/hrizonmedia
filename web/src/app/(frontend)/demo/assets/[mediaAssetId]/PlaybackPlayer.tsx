@@ -11,9 +11,10 @@ interface PlaybackGrantContract {
   distinctiveIdentifier: 'not-allowed'
   expiresAt: string
   hdcpRequired: false
-  keySystem: 'com.widevine.alpha'
+  fairPlayCertificateURL?: string
+  keySystem: 'com.apple.fps' | 'com.widevine.alpha'
   licenceURL: string
-  manifestFormat: 'dash'
+  manifestFormat: 'dash' | 'hls'
   manifestURL: string
   persistentState: 'not-allowed'
   playbackGrantId: string
@@ -57,33 +58,51 @@ async function responseJSON<T>(response: Response): Promise<T> {
   return body
 }
 
-async function assertWidevineAvailable(): Promise<void> {
-  if (!navigator.requestMediaKeySystemAccess) {
-    throw new Error('Secure playback is not supported by this browser. Widevine DRM is unavailable.')
+async function keySystemAvailable(
+  keySystem: 'com.apple.fps' | 'com.widevine.alpha',
+  initDataType: 'cenc' | 'skd',
+): Promise<boolean> {
+  if (!navigator.requestMediaKeySystemAccess) return false
+  try {
+    await navigator.requestMediaKeySystemAccess(keySystem, [
+      {
+        audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }],
+        initDataTypes: [initDataType],
+        videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.640028"' }],
+      },
+    ])
+    return true
+  } catch {
+    return false
   }
-  await navigator.requestMediaKeySystemAccess('com.widevine.alpha', [
-    {
-      audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }],
-      initDataTypes: ['cenc'],
-      videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.640028"' }],
-    },
-  ])
 }
 
-export function PlaybackPlayer({
-  mediaAssetId,
-}: {
-  mediaAssetId: string
-}) {
+async function protectedPlaybackCapabilities() {
+  const [fairPlayAvailable, widevineAvailable] = await Promise.all([
+    keySystemAvailable('com.apple.fps', 'skd'),
+    keySystemAvailable('com.widevine.alpha', 'cenc'),
+  ])
+  if (!fairPlayAvailable && !widevineAvailable) {
+    throw new Error(
+      'Secure playback is not supported by this browser. FairPlay or Widevine DRM is unavailable.',
+    )
+  }
+  return { fairPlayAvailable, widevineAvailable }
+}
+
+export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
   const playerRef = useRef<null | { destroy(): Promise<void> }>(null)
   const uiRef = useRef<null | { destroy(): Promise<unknown> }>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [message, setMessage] = useState('Playback has not started.')
-  const [watermark, setWatermark] = useState<null | (Watermark & {
-    playbackGrantId: string
-    playbackGrantToken: string
-  })>(null)
+  const [watermark, setWatermark] = useState<
+    | null
+    | (Watermark & {
+        playbackGrantId: string
+        playbackGrantToken: string
+      })
+  >(null)
   const [watermarkPosition, setWatermarkPosition] = useState(0)
   const [starting, setStarting] = useState(false)
 
@@ -136,9 +155,12 @@ export function PlaybackPlayer({
     setStarting(true)
     setMessage('Authorising encrypted playback…')
     try {
-      await assertWidevineAvailable()
+      const capabilities = await protectedPlaybackCapabilities()
       const response = await fetch(`/api/demo/assets/${mediaAssetId}/playback-grants`, {
-        headers: { 'X-Hrizonmedia-Widevine': 'available' },
+        headers: {
+          'X-Hrizonmedia-Fairplay': capabilities.fairPlayAvailable ? 'available' : 'unavailable',
+          'X-Hrizonmedia-Widevine': capabilities.widevineAvailable ? 'available' : 'unavailable',
+        },
         method: 'POST',
       })
       const grant = await responseJSON<PlaybackGrantContract>(response)
@@ -173,9 +195,28 @@ export function PlaybackPlayer({
             [grant.keySystem]: {
               distinctiveIdentifierRequired: false,
               persistentStateRequired: false,
+              ...(grant.fairPlayCertificateURL
+                ? { serverCertificateUri: grant.fairPlayCertificateURL }
+                : {}),
               sessionType: grant.sessionType,
             },
           },
+          ...(grant.keySystem === 'com.apple.fps'
+            ? {
+                initDataTransform: (
+                  initData: Uint8Array,
+                  initDataType: string,
+                  drmInfo: { serverCertificate?: Uint8Array },
+                ) => {
+                  if (initDataType !== 'skd' || !drmInfo.serverCertificate) return initData
+                  return shaka.drm.FairPlay.initDataTransform(
+                    initData,
+                    shaka.drm.FairPlay.defaultGetContentId(initData),
+                    drmInfo.serverCertificate,
+                  )
+                },
+              }
+            : {}),
           persistentSessionOnlinePlayback: false,
           persistentSessionsMetadata: [],
           servers: { [grant.keySystem]: grant.licenceURL },
@@ -272,7 +313,7 @@ export function PlaybackPlayer({
     <section aria-labelledby="secure-playback-title" className="secure-playback">
       <div className="secure-playback__heading">
         <div>
-          <p className="eyebrow">Widevine streaming</p>
+          <p className="eyebrow">Protected streaming</p>
           <h2 id="secure-playback-title">Secure playback</h2>
         </div>
         <button disabled={starting} onClick={startPlayback} type="button">
@@ -313,9 +354,8 @@ export function PlaybackPlayer({
       <p className="secure-playback__disclosure" id="playback-watermark-notice">
         A compact Leak ID and server-issued timestamp move across playback to support recording
         investigations without displaying your email. Streaming-only playback uses temporary rights;
-        downloads, offline playback,
-        persistent licences, and picture-in-picture are disabled. Read the{' '}
-        <Link href="/demo/terms">Pilot terms</Link>.
+        downloads, offline playback, persistent licences, and picture-in-picture are disabled. Read
+        the <Link href="/demo/terms">Pilot terms</Link>.
       </p>
     </section>
   )

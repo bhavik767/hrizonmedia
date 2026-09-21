@@ -3,7 +3,7 @@ import { createDecipheriv, createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 
 import { newPlaybackGrantId } from '@/media/identifiers'
-import { widevinePlaybackBrowser } from '@/media/playback-browser'
+import { fairPlayPlaybackBrowser, widevinePlaybackBrowser } from '@/media/playback-browser'
 import { createDoveRunnerDrmProvider } from '@/media/providers/doverunner'
 import { getMediaProviders } from '@/media/providers'
 import { PermanentTranscodeError } from '@/media/providers/errors'
@@ -27,9 +27,10 @@ function decodeProviderToken(token: string) {
     Buffer.from('0123456789abcdef', 'utf8'),
   )
   const policy = JSON.parse(
-    Buffer.concat([decipher.update(Buffer.from(decoded.policy, 'base64')), decipher.final()]).toString(
-      'utf8',
-    ),
+    Buffer.concat([
+      decipher.update(Buffer.from(decoded.policy, 'base64')),
+      decipher.final(),
+    ]).toString('utf8'),
   )
   return { policy, token: decoded }
 }
@@ -80,6 +81,7 @@ describe('DoveRunner DRM provider', () => {
 
     await expect(
       drm.acquireTemporaryLicence({
+        browser: widevinePlaybackBrowser,
         challenge: Uint8Array.from([1]),
         drmContentId: 'copied-content-id',
         playbackGrantId: newPlaybackGrantId(),
@@ -105,6 +107,7 @@ describe('DoveRunner DRM provider', () => {
 
     await expect(
       drm.acquireTemporaryLicence({
+        browser: widevinePlaybackBrowser,
         challenge,
         drmContentId: 'drm_processing_00000000-0000-4000-8000-000000000000',
         playbackGrantId: grant,
@@ -132,12 +135,47 @@ describe('DoveRunner DRM provider', () => {
     })
     expect(token.hash).toBe(
       createHash('sha256')
-        .update(`${accessKey}${token.drm_type}${token.site_id}${token.user_id}${token.cid}${token.policy}${token.timestamp}`)
+        .update(
+          `${accessKey}${token.drm_type}${token.site_id}${token.user_id}${token.cid}${token.policy}${token.timestamp}`,
+        )
         .digest('base64'),
     )
     expect(policy).toEqual({
       playback_policy: { license_duration: 0, persistent: false },
       policy_version: 2,
+    })
+  })
+
+  it('proxies a FairPlay SPC with the same nonpersistent policy and a FairPlay token', async () => {
+    const fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () => new Response(Uint8Array.from([9, 8, 7])),
+    )
+    const drm = createDoveRunnerDrmProvider(
+      { accessKey, siteId: 'GXIW', siteKey },
+      { fetch, now: () => new Date('2026-09-17T12:00:00.000Z') },
+    )
+    const grant = newPlaybackGrantId()
+
+    await drm.acquireTemporaryLicence({
+      browser: fairPlayPlaybackBrowser,
+      challenge: Uint8Array.from([1, 2, 3, 4]),
+      drmContentId: 'drm_processing_00000000-0000-4000-8000-000000000000',
+      playbackGrantId: grant,
+    })
+
+    const customData = new Headers(fetch.mock.calls[0]![1]?.headers).get('pallycon-customdata-v2')
+    const { policy, token } = decodeProviderToken(customData!)
+    expect(token).toMatchObject({ drm_type: 'FairPlay', user_id: grant })
+    expect(policy).toEqual({
+      playback_policy: { license_duration: 0, persistent: false },
+      policy_version: 2,
+    })
+    expect(
+      drm.createPlaybackContract({ browser: fairPlayPlaybackBrowser, playbackGrantId: grant }),
+    ).toMatchObject({
+      fairPlayCertificateURL: 'https://license-global.pallycon.com/ri/fpsCert.do?siteId=GXIW',
+      keySystem: 'com.apple.fps',
+      manifestFormat: 'hls',
     })
   })
 })

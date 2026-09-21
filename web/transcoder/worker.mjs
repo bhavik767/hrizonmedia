@@ -58,6 +58,27 @@ export function ffmpegArguments(job, sourcePath, clearDirectory) {
   ])
 }
 
+export function packagerArguments(job, clearFiles, packagedDirectory, encryptionToken) {
+  return [
+    '--enc_token',
+    encryptionToken,
+    '--content_id',
+    job.drmContentId,
+    '--dash',
+    '--hls',
+    '-i',
+    ...clearFiles.map(({ absolute }) => absolute),
+    '-o',
+    packagedDirectory,
+    '--mpd_filename',
+    'manifest.mpd',
+    '--m3u8_filename',
+    'master.m3u8',
+    '--license_url',
+    'https://drm-license.doverunner.com/ri/licenseManager.do',
+  ]
+}
+
 async function exists(client, bucket, key) {
   try {
     await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
@@ -91,13 +112,13 @@ async function sendCallback(job, status, environment, fetcher) {
     .update(`${timestamp}.${body}`)
     .digest('base64url')
   const response = await fetcher(`${environment.APPLICATION_ORIGIN}/api/internal/transcode/callback`, {
-    body,
-    headers: {
-      'content-type': 'application/json',
-      'x-hrizon-signature': signature,
-      'x-hrizon-timestamp': timestamp,
-    },
-    method: 'POST',
+      body,
+      headers: {
+        'content-type': 'application/json',
+        'x-hrizon-signature': signature,
+        'x-hrizon-timestamp': timestamp,
+      },
+      method: 'POST',
   })
   if (!response.ok) throw new Error('Application callback was rejected.')
 }
@@ -124,11 +145,11 @@ export async function processJob(value, dependencies = {}) {
   if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) return { cancelled: true }
   try {
     await client.send(new PutObjectCommand({
-      Body: JSON.stringify({ acquiredAt: new Date().toISOString(), nonce: randomUUID() }),
-      Bucket: bucket,
-      ContentType: 'application/json',
-      IfNoneMatch: '*',
-      Key: `${controlPrefix}.lock`,
+        Body: JSON.stringify({ acquiredAt: new Date().toISOString(), nonce: randomUUID() }),
+        Bucket: bucket,
+        ContentType: 'application/json',
+        IfNoneMatch: '*',
+        Key: `${controlPrefix}.lock`,
     }))
   } catch (error) {
     if (error?.name === 'PreconditionFailed' || error?.$metadata?.httpStatusCode === 412) {
@@ -153,19 +174,33 @@ export async function processJob(value, dependencies = {}) {
       await run(environment.FFMPEG_BIN ?? 'ffmpeg', args, { timeout: 12 * 60 * 1000 })
     }
     const clearFiles = await filesUnder(clearDirectory)
-    await run(environment.DOVERUNNER_PACKAGER_BIN ?? 'PallyConPackager', [
-      '--enc_token', environment.DOVERUNNER_ENC_TOKEN,
-      '--content_id', job.drmContentId,
-      '--dash', '-i', ...clearFiles.map(({ absolute }) => absolute),
-      '-o', packagedDirectory, '--mpd_filename', 'manifest.mpd',
-      '--license_url', 'https://drm-license.doverunner.com/ri/licenseManager.do',
-    ], { timeout: 3 * 60 * 1000 })
+    await run(
+      environment.DOVERUNNER_PACKAGER_BIN ?? 'PallyConPackager',
+      packagerArguments(job, clearFiles, packagedDirectory, environment.DOVERUNNER_ENC_TOKEN),
+      { timeout: 3 * 60 * 1000 },
+    )
     const packaged = await filesUnder(packagedDirectory)
     const manifest = packaged.find(({ relative }) => relative === 'manifest.mpd')
     if (!manifest) throw new Error('DoveRunner did not create manifest.mpd.')
+    const hlsManifest = packaged.find(({ relative }) => relative === 'master.m3u8')
+    if (!hlsManifest) throw new Error('DoveRunner did not create master.m3u8.')
     const manifestText = await readFile(manifest.absolute, 'utf8')
     if (!/edef8ba9-79d6-4ace-a3c8-27dcd51d21ed/i.test(manifestText)) {
       throw new Error('DoveRunner manifest is not Widevine encrypted.')
+    }
+    const hlsPlaylists = packaged.filter(({ relative }) => relative.endsWith('.m3u8'))
+    const hlsPlaylistTexts = await Promise.all(
+      hlsPlaylists.map(async ({ absolute }) => readFile(absolute, 'utf8')),
+    )
+    if (
+      !/^#EXTM3U/m.test(await readFile(hlsManifest.absolute, 'utf8')) ||
+      !hlsPlaylistTexts.some(
+        (playlist) =>
+          /#EXT-X-KEY:METHOD=SAMPLE-AES,/i.test(playlist) &&
+          /KEYFORMAT="com\.apple\.streamingkeydelivery"/i.test(playlist),
+      )
+    ) {
+      throw new Error('DoveRunner HLS manifest is invalid.')
     }
     if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) {
       return { cancelled: true }
@@ -174,9 +209,11 @@ export async function processJob(value, dependencies = {}) {
     for (const file of packaged) {
       const contentType = file.relative.endsWith('.mpd')
         ? 'application/dash+xml'
-        : file.relative.endsWith('.m4s') || file.relative.endsWith('.mp4')
-          ? 'video/mp4'
-          : 'application/octet-stream'
+        : file.relative.endsWith('.m3u8')
+          ? 'application/vnd.apple.mpegurl'
+          : file.relative.endsWith('.m4s') || file.relative.endsWith('.mp4')
+            ? 'video/mp4'
+            : 'application/octet-stream'
       await client.send(new PutObjectCommand({
         Body: await readFile(file.absolute),
         Bucket: bucket,

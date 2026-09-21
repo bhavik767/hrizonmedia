@@ -18,6 +18,61 @@ async function openReadyAsset(page: Page, fileName: string) {
     mimeType: 'video/mp4',
     name: fileName,
   })
+
+  test('issues Safari a FairPlay HLS grant and rejects its DASH package route', async ({
+    page,
+  }) => {
+    await openReadyAsset(page, 'fairplay-lesson.mp4')
+    const mediaAssetId = page.url().split('/').at(-1)!
+    const origin = new URL(page.url()).origin
+    const grantResponse = await page.request.post(
+      `/api/demo/assets/${mediaAssetId}/playback-grants`,
+      {
+        headers: {
+          Origin: origin,
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
+          'X-Hrizonmedia-Fairplay': 'available',
+          'X-Hrizonmedia-Widevine': 'unavailable',
+        },
+      },
+    )
+    expect(grantResponse.status()).toBe(201)
+    const grant = (await grantResponse.json()) as {
+      fairPlayCertificateURL: string
+      keySystem: string
+      licenceURL: string
+      manifestFormat: string
+      manifestURL: string
+      playbackGrantToken: string
+    }
+    expect(grant).toMatchObject({
+      fairPlayCertificateURL: expect.stringContaining('/fairplay-certificate'),
+      keySystem: 'com.apple.fps',
+      manifestFormat: 'hls',
+    })
+    const master = await page.request.get(grant.manifestURL)
+    expect(master.status()).toBe(200)
+    const masterPlaylist = await master.text()
+    expect(masterPlaylist).toContain('/fairplay.m3u8')
+    const mediaPlaylist = await page.request.get(
+      masterPlaylist.match(/\/api\/demo\/playback\/[^\n]+fairplay\.m3u8\?[^\n]+/)![0],
+    )
+    expect(mediaPlaylist.status()).toBe(200)
+    expect(await mediaPlaylist.text()).toContain(
+      'KEYFORMAT="com.apple.streamingkeydelivery"',
+    )
+    const certificate = await page.request.get(grant.fairPlayCertificateURL)
+    expect(certificate.status()).toBe(200)
+    expect(certificate.headers()['content-type']).toBe('application/octet-stream')
+    const dash = await page.request.get(grant.manifestURL.replace('/master.m3u8', '/manifest.mpd'))
+    expect(dash.status()).toBe(403)
+    const licence = await page.request.post(grant.licenceURL, {
+      data: Buffer.from('deterministic-fairplay-spc'),
+      headers: { Origin: origin, 'X-Playback-Grant': grant.playbackGrantToken },
+    })
+    expect(licence.status()).toBe(200)
+  })
   await page.getByRole('button', { name: 'Upload asset' }).click()
   const asset = page.getByRole('article', { name: fileName })
   await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
@@ -118,7 +173,9 @@ test.describe('encrypted playback contract', () => {
       })
   })
 
-  test('shows a browser-compatibility reason without issuing a playback fallback', async ({ browser }) => {
+  test('shows a browser-compatibility reason without issuing a playback fallback', async ({
+    browser,
+  }) => {
     const context = await browser.newContext({
       baseURL: 'http://127.0.0.1:3103',
       userAgent:
@@ -137,7 +194,7 @@ test.describe('encrypted playback contract', () => {
       await page.getByRole('button', { name: 'Start secure playback' }).click()
 
       await expect(page.locator('.secure-playback__status')).toHaveText(
-        'Secure playback is not supported by this browser. Widevine DRM is unavailable.',
+        'Secure playback is not supported by this browser. Use current Safari with FairPlay DRM, or Chrome or Microsoft Edge with Widevine DRM enabled.',
       )
       expect(requestedGrant).toBe(false)
       const mediaAssetId = page.url().split('/').at(-1)!
@@ -160,8 +217,7 @@ test.describe('encrypted playback contract', () => {
     const watermark = page.getByTestId('viewer-watermark')
     await expect(watermark).not.toBeVisible()
     const rotationResponsePromise = page.waitForResponse(
-      (response) =>
-        response.url().includes('/watermark') && response.request().method() === 'POST',
+      (response) => response.url().includes('/watermark') && response.request().method() === 'POST',
     )
     await page.getByRole('button', { name: 'Start secure playback' }).click()
     await expect(watermark).toHaveAccessibleName('Recording attribution watermark')
@@ -223,6 +279,8 @@ test.describe('encrypted playback contract', () => {
     await page.goto('/demo/terms')
     await expect(page).toHaveURL('/demo/terms')
     await expect(page.getByRole('heading', { name: 'Pilot terms' })).toBeVisible()
-    await expect(page.getByText(/compact, opaque Leak ID and a server-issued timestamp/)).toBeVisible()
+    await expect(
+      page.getByText(/compact, opaque Leak ID and a server-issued timestamp/),
+    ).toBeVisible()
   })
 })

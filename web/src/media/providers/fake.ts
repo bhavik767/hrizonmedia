@@ -13,10 +13,7 @@ import type {
   StorageProvider,
   TranscodeProvider,
 } from './contracts'
-import {
-  InvalidMediaError,
-  MultipartUploadError,
-} from './errors'
+import { InvalidMediaError, MultipartUploadError } from './errors'
 
 const FAKE_PART_SIZE = 5 * 1024 * 1024
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
@@ -295,10 +292,10 @@ export const fakeTranscodeProvider: TranscodeProvider = {
 }
 
 export const fakeDeliveryProvider: DeliveryProvider = {
-  async authorize({ expiresAt, mediaAssetId, playbackGrantId, token }) {
+  async authorize({ expiresAt, manifestFormat, mediaAssetId, playbackGrantId, token }) {
     return {
       expiresAt: expiresAt.toISOString(),
-      manifestURL: `/api/demo/playback/${playbackGrantId}/manifest.mpd?asset=${mediaAssetId}&token=${encodeURIComponent(token)}`,
+      manifestURL: `/api/demo/playback/${playbackGrantId}/${manifestFormat === 'hls' ? 'master.m3u8' : 'manifest.mpd'}?asset=${mediaAssetId}&token=${encodeURIComponent(token)}`,
     }
   },
 
@@ -317,6 +314,18 @@ export const fakeDrmProvider: DrmProvider = {
   },
 
   createPlaybackContract({ browser, playbackGrantId }) {
+    if (browser.keySystem === 'com.apple.fps') {
+      return {
+        distinctiveIdentifier: 'not-allowed',
+        fairPlayCertificateURL: `/api/demo/playback/${playbackGrantId}/fairplay-certificate`,
+        hdcpRequired: false,
+        keySystem: browser.keySystem,
+        licenceURL: `/api/demo/playback/${playbackGrantId}/licence`,
+        manifestFormat: browser.manifestFormat,
+        persistentState: 'not-allowed',
+        sessionType: 'temporary',
+      }
+    }
     return {
       distinctiveIdentifier: 'not-allowed',
       hdcpRequired: false,

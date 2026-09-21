@@ -65,7 +65,10 @@ export interface StorageProvider {
     metadata: UploadMetadata
     uploadSessionId: UploadSessionId
   }): Promise<MultipartUpload>
-  listParts(providerUploadId: ProviderUploadId, providerUploadData?: string): Promise<CompletedPart[]>
+  listParts(
+    providerUploadId: ProviderUploadId,
+    providerUploadData?: string,
+  ): Promise<CompletedPart[]>
   probe(objectKey: string): Promise<MediaProbe>
 }
 
@@ -114,18 +117,28 @@ export interface DeliveryProvider {
   revokeAsset(mediaAssetId: MediaAssetId): Promise<void>
 }
 
-export interface DrmPlaybackContract {
+interface BaseDrmPlaybackContract {
   distinctiveIdentifier: 'not-allowed'
   hdcpRequired: false
-  keySystem: 'com.widevine.alpha'
   licenceURL: string
-  manifestFormat: ProtectedPlaybackBrowser['manifestFormat']
   persistentState: 'not-allowed'
   sessionType: 'temporary'
 }
 
+export type DrmPlaybackContract =
+  | (BaseDrmPlaybackContract & {
+      keySystem: 'com.widevine.alpha'
+      manifestFormat: 'dash'
+    })
+  | (BaseDrmPlaybackContract & {
+      fairPlayCertificateURL: string
+      keySystem: 'com.apple.fps'
+      manifestFormat: 'hls'
+    })
+
 export interface DrmProvider {
   acquireTemporaryLicence(input: {
+    browser: ProtectedPlaybackBrowser
     challenge: Uint8Array
     drmContentId: string
     playbackGrantId: PlaybackGrantId
