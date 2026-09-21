@@ -6,6 +6,7 @@ import { OperatorAuthorizationError } from '@/pilot/operations'
 
 import { parseMediaAssetId, parsePlaybackGrantId, type DeliveryToken } from './identifiers'
 import { authorizePlaybackResource, PlaybackAuthorizationError } from './playback'
+import { PlaybackCompatibilityError } from './playback-browser'
 import { MediaLibraryError } from './library'
 import {
   assertDemoMutationOrigin,
@@ -49,6 +50,7 @@ export function mediaErrorResponse(error: unknown): Response {
   if (error instanceof Response) return error
   if (
     error instanceof MediaLibraryError ||
+    error instanceof PlaybackCompatibilityError ||
     error instanceof PlaybackAuthorizationError ||
     error instanceof OperatorAuthorizationError
   ) {

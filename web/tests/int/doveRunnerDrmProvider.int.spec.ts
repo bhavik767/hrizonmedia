@@ -3,6 +3,7 @@ import { createDecipheriv, createHash } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 
 import { newPlaybackGrantId } from '@/media/identifiers'
+import { widevinePlaybackBrowser } from '@/media/playback-browser'
 import { createDoveRunnerDrmProvider } from '@/media/providers/doverunner'
 import { getMediaProviders } from '@/media/providers'
 import { PermanentTranscodeError } from '@/media/providers/errors'
@@ -56,8 +57,15 @@ describe('DoveRunner DRM provider', () => {
       VIDEO_S3_SECRET_ACCESS_KEY: 'video-secret',
     })
 
-    expect(providers.drm.createPlaybackContract({ playbackGrantId: newPlaybackGrantId() })).toMatchObject({
+    expect(
+      providers.drm.createPlaybackContract({
+        browser: widevinePlaybackBrowser,
+        playbackGrantId: newPlaybackGrantId(),
+      }),
+    ).toMatchObject({
+      hdcpRequired: false,
       keySystem: 'com.widevine.alpha',
+      manifestFormat: 'dash',
       persistentState: 'not-allowed',
       sessionType: 'temporary',
     })

@@ -316,11 +316,13 @@ export const fakeDrmProvider: DrmProvider = {
       .digest()
   },
 
-  createPlaybackContract({ playbackGrantId }) {
+  createPlaybackContract({ browser, playbackGrantId }) {
     return {
       distinctiveIdentifier: 'not-allowed',
-      keySystem: 'com.widevine.alpha',
+      hdcpRequired: false,
+      keySystem: browser.keySystem,
       licenceURL: `/api/demo/playback/${playbackGrantId}/licence`,
+      manifestFormat: browser.manifestFormat,
       persistentState: 'not-allowed',
       sessionType: 'temporary',
     }

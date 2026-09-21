@@ -7,6 +7,7 @@ import {
   authorizePlaybackResource,
   createPlaybackGrant,
 } from '@/media/playback'
+import { PlaybackCompatibilityError, protectedPlaybackBrowser } from '@/media/playback-browser'
 import { getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
 import config from '@/payload.config'
 import type { MediaAsset, PilotMember } from '@/payload-types'
@@ -91,6 +92,60 @@ describe('Playback Grant authorization', () => {
     expect(first.licenceURL).toContain(`/api/demo/playback/${first.playbackGrantId}/licence`)
     expect(refreshed.playbackGrantId).not.toBe(first.playbackGrantId)
     expect(refreshed.expiresAt).toBe('2026-09-14T12:09:59.000Z')
+  })
+
+  it('selects the verified encrypted Widevine package for Chrome and Edge without HDCP gating', async () => {
+    const asset = await createAsset(owner)
+
+    const chrome = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, {
+      browser: protectedPlaybackBrowser(
+        'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36',
+        true,
+      ),
+      now,
+    })
+    const edge = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, {
+      browser: protectedPlaybackBrowser(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/126.0.0.0 Safari/537.36',
+        true,
+      ),
+      now,
+    })
+
+    expect(chrome).toMatchObject({
+      hdcpRequired: false,
+      keySystem: 'com.widevine.alpha',
+      manifestFormat: 'dash',
+    })
+    expect(chrome.manifestURL).toContain('/manifest.mpd')
+    expect(edge).toMatchObject({
+      hdcpRequired: false,
+      keySystem: 'com.widevine.alpha',
+      manifestFormat: 'dash',
+    })
+  })
+
+  it('rejects browsers without a verified protected-playback path before creating a grant', async () => {
+    const asset = await createAsset(owner)
+
+    expect(() =>
+      protectedPlaybackBrowser(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
+        true,
+      ),
+    ).toThrow(PlaybackCompatibilityError)
+    expect(() =>
+      protectedPlaybackBrowser(
+        'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36',
+        false,
+      ),
+    ).toThrow(PlaybackCompatibilityError)
+    expect(() =>
+      protectedPlaybackBrowser(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 OPR/111.0.0.0 Safari/537.36',
+        true,
+      ),
+    ).toThrow(PlaybackCompatibilityError)
   })
 
   it('blocks new playback activity while the operator kill switch is enabled', async () => {

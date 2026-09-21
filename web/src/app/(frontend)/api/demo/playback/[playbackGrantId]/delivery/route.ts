@@ -21,6 +21,7 @@ export async function GET(
         await getMediaProviders().delivery.authorize({
           expiresAt: new Date(authorization.deliveryExpiresAt),
           mediaAssetId: authorization.mediaAssetId,
+          manifestFormat: authorization.manifestFormat,
           playbackGrantId: authorization.playbackGrantId,
           processingJobId: authorization.processingJobId,
           token: authorization.token,

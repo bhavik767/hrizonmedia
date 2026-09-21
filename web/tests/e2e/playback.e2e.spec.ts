@@ -100,6 +100,7 @@ test.describe('encrypted playback contract', () => {
       )
       .toMatchObject({
         distinctiveIdentifierRequired: false,
+        hdcpRequired: false,
         keySystem: 'com.widevine.alpha',
         persistentSessionOnlinePlayback: false,
         persistentStateRequired: false,
@@ -110,6 +111,39 @@ test.describe('encrypted playback contract', () => {
           playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
         },
       })
+  })
+
+  test('shows a browser-compatibility reason without issuing a playback fallback', async ({ browser }) => {
+    const context = await browser.newContext({
+      baseURL: 'http://127.0.0.1:3103',
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
+    })
+    const page = await context.newPage()
+
+    try {
+      await openReadyAsset(page, 'unsupported-browser-lesson.mp4')
+      let requestedGrant = false
+      page.on('request', (request) => {
+        if (request.url().includes('/playback-grants') && request.method() === 'POST') {
+          requestedGrant = true
+        }
+      })
+      await page.getByRole('button', { name: 'Start secure playback' }).click()
+
+      await expect(page.locator('.secure-playback__status')).toHaveText(
+        'Secure playback is not supported by this browser. Widevine DRM is unavailable.',
+      )
+      expect(requestedGrant).toBe(false)
+      const mediaAssetId = page.url().split('/').at(-1)!
+      const manifest = await page.request.get(
+        `/api/demo/playback/playback_00000000-0000-4000-8000-000000000000/manifest.mpd?asset=${mediaAssetId}&token=invalid`,
+      )
+      expect(manifest.status()).toBe(401)
+      await expect(page.getByTestId('secure-video')).not.toHaveAttribute('src', /./)
+    } finally {
+      await context.close()
+    }
   })
 
   test('attributes recordings with a moving disclosed watermark, including in fullscreen', async ({

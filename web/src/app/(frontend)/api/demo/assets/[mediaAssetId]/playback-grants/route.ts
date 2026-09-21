@@ -1,5 +1,6 @@
 import { parseMediaAssetId } from '@/media/identifiers'
 import { createPlaybackGrant } from '@/media/playback'
+import { protectedPlaybackBrowser } from '@/media/playback-browser'
 import { withAuthenticatedUploader } from '@/media/request'
 
 export async function POST(
@@ -9,7 +10,12 @@ export async function POST(
   return withAuthenticatedUploader(request, async ({ member, payload }) => {
     const mediaAssetId = parseMediaAssetId((await context.params).mediaAssetId)
     if (!mediaAssetId) return Response.json({ error: 'Media Asset not found.' }, { status: 404 })
-    return Response.json(await createPlaybackGrant(payload, member, mediaAssetId), {
+    return Response.json(await createPlaybackGrant(payload, member, mediaAssetId, {
+      browser: protectedPlaybackBrowser(
+        request.headers.get('user-agent'),
+        request.headers.get('x-hrizonmedia-widevine') === 'available',
+      ),
+    }), {
       headers: { 'cache-control': 'no-store' },
       status: 201,
     })
