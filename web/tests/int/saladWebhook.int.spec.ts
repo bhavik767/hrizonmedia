@@ -121,6 +121,20 @@ describe('SaladCloud native webhook', () => {
     expect(events.docs).toHaveLength(1)
   })
 
+  it('accepts Salad callbacks when the provider omits optional metadata', async () => {
+    const { job, processingJobId } = await createProcessingJobFixture()
+    const body = JSON.stringify({
+      id: nativeJobId,
+      input: { outputPrefix: processingOutputPrefix(processingJobId), processingJobId },
+      status: 'failed',
+    })
+
+    expect((await saladWebhook(request(body, 'salad-event-without-metadata'))).status).toBe(204)
+    await expect(
+      payload.findByID({ collection: 'processing-jobs', id: job.id, overrideAccess: true }),
+    ).resolves.toMatchObject({ attempts: 1, status: 'queued' })
+  })
+
   it('rejects a tampered native webhook without changing the Processing Job', async () => {
     const { job, processingJobId } = await createProcessingJobFixture()
     const signed = JSON.stringify({

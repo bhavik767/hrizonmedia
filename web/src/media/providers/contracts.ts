@@ -30,7 +30,7 @@ export interface SourceMedia {
 
 export interface Rendition {
   audioCodec: 'aac'
-  height: 360 | 480 | 720 | 1080
+  height: 240 | 270 | 360 | 480 | 720 | 1080
   videoCodec: 'h264'
   width: number
 }

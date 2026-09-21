@@ -21,7 +21,18 @@ if ! curl --fail --silent --show-error http://127.0.0.1:"$PORT"/health >/dev/nul
   exit 1
 fi
 
-/usr/local/bin/salad-http-job-queue-worker &
+run_queue_worker() {
+  # Salad's workload-token endpoint can briefly return 5xx during instance
+  # allocation. Keep the HTTP transcoder alive and reconnect the queue worker
+  # instead of terminating the whole container on a transient control-plane
+  # failure.
+  while true; do
+    /usr/local/bin/salad-http-job-queue-worker || true
+    sleep 5
+  done
+}
+
+run_queue_worker &
 queue_worker_pid=$!
 
 wait -n "$application_pid" "$queue_worker_pid"

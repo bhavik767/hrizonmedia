@@ -7,6 +7,8 @@ import { getVisibleAsset } from '@/media/library'
 import type { Rendition } from '@/media/providers/contracts'
 
 const videoBandwidth: Record<Rendition['height'], number> = {
+  240: 300_000,
+  270: 400_000,
   360: 500_000,
   480: 900_000,
   720: 1_800_000,

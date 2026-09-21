@@ -13,7 +13,7 @@ import {
 import { fakeTranscodeProvider, getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
 import { PermanentTranscodeError, TransientTranscodeError } from '@/media/providers/errors'
 import type { TranscodeProvider } from '@/media/providers/contracts'
-import { newProcessingJobData, runProcessingCycle } from '@/media/processing'
+import { adaptiveRenditions, newProcessingJobData, runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
 import { POST as processingCallback } from '@/app/(frontend)/api/internal/transcode/callback/route'
 import type { PilotMember } from '@/payload-types'
@@ -25,6 +25,13 @@ let uploader: PilotMember
 
 const at = (value: string) => new Date(value)
 const start = at('2026-09-14T12:00:00.000Z')
+
+it('creates a native rendition for sources below the 360p ladder', () => {
+  expect(adaptiveRenditions({ durationSeconds: 30, height: 270, width: 480 })).toEqual([
+    { audioCodec: 'aac', height: 240, videoCodec: 'h264', width: 426 },
+    { audioCodec: 'aac', height: 270, videoCodec: 'h264', width: 480 },
+  ])
+})
 
 function fixture(source = '1920x1080:2') {
   const [dimensions, durationText] = source.split(':')

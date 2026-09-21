@@ -55,12 +55,18 @@ function providerJobId(value: unknown): ProviderJobId {
 }
 
 function expectedRenditions(source: SaladJobInput['source']): Rendition[] {
-  const widths = new Map([
-    [360, 640],
-    [480, 854],
-    [720, 1280],
-    [1080, 1920],
-  ])
+  const widths =
+    source.height < 360
+      ? new Map([
+          [240, 426],
+          [270, 480],
+        ])
+      : new Map([
+          [360, 640],
+          [480, 854],
+          [720, 1280],
+          [1080, 1920],
+        ])
   return [...widths]
     .filter(([height]) => height <= source.height)
     .map(([height, standardWidth]) => ({

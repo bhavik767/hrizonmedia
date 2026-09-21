@@ -37,7 +37,7 @@ export function validateJob(value) {
       ({ audioCodec, height, videoCodec, width }) =>
         audioCodec !== 'aac' ||
         videoCodec !== 'h264' ||
-        ![360, 480, 720, 1080].includes(height) ||
+        ![240, 270, 360, 480, 720, 1080].includes(height) ||
         !Number.isInteger(width) ||
         width < 2 ||
         height > job.source?.height ||

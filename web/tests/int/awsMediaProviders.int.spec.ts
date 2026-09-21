@@ -70,7 +70,11 @@ describe('S3 storage provider', () => {
     const uploadSessionId = newUploadSessionId()
     const { client, send } = commandSender([{ UploadId: 'native-upload-id' }])
     const presign = vi.fn(
-      async (_client: unknown, _command: UploadPartCommand, _options: { expiresIn: number }) =>
+      async (
+        _client: unknown,
+        _command: UploadPartCommand,
+        _options: { expiresIn: number; unhoistableHeaders?: Set<string> },
+      ) =>
         'https://bucket.example/upload-part',
     )
     const provider = createS3StorageProvider(
@@ -111,7 +115,13 @@ describe('S3 storage provider', () => {
       PartNumber: 1,
       UploadId: 'native-upload-id',
     })
-    expect(target.headers).not.toHaveProperty('x-amz-checksum-sha256')
+    expect(target.headers).toMatchObject({
+      'x-amz-checksum-sha256': Buffer.from(checksumSHA256, 'hex').toString('base64'),
+    })
+    expect(presign.mock.calls[0]![2]).toMatchObject({ expiresIn: 10 * 60 })
+    expect(presign.mock.calls[0]![2]?.unhoistableHeaders).toEqual(
+      new Set(['x-amz-checksum-sha256']),
+    )
   })
 
   it('exhausts part pagination and rejects completion receipts that differ from storage', async () => {
