@@ -7,8 +7,9 @@ export interface FairPlayPlaybackBrowser {
   keySystem: 'com.apple.fps'
   manifestFormat: 'hls'
 }
+export interface PlayReadyPlaybackBrowser { keySystem: 'com.microsoft.playready'; manifestFormat: 'dash' }
 
-export type ProtectedPlaybackBrowser = FairPlayPlaybackBrowser | WidevinePlaybackBrowser
+export type ProtectedPlaybackBrowser = FairPlayPlaybackBrowser | PlayReadyPlaybackBrowser | WidevinePlaybackBrowser
 
 export const widevinePlaybackBrowser: WidevinePlaybackBrowser = {
   keySystem: 'com.widevine.alpha',
@@ -19,6 +20,7 @@ export const fairPlayPlaybackBrowser: FairPlayPlaybackBrowser = {
   keySystem: 'com.apple.fps',
   manifestFormat: 'hls',
 }
+export const playReadyPlaybackBrowser: PlayReadyPlaybackBrowser = { keySystem: 'com.microsoft.playready', manifestFormat: 'dash' }
 
 export class PlaybackCompatibilityError extends Error {
   readonly status = 422
@@ -29,11 +31,13 @@ export class PlaybackCompatibilityError extends Error {
 }
 
 const WIDEVINE_BROWSER = /(?:Chrome|Edg|EdgA)\/\d+/i
+const PLAYREADY_BROWSER = /(?:Edg|EdgA)\/\d+/i
 const UNVERIFIED_CHROMIUM_BROWSER = /(?:CriOS|EdgiOS|OPR|SamsungBrowser)\//i
 const SAFARI_BROWSER = /Version\/\d+(?:\.\d+)*.*Safari\//i
 
 export interface ProtectedPlaybackCapabilities {
   fairPlayAvailable: boolean
+  playReadyAvailable: boolean
   widevineAvailable: boolean
 }
 
@@ -44,6 +48,7 @@ export function protectedPlaybackBrowser(
   if (userAgent && capabilities.fairPlayAvailable && SAFARI_BROWSER.test(userAgent)) {
     return fairPlayPlaybackBrowser
   }
+  if (userAgent && capabilities.playReadyAvailable && PLAYREADY_BROWSER.test(userAgent)) return playReadyPlaybackBrowser
 
   if (
     userAgent &&
@@ -66,6 +71,8 @@ export function isProtectedPlaybackBrowser(value: unknown): value is ProtectedPl
     (((value as ProtectedPlaybackBrowser).keySystem === 'com.widevine.alpha' &&
       (value as ProtectedPlaybackBrowser).manifestFormat === 'dash') ||
       ((value as ProtectedPlaybackBrowser).keySystem === 'com.apple.fps' &&
-        (value as ProtectedPlaybackBrowser).manifestFormat === 'hls'))
+        (value as ProtectedPlaybackBrowser).manifestFormat === 'hls') ||
+      ((value as ProtectedPlaybackBrowser).keySystem === 'com.microsoft.playready' &&
+        (value as ProtectedPlaybackBrowser).manifestFormat === 'dash'))
   )
 }

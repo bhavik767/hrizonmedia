@@ -339,6 +339,7 @@ describe('CloudFront delivery provider', () => {
     const authorization = await provider.authorize({
       expiresAt: new Date(now.getTime() + 2 * 60 * 60 * 1000),
       mediaAssetId: newMediaAssetId(),
+      manifestFormat: 'dash',
       playbackGrantId: 'playback_00000000-0000-0000-0000-000000000000',
       processingJobId,
       manifestFormat: 'dash',

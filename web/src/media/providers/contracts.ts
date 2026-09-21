@@ -126,6 +126,7 @@ interface BaseDrmPlaybackContract {
 }
 
 export type DrmPlaybackContract =
+  | (BaseDrmPlaybackContract & { keySystem: 'com.microsoft.playready'; manifestFormat: 'dash' })
   | (BaseDrmPlaybackContract & {
       keySystem: 'com.widevine.alpha'
       manifestFormat: 'dash'

@@ -42,7 +42,7 @@ function providerToken(
   configuration: DoveRunnerDrmConfiguration,
   drmContentId: string,
   playbackGrantId: string,
-  drmType: 'FairPlay' | 'Widevine',
+  drmType: 'FairPlay' | 'PlayReady' | 'Widevine',
   now: Date,
 ): string {
   if (!CONTENT_ID.test(drmContentId)) {
@@ -77,7 +77,7 @@ export function createDoveRunnerDrmProvider(
         configuration,
         drmContentId,
         playbackGrantId,
-        browser.keySystem === 'com.apple.fps' ? 'FairPlay' : 'Widevine',
+        browser.keySystem === 'com.apple.fps' ? 'FairPlay' : browser.keySystem === 'com.microsoft.playready' ? 'PlayReady' : 'Widevine',
         now(),
       )
       let response: Response

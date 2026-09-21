@@ -269,6 +269,8 @@ export const fakeStorageProvider: StorageProvider & {
 }
 
 export const fakeTranscodeProvider: TranscodeProvider = {
+  producesPlayReadyPackage: true,
+
   async deleteOutputs() {},
 
   async queue({ idempotencyKey, mediaAssetId, objectKey, renditions }) {
@@ -303,13 +305,15 @@ export const fakeDeliveryProvider: DeliveryProvider = {
 }
 
 export const fakeDrmProvider: DrmProvider = {
-  async acquireTemporaryLicence({ challenge, drmContentId, playbackGrantId }) {
+  async acquireTemporaryLicence({ browser, challenge, drmContentId, playbackGrantId }) {
     return createHash('sha256')
       .update(challenge)
       .update('\0')
       .update(drmContentId)
       .update('\0')
       .update(playbackGrantId)
+      .update('\0')
+      .update(browser.keySystem)
       .digest()
   },
 
