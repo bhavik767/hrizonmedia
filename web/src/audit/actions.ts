@@ -12,6 +12,7 @@ export const auditActions = [
   'processing_failed',
   'processing_retried',
   'playback_granted',
+  'playback_leak_id_issued',
   'playback_licence_acquired',
   'processing_callback_received',
   'processing_callback_rejected',

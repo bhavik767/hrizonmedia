@@ -14,8 +14,10 @@ import {
 } from './playback-browser'
 
 import {
+  newLeakId,
   newPlaybackGrantId,
   type DeliveryToken,
+  type LeakId,
   type MediaAssetId,
   type PlaybackGrantId,
   type PlaybackGrantToken,
@@ -31,6 +33,7 @@ import { getMediaProviders } from './providers'
 const GRANT_LIFETIME_MS = 5 * 60 * 1000
 const MAX_ASSET_DURATION_MS = 2 * 60 * 60 * 1000
 const DELIVERY_LIFETIME_MS = MAX_ASSET_DURATION_MS + GRANT_LIFETIME_MS
+const WATERMARK_ROTATION_INTERVAL_MS = 30 * 1000
 
 type PlaybackTokenKind = 'delivery' | 'grant'
 
@@ -51,6 +54,12 @@ export interface PlaybackGrantResponse extends DrmPlaybackContract {
   playbackGrantId: PlaybackGrantId
   playbackGrantToken: PlaybackGrantToken
   resourceAuthorization?: DeliveryAuthorization['resourceAuthorization']
+  watermark: PlaybackWatermark
+}
+
+export interface PlaybackWatermark {
+  issuedAt: string
+  leakId: LeakId
 }
 
 export class PlaybackAuthorizationError extends Error {
@@ -196,6 +205,31 @@ async function assetProcessingJobId(
   return processingJobId ? (processingJobId as ProcessingJobId) : undefined
 }
 
+function newPlaybackWatermark(now: Date): PlaybackWatermark {
+  return { issuedAt: now.toISOString(), leakId: newLeakId() }
+}
+
+function storedPlaybackWatermark(grant: PlaybackGrant): PlaybackWatermark {
+  return {
+    issuedAt: grant.leakIdIssuedAt,
+    leakId: grant.leakId as LeakId,
+  }
+}
+
+async function recordLeakIdIssued(
+  payload: Payload,
+  input: { assetID: number; ownerID: number; playbackGrantId: PlaybackGrantId; watermark: PlaybackWatermark },
+): Promise<void> {
+  await recordAuditEvent(payload, {
+    action: 'playback_leak_id_issued',
+    actorID: input.ownerID,
+    assetID: input.assetID,
+    details: { leakId: input.watermark.leakId, playbackGrantId: input.playbackGrantId },
+    eventKey: `playback-grant:${input.playbackGrantId}:leak:${input.watermark.leakId}`,
+    occurredAt: new Date(input.watermark.issuedAt),
+  })
+}
+
 export async function createPlaybackGrant(
   payload: Payload,
   member: PilotMember,
@@ -213,12 +247,15 @@ export async function createPlaybackGrant(
   const playbackGrantId = newPlaybackGrantId()
   const expiresAt = new Date(now.getTime() + GRANT_LIFETIME_MS)
   const deliveryExpiresAt = new Date(now.getTime() + DELIVERY_LIFETIME_MS)
+  const watermark = newPlaybackWatermark(now)
   await payload.create({
     collection: 'playback-grants',
     data: {
       asset: asset.id,
       deliveryExpiresAt: deliveryExpiresAt.toISOString(),
       expiresAt: expiresAt.toISOString(),
+      leakId: watermark.leakId,
+      leakIdIssuedAt: watermark.issuedAt,
       owner: owner.id,
       playbackGrantId,
     },
@@ -259,6 +296,12 @@ export async function createPlaybackGrant(
     eventKey: `playback-grant:${playbackGrantId}:granted`,
     occurredAt: now,
   })
+  await recordLeakIdIssued(payload, {
+    assetID: asset.id,
+    ownerID: owner.id,
+    playbackGrantId,
+    watermark,
+  })
   return {
     ...drm,
     deliveryExpiresAt: delivery.expiresAt,
@@ -268,7 +311,48 @@ export async function createPlaybackGrant(
     playbackGrantId,
     playbackGrantToken,
     resourceAuthorization: delivery.resourceAuthorization,
+    watermark,
   }
+}
+
+export async function refreshPlaybackWatermark(
+  payload: Payload,
+  member: PilotMember,
+  token: PlaybackGrantToken,
+  options: { now?: Date; requestedPlaybackGrantId?: PlaybackGrantId } = {},
+): Promise<PlaybackWatermark> {
+  await assertMediaActivityAllowed(payload)
+  const now = options.now ?? new Date()
+  const owner = await activeUploader(payload, member)
+  const claims = decodeClaims(token, 'grant', now)
+  if (options.requestedPlaybackGrantId && claims.grant !== options.requestedPlaybackGrantId) {
+    throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
+  }
+  if (claims.owner !== owner.id) {
+    throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
+  }
+  const grant = await storedGrant(payload, claims)
+  const asset = await ownedAsset(payload, owner, claims.asset)
+  assertPlayable(asset, now)
+  const current = storedPlaybackWatermark(grant)
+  if (now.getTime() - new Date(current.issuedAt).getTime() < WATERMARK_ROTATION_INTERVAL_MS) {
+    return current
+  }
+
+  const watermark = newPlaybackWatermark(now)
+  await payload.update({
+    collection: 'playback-grants',
+    data: { leakId: watermark.leakId, leakIdIssuedAt: watermark.issuedAt },
+    id: grant.id,
+    overrideAccess: true,
+  })
+  await recordLeakIdIssued(payload, {
+    assetID: asset.id,
+    ownerID: owner.id,
+    playbackGrantId: claims.grant,
+    watermark,
+  })
+  return watermark
 }
 
 export async function acquirePlaybackLicence(

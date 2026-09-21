@@ -1279,6 +1279,8 @@ export interface PlaybackGrant {
   owner: number | PilotMember;
   expiresAt: string;
   deliveryExpiresAt: string;
+  leakId: string;
+  leakIdIssuedAt: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -1303,6 +1305,7 @@ export interface AuditEvent {
     | 'processing_failed'
     | 'processing_retried'
     | 'playback_granted'
+    | 'playback_leak_id_issued'
     | 'playback_licence_acquired'
     | 'processing_callback_received'
     | 'processing_callback_rejected'
@@ -2205,6 +2208,8 @@ export interface PlaybackGrantsSelect<T extends boolean = true> {
   owner?: T;
   expiresAt?: T;
   deliveryExpiresAt?: T;
+  leakId?: T;
+  leakIdIssuedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }

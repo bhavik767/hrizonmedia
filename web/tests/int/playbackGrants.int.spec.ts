@@ -6,6 +6,7 @@ import {
   acquirePlaybackLicence,
   authorizePlaybackResource,
   createPlaybackGrant,
+  refreshPlaybackWatermark,
 } from '@/media/playback'
 import { PlaybackCompatibilityError, protectedPlaybackBrowser } from '@/media/playback-browser'
 import { getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
@@ -78,7 +79,7 @@ describe('Playback Grant authorization', () => {
     await cleanPlaybackRecords()
   })
 
-  it('issues a fresh five-minute start grant after each ownership check', async () => {
+  it('issues a fresh, traceable Leak ID with every five-minute start grant', async () => {
     const asset = await createAsset(owner)
 
     const first = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, { now })
@@ -88,10 +89,60 @@ describe('Playback Grant authorization', () => {
 
     expect(first.playbackGrantId).toMatch(/^playback_/)
     expect(first.expiresAt).toBe('2026-09-14T12:05:00.000Z')
+    expect(first.watermark).toMatchObject({
+      issuedAt: now.toISOString(),
+      leakId: expect.stringMatching(/^lk_[A-Za-z0-9_-]{16}$/),
+    })
     expect(first.manifestURL).toContain(`/api/demo/playback/${first.playbackGrantId}/manifest.mpd`)
     expect(first.licenceURL).toContain(`/api/demo/playback/${first.playbackGrantId}/licence`)
     expect(refreshed.playbackGrantId).not.toBe(first.playbackGrantId)
     expect(refreshed.expiresAt).toBe('2026-09-14T12:09:59.000Z')
+    expect(refreshed.watermark.leakId).not.toBe(first.watermark.leakId)
+
+    const storedGrant = await payload.find({
+      collection: 'playback-grants',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { playbackGrantId: { equals: first.playbackGrantId } },
+    })
+    expect(storedGrant.docs[0]).toMatchObject({
+      asset: asset.id,
+      leakId: first.watermark.leakId,
+      owner: owner.id,
+    })
+    const audit = await payload.find({
+      collection: 'audit-events',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { eventKey: { equals: `playback-grant:${first.playbackGrantId}:leak:${first.watermark.leakId}` } },
+    })
+    expect(audit.docs[0]).toMatchObject({
+      action: 'playback_leak_id_issued',
+      actor: owner.id,
+      asset: asset.id,
+      details: { leakId: first.watermark.leakId, playbackGrantId: first.playbackGrantId },
+    })
+  })
+
+  it('rotates the persisted Leak ID no sooner than every 30 seconds', async () => {
+    const asset = await createAsset(owner)
+    const grant = await createPlaybackGrant(payload, owner, asset.mediaAssetId, { now })
+
+    await expect(
+      refreshPlaybackWatermark(payload, owner, grant.playbackGrantToken, {
+        now: new Date(now.getTime() + 29_999),
+        requestedPlaybackGrantId: grant.playbackGrantId,
+      }),
+    ).resolves.toEqual(grant.watermark)
+
+    const rotated = await refreshPlaybackWatermark(payload, owner, grant.playbackGrantToken, {
+      now: new Date(now.getTime() + 30_000),
+      requestedPlaybackGrantId: grant.playbackGrantId,
+    })
+    expect(rotated).toMatchObject({ issuedAt: '2026-09-14T12:00:30.000Z' })
+    expect(rotated.leakId).not.toBe(grant.watermark.leakId)
   })
 
   it('selects the verified encrypted Widevine package for Chrome and Edge without HDCP gating', async () => {

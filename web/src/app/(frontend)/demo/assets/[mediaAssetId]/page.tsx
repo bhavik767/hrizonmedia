@@ -71,7 +71,7 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
         )}
       </dl>
       {member.role === 'uploader' && asset.status === 'ready' && (
-        <PlaybackPlayer mediaAssetId={asset.mediaAssetId} viewerEmail={member.email} />
+        <PlaybackPlayer mediaAssetId={asset.mediaAssetId} />
       )}
       {asset.status === 'failed' && asset.failureMessage && (
         <section aria-labelledby="processing-failure-title" className="processing-failure">
