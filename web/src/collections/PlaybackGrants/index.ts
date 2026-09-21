@@ -28,6 +28,8 @@ export const PlaybackGrants: CollectionConfig = {
     },
     { name: 'expiresAt', type: 'date', required: true, index: true },
     { name: 'deliveryExpiresAt', type: 'date', required: true, index: true },
+    { name: 'leakId', type: 'text', required: true, unique: true, index: true },
+    { name: 'leakIdIssuedAt', type: 'date', required: true, index: true },
   ],
   timestamps: true,
 }

@@ -58,7 +58,12 @@ test.describe('encrypted playback contract', () => {
     const grant = (await grantResponse.json()) as {
       licenceURL: string
       playbackGrantToken: string
+      watermark: { issuedAt: string; leakId: string }
     }
+    expect(grant.watermark).toMatchObject({
+      issuedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      leakId: expect.stringMatching(/^lk_[A-Za-z0-9_-]{16}$/),
+    })
     const manifestResponse = await manifestResponsePromise
     expect(manifestResponse.status()).toBe(200)
     const manifest = await manifestResponse.text()
@@ -146,24 +151,35 @@ test.describe('encrypted playback contract', () => {
     }
   })
 
-  test('attributes recordings with a moving disclosed watermark, including in fullscreen', async ({
+  test('attributes recordings with a rotating Leak ID watermark, including in fullscreen', async ({
     page,
   }) => {
+    test.setTimeout(90_000)
     await openReadyAsset(page, 'watermarked-lesson.mp4')
 
     const watermark = page.getByTestId('viewer-watermark')
+    await expect(watermark).not.toBeVisible()
+    const rotationResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes('/watermark') && response.request().method() === 'POST',
+    )
+    await page.getByRole('button', { name: 'Start secure playback' }).click()
     await expect(watermark).toHaveAccessibleName('Recording attribution watermark')
-    await expect(watermark).toContainText(testInvitee.email)
+    await expect(watermark).not.toContainText(testInvitee.email)
+    await expect(watermark.locator('span')).toHaveText(/^lk_[A-Za-z0-9_-]{16}$/)
     await expect(watermark.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}T/)
+    const initialLeakId = await watermark.locator('span').textContent()
     const initialPosition = await watermark.getAttribute('data-position')
-    await expect
-      .poll(() => watermark.getAttribute('data-position'), { timeout: 10_000 })
-      .not.toBe(initialPosition)
+    const rotationResponse = await rotationResponsePromise
+    expect(rotationResponse.status()).toBe(200)
+    const rotation = (await rotationResponse.json()) as { leakId: string }
+    expect(rotation.leakId).not.toBe(initialLeakId)
+    await expect(watermark.locator('span')).toHaveText(rotation.leakId)
+    await expect.poll(() => watermark.getAttribute('data-position')).not.toBe(initialPosition)
 
     await expect(
-      page.getByText(/Your full email and the current timestamp move across playback/),
+      page.getByText(/compact Leak ID and server-issued timestamp move across playback/),
     ).toBeVisible()
-    await page.getByRole('button', { name: 'Start secure playback' }).click()
     await expect(page.locator('.secure-playback__status')).toHaveText(
       'Secure playback could not start. Request a fresh grant and try again.',
     )
@@ -207,6 +223,6 @@ test.describe('encrypted playback contract', () => {
     await page.goto('/demo/terms')
     await expect(page).toHaveURL('/demo/terms')
     await expect(page.getByRole('heading', { name: 'Pilot terms' })).toBeVisible()
-    await expect(page.getByText(/full Pilot Member email and a current timestamp/)).toBeVisible()
+    await expect(page.getByText(/compact, opaque Leak ID and a server-issued timestamp/)).toBeVisible()
   })
 })

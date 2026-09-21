@@ -21,9 +21,9 @@ export default async function PilotTermsPage() {
       <section aria-labelledby="playback-watermark-term">
         <h2 id="playback-watermark-term">Playback watermark</h2>
         <p>
-          Secure playback displays your full Pilot Member email and a current timestamp over the
-          video. This disclosed watermark moves periodically through the picture and remains visible
-          in fullscreen so that screen recordings can be attributed to the signed-in member.
+          Secure playback displays a compact, opaque Leak ID and a server-issued timestamp over the
+          video. The watermark changes periodically through the picture and remains visible in
+          fullscreen so that recordings can be investigated without displaying your email.
         </p>
         <p>
           Pilot playback is streaming-only. Downloads, offline storage, persistent licences, and

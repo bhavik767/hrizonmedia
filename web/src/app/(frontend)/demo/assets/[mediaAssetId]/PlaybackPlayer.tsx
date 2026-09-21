@@ -20,12 +20,18 @@ interface PlaybackGrantContract {
   playbackGrantToken: string
   resourceAuthorization?: ResourceAuthorization
   sessionType: 'temporary'
+  watermark: Watermark
 }
 
 interface ResourceAuthorization {
   origin: string
   pathPrefix: string
   query: string
+}
+
+interface Watermark {
+  issuedAt: string
+  leakId: string
 }
 
 const UI_CONFIGURATION = {
@@ -66,17 +72,18 @@ async function assertWidevineAvailable(): Promise<void> {
 
 export function PlaybackPlayer({
   mediaAssetId,
-  viewerEmail,
 }: {
   mediaAssetId: string
-  viewerEmail: string
 }) {
   const playerRef = useRef<null | { destroy(): Promise<void> }>(null)
   const uiRef = useRef<null | { destroy(): Promise<unknown> }>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [message, setMessage] = useState('Playback has not started.')
-  const [timestamp, setTimestamp] = useState('')
+  const [watermark, setWatermark] = useState<null | (Watermark & {
+    playbackGrantId: string
+    playbackGrantToken: string
+  })>(null)
   const [watermarkPosition, setWatermarkPosition] = useState(0)
   const [starting, setStarting] = useState(false)
 
@@ -89,21 +96,38 @@ export function PlaybackPlayer({
   )
 
   useEffect(() => {
-    const updateTimestamp = () => setTimestamp(new Date().toISOString())
-    updateTimestamp()
-    const timestampTimer = window.setInterval(updateTimestamp, 1_000)
-    const positionTimer = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? undefined
-      : window.setInterval(
-          () => setWatermarkPosition((position) => (position + 1) % WATERMARK_POSITIONS.length),
-          6_000,
-        )
+    if (!watermark) return
+    let cancelled = false
+    let refreshing = false
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const refreshWatermark = async () => {
+      if (refreshing) return
+      refreshing = true
+      try {
+        const response = await fetch(`/api/demo/playback/${watermark.playbackGrantId}/watermark`, {
+          headers: { 'X-Playback-Grant': watermark.playbackGrantToken },
+          method: 'POST',
+        })
+        const next = await responseJSON<Watermark>(response)
+        if (!cancelled) {
+          setWatermark({ ...watermark, ...next })
+          if (!reducedMotion) {
+            setWatermarkPosition((position) => (position + 1) % WATERMARK_POSITIONS.length)
+          }
+        }
+      } catch (error) {
+        console.error(error)
+      } finally {
+        refreshing = false
+      }
+    }
+    const rotationTimer = window.setInterval(() => void refreshWatermark(), 30_000)
 
     return () => {
-      window.clearInterval(timestampTimer)
-      if (positionTimer !== undefined) window.clearInterval(positionTimer)
+      cancelled = true
+      window.clearInterval(rotationTimer)
     }
-  }, [])
+  }, [watermark])
 
   async function startPlayback() {
     const video = videoRef.current
@@ -118,6 +142,11 @@ export function PlaybackPlayer({
         method: 'POST',
       })
       const grant = await responseJSON<PlaybackGrantContract>(response)
+      setWatermark({
+        ...grant.watermark,
+        playbackGrantId: grant.playbackGrantId,
+        playbackGrantToken: grant.playbackGrantToken,
+      })
       const { default: shaka } = await import('shaka-player/dist/shaka-player.ui.js')
       shaka.polyfill.installAll()
       if (!shaka.Player.isBrowserSupported()) {
@@ -261,29 +290,30 @@ export function PlaybackPlayer({
           playsInline
           ref={videoRef}
         />
-        <div
-          aria-label="Recording attribution watermark"
-          className="secure-playback__watermark"
-          data-position={WATERMARK_POSITIONS[watermarkPosition]}
-          data-testid="viewer-watermark"
-        >
-          <span>{viewerEmail}</span>
-          <time dateTime={timestamp}>
-            {timestamp
-              ? new Date(timestamp).toLocaleString('en-IN', {
-                  dateStyle: 'medium',
-                  timeStyle: 'medium',
-                })
-              : 'Loading current time…'}
-          </time>
-        </div>
+        {watermark && (
+          <div
+            aria-label="Recording attribution watermark"
+            className="secure-playback__watermark"
+            data-position={WATERMARK_POSITIONS[watermarkPosition]}
+            data-testid="viewer-watermark"
+          >
+            <span>{watermark.leakId}</span>
+            <time dateTime={watermark.issuedAt}>
+              {new Date(watermark.issuedAt).toLocaleString('en-IN', {
+                dateStyle: 'medium',
+                timeStyle: 'medium',
+              })}
+            </time>
+          </div>
+        )}
       </div>
       <p aria-live="polite" className="secure-playback__status">
         {message}
       </p>
       <p className="secure-playback__disclosure" id="playback-watermark-notice">
-        Your full email and the current timestamp move across playback to attribute screen
-        recordings. Streaming-only playback uses temporary rights; downloads, offline playback,
+        A compact Leak ID and server-issued timestamp move across playback to support recording
+        investigations without displaying your email. Streaming-only playback uses temporary rights;
+        downloads, offline playback,
         persistent licences, and picture-in-picture are disabled. Read the{' '}
         <Link href="/demo/terms">Pilot terms</Link>.
       </p>

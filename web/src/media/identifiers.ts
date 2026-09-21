@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 
 export type MediaAssetId = `asset_${string}`
 export type UploadSessionId = `upload_${string}`
@@ -6,6 +6,7 @@ export type ProcessingJobId = `processing_${string}`
 export type ProviderJobId = `provider_job_${string}`
 export type ProviderUploadId = `provider_upload_${string}`
 export type PlaybackGrantId = `playback_${string}`
+export type LeakId = `lk_${string}`
 declare const deliveryTokenBrand: unique symbol
 declare const playbackGrantTokenBrand: unique symbol
 export type DeliveryToken = string & { readonly [deliveryTokenBrand]: true }
@@ -25,6 +26,10 @@ export function newProcessingJobId(): ProcessingJobId {
 
 export function newPlaybackGrantId(): PlaybackGrantId {
   return `playback_${randomUUID()}`
+}
+
+export function newLeakId(): LeakId {
+  return `lk_${randomBytes(12).toString('base64url')}`
 }
 
 export function processingOutputPrefix(processingJobId: string): string {
