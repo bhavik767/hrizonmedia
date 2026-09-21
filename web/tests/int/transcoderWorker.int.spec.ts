@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ffmpegArguments, validateJob } from '../../transcoder/worker.mjs'
+import { ffmpegArguments, packagerArguments, validateJob } from '../../transcoder/worker.mjs'
 
 const processingJobId = 'processing_00000000-0000-4000-8000-000000000000'
 const job = {
@@ -23,6 +23,26 @@ describe('Salad transcoder worker contract', () => {
     expect(commands).toHaveLength(2)
     expect(commands[0]).toEqual(expect.arrayContaining(['scale=640:360', 'libx264', 'aac']))
     expect(commands[1]).toEqual(expect.arrayContaining(['scale=1280:720', 'libx264', 'aac']))
+  })
+
+  it('requests separately named DASH/CENC and HLS/CBCS delivery packages', () => {
+    expect(
+      packagerArguments(
+        job,
+        [{ absolute: '/work/clear/video-360.mp4' }],
+        '/work/packaged',
+        'enc-token',
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        '--dash',
+        '--hls',
+        '--mpd_filename',
+        'manifest.mpd',
+        '--m3u8_filename',
+        'master.m3u8',
+      ]),
+    )
   })
 
   it('rejects a worker attempt that escapes paths or upscales', () => {

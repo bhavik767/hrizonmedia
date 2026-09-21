@@ -5,7 +5,8 @@ import { createCipheriv, createHash } from 'node:crypto'
 import type { DrmProvider } from './contracts'
 import { PermanentTranscodeError, TransientTranscodeError } from './errors'
 
-const LICENCE_URL = 'https://drm-license.doverunner.com/ri/licenseManager.do?response_format=original'
+const LICENCE_URL =
+  'https://drm-license.doverunner.com/ri/licenseManager.do?response_format=original'
 const TOKEN_IV = Buffer.from('0123456789abcdef', 'utf8')
 const CONTENT_ID = /^drm_processing_[0-9a-f-]{36}$/
 
@@ -41,6 +42,7 @@ function providerToken(
   configuration: DoveRunnerDrmConfiguration,
   drmContentId: string,
   playbackGrantId: string,
+  drmType: 'FairPlay' | 'Widevine',
   now: Date,
 ): string {
   if (!CONTENT_ID.test(drmContentId)) {
@@ -48,7 +50,7 @@ function providerToken(
   }
   const token = {
     cid: drmContentId,
-    drm_type: 'Widevine',
+    drm_type: drmType,
     policy: encryptedPolicy(configuration.siteKey),
     site_id: configuration.siteId,
     timestamp: timestamp(now),
@@ -70,8 +72,14 @@ export function createDoveRunnerDrmProvider(
   const now = dependencies.now ?? (() => new Date())
 
   return {
-    async acquireTemporaryLicence({ challenge, drmContentId, playbackGrantId }) {
-      const customData = providerToken(configuration, drmContentId, playbackGrantId, now())
+    async acquireTemporaryLicence({ browser, challenge, drmContentId, playbackGrantId }) {
+      const customData = providerToken(
+        configuration,
+        drmContentId,
+        playbackGrantId,
+        browser.keySystem === 'com.apple.fps' ? 'FairPlay' : 'Widevine',
+        now(),
+      )
       let response: Response
       try {
         response = await fetcher(LICENCE_URL, {
@@ -89,7 +97,8 @@ export function createDoveRunnerDrmProvider(
       if (response.status === 429 || response.status >= 500) {
         throw new TransientTranscodeError('DoveRunner licence service is temporarily unavailable.')
       }
-      if (!response.ok) throw new PermanentTranscodeError('DoveRunner rejected the licence request.')
+      if (!response.ok)
+        throw new PermanentTranscodeError('DoveRunner rejected the licence request.')
       const licence = new Uint8Array(await response.arrayBuffer())
       if (licence.byteLength === 0) {
         throw new PermanentTranscodeError('DoveRunner returned an empty licence.')
@@ -98,6 +107,18 @@ export function createDoveRunnerDrmProvider(
     },
 
     createPlaybackContract({ browser, playbackGrantId }) {
+      if (browser.keySystem === 'com.apple.fps') {
+        return {
+          distinctiveIdentifier: 'not-allowed',
+          fairPlayCertificateURL: `https://license-global.pallycon.com/ri/fpsCert.do?siteId=${encodeURIComponent(configuration.siteId)}`,
+          hdcpRequired: false,
+          keySystem: browser.keySystem,
+          licenceURL: `/api/demo/playback/${playbackGrantId}/licence`,
+          manifestFormat: browser.manifestFormat,
+          persistentState: 'not-allowed',
+          sessionType: 'temporary',
+        }
+      }
       return {
         distinctiveIdentifier: 'not-allowed',
         hdcpRequired: false,

@@ -46,7 +46,7 @@ interface PlaybackTokenClaims {
   owner: number
 }
 
-export interface PlaybackGrantResponse extends DrmPlaybackContract {
+export type PlaybackGrantResponse = DrmPlaybackContract & {
   deliveryExpiresAt: string
   deliveryToken: DeliveryToken
   expiresAt: string
@@ -218,7 +218,12 @@ function storedPlaybackWatermark(grant: PlaybackGrant): PlaybackWatermark {
 
 async function recordLeakIdIssued(
   payload: Payload,
-  input: { assetID: number; ownerID: number; playbackGrantId: PlaybackGrantId; watermark: PlaybackWatermark },
+  input: {
+    assetID: number
+    ownerID: number
+    playbackGrantId: PlaybackGrantId
+    watermark: PlaybackWatermark
+  },
 ): Promise<void> {
   await recordAuditEvent(payload, {
     action: 'playback_leak_id_issued',
@@ -385,6 +390,7 @@ export async function acquirePlaybackLicence(
     playbackGrantId: claims.grant,
   })
   const licence = await providers.drm.acquireTemporaryLicence({
+    browser: claims.browser,
     challenge: options.challenge ?? new Uint8Array(),
     drmContentId: asset.drmContentId!,
     playbackGrantId: claims.grant,

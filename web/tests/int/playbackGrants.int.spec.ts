@@ -116,7 +116,11 @@ describe('Playback Grant authorization', () => {
       depth: 0,
       limit: 1,
       overrideAccess: true,
-      where: { eventKey: { equals: `playback-grant:${first.playbackGrantId}:leak:${first.watermark.leakId}` } },
+      where: {
+        eventKey: {
+          equals: `playback-grant:${first.playbackGrantId}:leak:${first.watermark.leakId}`,
+        },
+      },
     })
     expect(audit.docs[0]).toMatchObject({
       action: 'playback_leak_id_issued',
@@ -151,14 +155,14 @@ describe('Playback Grant authorization', () => {
     const chrome = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, {
       browser: protectedPlaybackBrowser(
         'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36',
-        true,
+        { fairPlayAvailable: false, widevineAvailable: true },
       ),
       now,
     })
     const edge = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, {
       browser: protectedPlaybackBrowser(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/126.0.0.0 Safari/537.36',
-        true,
+        { fairPlayAvailable: false, widevineAvailable: true },
       ),
       now,
     })
@@ -176,25 +180,51 @@ describe('Playback Grant authorization', () => {
     })
   })
 
-  it('rejects browsers without a verified protected-playback path before creating a grant', async () => {
+  it('selects a FairPlay HLS package for Safari through the same temporary Playback Grant', async () => {
     const asset = await createAsset(owner)
 
+    const safari = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, {
+      browser: protectedPlaybackBrowser(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
+        { fairPlayAvailable: true, widevineAvailable: false },
+      ),
+      now,
+    })
+
+    expect(safari).toMatchObject({
+      fairPlayCertificateURL: expect.stringContaining('/fairplay-certificate'),
+      hdcpRequired: false,
+      keySystem: 'com.apple.fps',
+      manifestFormat: 'hls',
+      persistentState: 'not-allowed',
+      sessionType: 'temporary',
+    })
+    expect(safari.manifestURL).toContain('/master.m3u8')
+    await expect(
+      acquirePlaybackLicence(payload, owner, safari.playbackGrantToken, {
+        now,
+        providers: getFakeProviders(),
+      }),
+    ).resolves.toMatchObject({ keySystem: 'com.apple.fps', manifestFormat: 'hls' })
+  })
+
+  it('rejects browsers without a verified protected-playback path before creating a grant', async () => {
     expect(() =>
       protectedPlaybackBrowser(
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
-        true,
+        { fairPlayAvailable: false, widevineAvailable: true },
       ),
     ).toThrow(PlaybackCompatibilityError)
     expect(() =>
       protectedPlaybackBrowser(
         'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36',
-        false,
+        { fairPlayAvailable: false, widevineAvailable: false },
       ),
     ).toThrow(PlaybackCompatibilityError)
     expect(() =>
       protectedPlaybackBrowser(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 OPR/111.0.0.0 Safari/537.36',
-        true,
+        { fairPlayAvailable: false, widevineAvailable: true },
       ),
     ).toThrow(PlaybackCompatibilityError)
   })

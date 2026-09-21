@@ -42,28 +42,64 @@ describe('S3 storage provider', () => {
     const { client, send } = commandSender([
       {
         Body: {
-          transformToString: async () => JSON.stringify({ attempt: 1, outputPrefix, renditions, version: 1 }),
+          transformToString: async () =>
+            JSON.stringify({ attempt: 1, outputPrefix, renditions, version: 1 }),
         },
         ContentLength: 512,
       },
       {
-        Body: { transformToString: async () => '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><Representation codecs="avc1.64001f" height="360"/><Representation codecs="avc1.640028" height="480"/><Representation codecs="mp4a.40.2"/></MPD>' },
+        Body: {
+          transformToString: async () =>
+            '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><Representation codecs="avc1.64001f" height="360"/><Representation codecs="avc1.640028" height="480"/><Representation codecs="mp4a.40.2"/></MPD>',
+        },
         ContentLength: 1024,
         ContentType: 'application/dash+xml',
       },
-      { Contents: [{ Key: `${outputPrefix}video-init.mp4` }, { Key: `${outputPrefix}video-1.m4s` }] },
+      {
+        Body: { transformToString: async () => '#EXTM3U\nvideo.m3u8\n' },
+        ContentLength: 1024,
+        ContentType: 'application/vnd.apple.mpegurl',
+      },
+      {
+        Body: {
+          transformToString: async () =>
+            '#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://asset",KEYFORMAT="com.apple.streamingkeydelivery"\n',
+        },
+        ContentLength: 1024,
+        ContentType: 'application/vnd.apple.mpegurl',
+      },
+      {
+        Contents: [
+          { Key: `${outputPrefix}master.m3u8` },
+          { Key: `${outputPrefix}video-init.mp4` },
+          { Key: `${outputPrefix}video-1.m4s` },
+        ],
+      },
     ])
     const verify = createS3OutputVerifier(
-      { accessKeyId: 'access', bucket: 'private-bucket', region: 'ap-south-1', secretAccessKey: 'secret' },
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
       { client },
     )
 
     await expect(verify({ attempt: 1, outputPrefix, renditions })).resolves.toBeUndefined()
     expect(send.mock.calls[0]![0]).toBeInstanceOf(GetObjectCommand)
-    expect((send.mock.calls[0]![0] as GetObjectCommand).input.Key).toBe(`${outputPrefix}completion.json`)
+    expect((send.mock.calls[0]![0] as GetObjectCommand).input.Key).toBe(
+      `${outputPrefix}completion.json`,
+    )
     expect(send.mock.calls[1]![0]).toBeInstanceOf(GetObjectCommand)
-    expect((send.mock.calls[1]![0] as GetObjectCommand).input.Key).toBe(`${outputPrefix}manifest.mpd`)
-    expect(send.mock.calls[2]![0]).toBeInstanceOf(ListObjectsV2Command)
+    expect((send.mock.calls[1]![0] as GetObjectCommand).input.Key).toBe(
+      `${outputPrefix}manifest.mpd`,
+    )
+    expect((send.mock.calls[2]![0] as GetObjectCommand).input.Key).toBe(
+      `${outputPrefix}master.m3u8`,
+    )
+    expect((send.mock.calls[3]![0] as GetObjectCommand).input.Key).toBe(`${outputPrefix}video.m3u8`)
+    expect(send.mock.calls[4]![0]).toBeInstanceOf(ListObjectsV2Command)
   })
 
   it('creates a private checksummed multipart upload and signs an exact part receipt', async () => {
@@ -74,11 +110,15 @@ describe('S3 storage provider', () => {
         _client: unknown,
         _command: UploadPartCommand,
         _options: { expiresIn: number; unhoistableHeaders?: Set<string> },
-      ) =>
-        'https://bucket.example/upload-part',
+      ) => 'https://bucket.example/upload-part',
     )
     const provider = createS3StorageProvider(
-      { accessKeyId: 'access', bucket: 'private-bucket', region: 'ap-south-1', secretAccessKey: 'secret' },
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
       { client, presign, probe: vi.fn() },
     )
 
@@ -148,10 +188,18 @@ describe('S3 storage provider', () => {
       },
     ])
     const provider = createS3StorageProvider(
-      { accessKeyId: 'access', bucket: 'private-bucket', region: 'ap-south-1', secretAccessKey: 'secret' },
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
       { client, presign: vi.fn(), probe: vi.fn() },
     )
-    const initiated = await provider.initiateMultipart({ metadata: { ...metadata, size: 6 }, uploadSessionId })
+    const initiated = await provider.initiateMultipart({
+      metadata: { ...metadata, size: 6 },
+      uploadSessionId,
+    })
 
     await expect(
       provider.listParts(initiated.providerUploadId, initiated.providerUploadData),
@@ -184,7 +232,12 @@ describe('S3 storage provider', () => {
       { ChecksumSHA256: checksum, ContentLength: metadata.size, ContentType: 'video/mp4' },
     ])
     const provider = createS3StorageProvider(
-      { accessKeyId: 'access', bucket: 'private-bucket', region: 'ap-south-1', secretAccessKey: 'secret' },
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
       { client, presign: vi.fn(), probe: vi.fn() },
     )
     const initiated = await provider.initiateMultipart({ metadata, uploadSessionId })
@@ -206,13 +259,22 @@ describe('S3 storage provider', () => {
     const processingJobId = newProcessingJobId()
     const prefix = `outputs/${processingJobId}/`
     const { client, send } = commandSender([
-      { Contents: [{ Key: `${prefix}manifest.mpd` }], IsTruncated: true, NextContinuationToken: 'next' },
+      {
+        Contents: [{ Key: `${prefix}manifest.mpd` }],
+        IsTruncated: true,
+        NextContinuationToken: 'next',
+      },
       {},
       { Contents: [{ Key: `${prefix}video-1.m4s` }], IsTruncated: false },
       {},
     ])
     const provider = createS3StorageProvider(
-      { accessKeyId: 'access', bucket: 'private-bucket', region: 'ap-south-1', secretAccessKey: 'secret' },
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
       { client, presign: vi.fn(), probe: vi.fn() },
     )
 
@@ -236,7 +298,12 @@ describe('S3 storage provider', () => {
     send.mockImplementationOnce(async () => Promise.reject(missing))
     send.mockImplementationOnce(async () => ({}) as never)
     const provider = createS3StorageProvider(
-      { accessKeyId: 'access', bucket: 'private-bucket', region: 'ap-south-1', secretAccessKey: 'secret' },
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
       { client, presign: vi.fn(), probe: vi.fn() },
     )
     const initiated = await provider.initiateMultipart({ metadata, uploadSessionId })
@@ -274,6 +341,7 @@ describe('CloudFront delivery provider', () => {
       mediaAssetId: newMediaAssetId(),
       playbackGrantId: 'playback_00000000-0000-0000-0000-000000000000',
       processingJobId,
+      manifestFormat: 'dash',
       token: 'delivery-token' as never,
     })
     const signedURL = new URL(authorization.manifestURL)

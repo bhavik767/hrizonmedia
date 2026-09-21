@@ -32,12 +32,16 @@ export async function GET(
 ): Promise<Response> {
   return withAuthenticatedUploader(request, async ({ member, payload }) => {
     try {
-      const { mediaAssetId, playbackGrantId, token } = await authorizePlaybackResourceRequest({
-        member,
-        payload,
-        rawPlaybackGrantId: (await context.params).playbackGrantId,
-        request,
-      })
+      const { manifestFormat, mediaAssetId, playbackGrantId, token } =
+        await authorizePlaybackResourceRequest({
+          member,
+          payload,
+          rawPlaybackGrantId: (await context.params).playbackGrantId,
+          request,
+        })
+      if (manifestFormat !== 'dash') {
+        return Response.json({ error: 'Playback authorization is invalid.' }, { status: 403 })
+      }
       const asset = await getVisibleAsset(payload, member, mediaAssetId)
       if (!asset.renditions?.length) {
         throw new Error('Ready Media Asset has no renditions.')
