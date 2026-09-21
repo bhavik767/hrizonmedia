@@ -18,12 +18,17 @@ at both build and runtime, `HRIZONMEDIA_DEMO_ENABLED=true`, and independent stag
 secrets. Railway supplies `RAILWAY_ENVIRONMENT_NAME=staging`. Never duplicate
 production data or run the old template seed/reset scripts.
 
-Deploy this branch using the connected GitHub source or authenticated Railway CLI
-from the repository root: `railway up . --path-as-root --project <project-id>
+Deploy `fix/salad-staging-bootstrap` using the connected GitHub source or authenticated
+Railway CLI from the repository root: `railway up . --path-as-root --project <project-id>
 --environment staging --service <staging-web-service>`. This preserves `/web` in
 the upload archive, matching the service root and watch patterns.
 Confirm the linked project/service first. Do not change the production source branch,
 domain or variables. Keep `HRIZONMEDIA_DEMO_ENABLED` unset or `false` there.
+
+The staging deployment evidence records revision `e30ca97` on 15 September 2026.
+That revision is an ancestor of `fix/salad-staging-bootstrap`. Railway's checked-in
+configuration identifies the `staging` environment but does not record its GitHub
+source-branch binding; confirm the connected branch in Railway before changing it.
 
 ## Readiness and operations
 

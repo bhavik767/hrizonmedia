@@ -11,6 +11,7 @@ import type {
 } from '../identifiers'
 import type { CompletedPart, PartUploadTarget } from '../multipart'
 import type { UploadMetadata } from '../types'
+import type { ProtectedPlaybackBrowser } from '../playback-browser'
 
 export interface MultipartUpload {
   partSize: number
@@ -107,6 +108,7 @@ export interface DeliveryProvider {
     mediaAssetId: MediaAssetId
     playbackGrantId: PlaybackGrantId
     processingJobId?: ProcessingJobId
+    manifestFormat: ProtectedPlaybackBrowser['manifestFormat']
     token: DeliveryToken
   }): Promise<DeliveryAuthorization>
   revokeAsset(mediaAssetId: MediaAssetId): Promise<void>
@@ -114,8 +116,10 @@ export interface DeliveryProvider {
 
 export interface DrmPlaybackContract {
   distinctiveIdentifier: 'not-allowed'
+  hdcpRequired: false
   keySystem: 'com.widevine.alpha'
   licenceURL: string
+  manifestFormat: ProtectedPlaybackBrowser['manifestFormat']
   persistentState: 'not-allowed'
   sessionType: 'temporary'
 }
@@ -126,7 +130,10 @@ export interface DrmProvider {
     drmContentId: string
     playbackGrantId: PlaybackGrantId
   }): Promise<Uint8Array>
-  createPlaybackContract(input: { playbackGrantId: PlaybackGrantId }): DrmPlaybackContract
+  createPlaybackContract(input: {
+    browser: ProtectedPlaybackBrowser
+    playbackGrantId: PlaybackGrantId
+  }): DrmPlaybackContract
 }
 
 export interface MediaProviders {

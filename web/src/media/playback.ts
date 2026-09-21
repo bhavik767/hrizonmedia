@@ -7,6 +7,11 @@ import type { Payload } from 'payload'
 import type { MediaAsset, PilotMember, PlaybackGrant } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
 import { assertMediaActivityAllowed } from '@/pilot/operations'
+import {
+  isProtectedPlaybackBrowser,
+  type ProtectedPlaybackBrowser,
+  widevinePlaybackBrowser,
+} from './playback-browser'
 
 import {
   newPlaybackGrantId,
@@ -31,6 +36,7 @@ type PlaybackTokenKind = 'delivery' | 'grant'
 
 interface PlaybackTokenClaims {
   asset: MediaAssetId
+  browser: ProtectedPlaybackBrowser
   exp: number
   grant: PlaybackGrantId
   kind: PlaybackTokenKind
@@ -104,7 +110,12 @@ function decodeClaims(
   } catch {
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 401)
   }
-  if (claims.kind !== kind || !Number.isSafeInteger(claims.exp) || claims.exp < now.getTime()) {
+  if (
+    claims.kind !== kind ||
+    !isProtectedPlaybackBrowser(claims.browser) ||
+    !Number.isSafeInteger(claims.exp) ||
+    claims.exp < now.getTime()
+  ) {
     throw new PlaybackAuthorizationError('Playback authorization has expired.', 401)
   }
   return claims
@@ -189,11 +200,12 @@ export async function createPlaybackGrant(
   payload: Payload,
   member: PilotMember,
   mediaAssetId: MediaAssetId,
-  options: { now?: Date; providers?: MediaProviders } = {},
+  options: { browser?: ProtectedPlaybackBrowser; now?: Date; providers?: MediaProviders } = {},
 ): Promise<PlaybackGrantResponse> {
   await assertMediaActivityAllowed(payload)
   const now = options.now ?? new Date()
   const providers = options.providers ?? getMediaProviders()
+  const browser = options.browser ?? widevinePlaybackBrowser
   const owner = await activeUploader(payload, member)
   const asset = await ownedAsset(payload, owner, mediaAssetId)
   assertPlayable(asset, now)
@@ -214,6 +226,7 @@ export async function createPlaybackGrant(
   })
   const playbackGrantToken = encodeClaims({
     asset: mediaAssetId,
+    browser,
     exp: expiresAt.getTime(),
     grant: playbackGrantId,
     kind: 'grant',
@@ -221,6 +234,7 @@ export async function createPlaybackGrant(
   }) as PlaybackGrantToken
   const deliveryToken = encodeClaims({
     asset: mediaAssetId,
+    browser,
     exp: deliveryExpiresAt.getTime(),
     grant: playbackGrantId,
     kind: 'delivery',
@@ -231,11 +245,12 @@ export async function createPlaybackGrant(
     providers.delivery.authorize({
       expiresAt: deliveryExpiresAt,
       mediaAssetId,
+      manifestFormat: browser.manifestFormat,
       playbackGrantId,
       processingJobId,
       token: deliveryToken,
     }),
-    providers.drm.createPlaybackContract({ playbackGrantId }),
+    providers.drm.createPlaybackContract({ browser, playbackGrantId }),
   ])
   await recordAuditEvent(payload, {
     action: 'playback_granted',
@@ -281,7 +296,10 @@ export async function acquirePlaybackLicence(
   await storedGrant(payload, claims)
   const asset = await ownedAsset(payload, owner, claims.asset)
   assertPlayable(asset, now)
-  const contract = providers.drm.createPlaybackContract({ playbackGrantId: claims.grant })
+  const contract = providers.drm.createPlaybackContract({
+    browser: claims.browser,
+    playbackGrantId: claims.grant,
+  })
   const licence = await providers.drm.acquireTemporaryLicence({
     challenge: options.challenge ?? new Uint8Array(),
     drmContentId: asset.drmContentId!,
@@ -327,6 +345,7 @@ export async function authorizePlaybackResource(
   return {
     deliveryExpiresAt: grant.deliveryExpiresAt,
     mediaAssetId: claims.asset,
+    manifestFormat: claims.browser.manifestFormat,
     playbackGrantId: claims.grant,
     processingJobId: await assetProcessingJobId(payload, asset.id),
   }

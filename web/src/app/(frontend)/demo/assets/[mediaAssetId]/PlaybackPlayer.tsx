@@ -10,8 +10,10 @@ interface PlaybackGrantContract {
   deliveryToken: string
   distinctiveIdentifier: 'not-allowed'
   expiresAt: string
+  hdcpRequired: false
   keySystem: 'com.widevine.alpha'
   licenceURL: string
+  manifestFormat: 'dash'
   manifestURL: string
   persistentState: 'not-allowed'
   playbackGrantId: string
@@ -47,6 +49,19 @@ async function responseJSON<T>(response: Response): Promise<T> {
   const body = (await response.json()) as T & { error?: string }
   if (!response.ok) throw new Error(body.error || 'Playback authorization failed.')
   return body
+}
+
+async function assertWidevineAvailable(): Promise<void> {
+  if (!navigator.requestMediaKeySystemAccess) {
+    throw new Error('Secure playback is not supported by this browser. Widevine DRM is unavailable.')
+  }
+  await navigator.requestMediaKeySystemAccess('com.widevine.alpha', [
+    {
+      audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }],
+      initDataTypes: ['cenc'],
+      videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.640028"' }],
+    },
+  ])
 }
 
 export function PlaybackPlayer({
@@ -97,11 +112,12 @@ export function PlaybackPlayer({
     setStarting(true)
     setMessage('Authorising encrypted playback…')
     try {
+      await assertWidevineAvailable()
       const response = await fetch(`/api/demo/assets/${mediaAssetId}/playback-grants`, {
+        headers: { 'X-Hrizonmedia-Widevine': 'available' },
         method: 'POST',
       })
-      if (!response.ok) throw new Error(await response.text())
-      const grant = (await response.json()) as PlaybackGrantContract
+      const grant = await responseJSON<PlaybackGrantContract>(response)
       const { default: shaka } = await import('shaka-player/dist/shaka-player.ui.js')
       shaka.polyfill.installAll()
       if (!shaka.Player.isBrowserSupported()) {
@@ -199,6 +215,7 @@ export function PlaybackPlayer({
 
       const configuration = {
         distinctiveIdentifierRequired: false,
+        hdcpRequired: grant.hdcpRequired,
         keySystem: grant.keySystem,
         persistentSessionOnlinePlayback: false,
         persistentStateRequired: false,
@@ -212,7 +229,11 @@ export function PlaybackPlayer({
       await player.load(grant.manifestURL)
     } catch (error) {
       console.error(error)
-      setMessage('Secure playback could not start. Request a fresh grant and try again.')
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : 'Secure playback could not start. Request a fresh grant and try again.',
+      )
     } finally {
       setStarting(false)
     }
