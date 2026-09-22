@@ -145,6 +145,7 @@ export function createS3OutputVerifier(
       !/codecs=["'][^"']*avc1/i.test(manifestText) ||
       !/codecs=["'][^"']*mp4a/i.test(manifestText) ||
       !/edef8ba9-79d6-4ace-a3c8-27dcd51d21ed/i.test(manifestText) ||
+      !/9a04f079-9840-4286-ab92-e65be0885f95/i.test(manifestText) ||
       input.renditions.some(
         ({ height }) => !new RegExp(`height=["']${height}["']`).test(manifestText),
       )

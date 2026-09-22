@@ -19,6 +19,8 @@ import {
 const execFile = promisify(execFileCallback)
 const PROCESSING_ID = /^processing_[0-9a-f-]{36}$/
 const SOURCE_KEY = /^sources\/upload_[0-9a-f-]{36}\/source\.(?:mp4|mkv)$/
+const PLAYREADY_DASH_SYSTEM_ID = '9a04f079-9840-4286-ab92-e65be0885f95'
+const WIDEVINE_DASH_SYSTEM_ID = 'edef8ba9-79d6-4ace-a3c8-27dcd51d21ed'
 
 export function validateJob(value) {
   const job = value?.input ?? value
@@ -100,12 +102,13 @@ async function filesUnder(directory, root = directory) {
   return files
 }
 
-async function sendCallback(job, status, environment, fetcher) {
+async function sendCallback(job, status, environment, fetcher, { playReadyPackaged = false } = {}) {
   const timestamp = String(Date.now())
   const body = JSON.stringify({
     callbackId: `worker:${job.processingJobId}:${job.attempt}:${status}`,
     outputPrefix: job.outputPrefix,
     processingJobId: job.processingJobId,
+    ...(status === 'ready' ? { playReadyPackaged } : {}),
     status,
   })
   const signature = createHmac('sha256', environment.TRANSCODER_CALLBACK_SECRET)
@@ -121,6 +124,15 @@ async function sendCallback(job, status, environment, fetcher) {
       method: 'POST',
   })
   if (!response.ok) throw new Error('Application callback was rejected.')
+}
+
+export function verifyDashProtection(manifestText) {
+  if (!new RegExp(WIDEVINE_DASH_SYSTEM_ID, 'i').test(manifestText)) {
+    throw new Error('DoveRunner manifest is not Widevine encrypted.')
+  }
+  if (!new RegExp(PLAYREADY_DASH_SYSTEM_ID, 'i').test(manifestText)) {
+    throw new Error('DoveRunner manifest is not PlayReady encrypted.')
+  }
 }
 
 export async function processJob(value, dependencies = {}) {
@@ -185,9 +197,7 @@ export async function processJob(value, dependencies = {}) {
     const hlsManifest = packaged.find(({ relative }) => relative === 'master.m3u8')
     if (!hlsManifest) throw new Error('DoveRunner did not create master.m3u8.')
     const manifestText = await readFile(manifest.absolute, 'utf8')
-    if (!/edef8ba9-79d6-4ace-a3c8-27dcd51d21ed/i.test(manifestText)) {
-      throw new Error('DoveRunner manifest is not Widevine encrypted.')
-    }
+    verifyDashProtection(manifestText)
     const hlsPlaylists = packaged.filter(({ relative }) => relative.endsWith('.m3u8'))
     const hlsPlaylistTexts = await Promise.all(
       hlsPlaylists.map(async ({ absolute }) => readFile(absolute, 'utf8')),
@@ -240,7 +250,7 @@ export async function processJob(value, dependencies = {}) {
       ContentType: 'application/json',
       Key: completionKey,
     }))
-    await sendCallback(job, 'ready', environment, fetcher)
+    await sendCallback(job, 'ready', environment, fetcher, { playReadyPackaged: true })
     for (const file of packaged) {
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: `${attemptPrefix}${file.relative}` }))
     }

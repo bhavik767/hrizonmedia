@@ -194,6 +194,10 @@ export function createSaladTranscodeProvider(
   }
 
   return {
+    // The worker and S3 verifier both reject a ready result unless its DASH
+    // manifest contains the PlayReady system ID.
+    producesPlayReadyPackage: true,
+
     async deleteOutputs({ processingJobId, providerJobId: id }) {
       if (processingJobId) await dependencies.tombstone(processingJobId)
       if (!id) return
