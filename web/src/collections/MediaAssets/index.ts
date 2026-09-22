@@ -25,6 +25,7 @@ export const MediaAssets: CollectionConfig = {
     { name: 'durationSeconds', type: 'number' },
     { name: 'verifiedAt', type: 'date' },
     { name: 'drmContentId', type: 'text', unique: true, index: true },
+    { name: 'playReadyPackaged', type: 'checkbox', defaultValue: false },
     { name: 'expiresAt', type: 'date', index: true },
     { name: 'deletedAt', type: 'date', index: true },
     { name: 'deletedBy', type: 'relationship', relationTo: 'pilot-members', index: true },

@@ -163,12 +163,15 @@ async function ownedAsset(
   return asset
 }
 
-function assertPlayable(asset: MediaAsset, now: Date): void {
+function assertPlayable(asset: MediaAsset, now: Date, browser?: ProtectedPlaybackBrowser): void {
   if (asset.status !== 'ready') {
     throw new PlaybackAuthorizationError('Media Asset is not ready for playback.', 409)
   }
   if (!asset.drmContentId) {
     throw new PlaybackAuthorizationError('Media Asset is not encrypted for playback.', 409)
+  }
+  if (browser?.keySystem === 'com.microsoft.playready' && !asset.playReadyPackaged) {
+    throw new PlaybackAuthorizationError('Media Asset is not packaged for PlayReady playback.', 409)
   }
   if (!asset.expiresAt || new Date(asset.expiresAt).getTime() <= now.getTime()) {
     throw new PlaybackAuthorizationError('Media Asset has expired.', 410)
@@ -247,7 +250,7 @@ export async function createPlaybackGrant(
   const browser = options.browser ?? widevinePlaybackBrowser
   const owner = await activeUploader(payload, member)
   const asset = await ownedAsset(payload, owner, mediaAssetId)
-  assertPlayable(asset, now)
+  assertPlayable(asset, now, browser)
 
   const playbackGrantId = newPlaybackGrantId()
   const expiresAt = new Date(now.getTime() + GRANT_LIFETIME_MS)
@@ -338,7 +341,7 @@ export async function refreshPlaybackWatermark(
   }
   const grant = await storedGrant(payload, claims)
   const asset = await ownedAsset(payload, owner, claims.asset)
-  assertPlayable(asset, now)
+  assertPlayable(asset, now, claims.browser)
   const current = storedPlaybackWatermark(grant)
   if (now.getTime() - new Date(current.issuedAt).getTime() < WATERMARK_ROTATION_INTERVAL_MS) {
     return current

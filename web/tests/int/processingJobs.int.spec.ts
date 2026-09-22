@@ -562,6 +562,7 @@ describe('reliable Processing Jobs', () => {
     const callbackBody = JSON.stringify({
       callbackId: 'callback-issue-39',
       outputPrefix: processingOutputPrefix(job.processingJobId),
+      playReadyPackaged: true,
       providerJobId: job.providerJobId,
       status: 'ready',
     })
@@ -604,6 +605,14 @@ describe('reliable Processing Jobs', () => {
       assetId: session.asset.mediaAssetId,
       details: { providerJobId: job.providerJobId, status: 'ready' },
     })
+    await expect(
+      payload.find({
+        collection: 'media-assets',
+        limit: 1,
+        overrideAccess: true,
+        where: { mediaAssetId: { equals: session.asset.mediaAssetId } },
+      }),
+    ).resolves.toMatchObject({ docs: [{ playReadyPackaged: true }] })
     vi.unstubAllEnvs()
   })
 

@@ -81,6 +81,7 @@ export async function POST(request: Request): Promise<Response> {
   let input: {
     callbackId?: unknown
     outputPrefix?: unknown
+    playReadyPackaged?: unknown
     processingJobId?: unknown
     providerJobId?: unknown
     status?: unknown
@@ -106,6 +107,7 @@ export async function POST(request: Request): Promise<Response> {
     input.outputPrefix.length > 200 ||
     !/^outputs\/processing_[0-9a-f-]{36}\/$/.test(input.outputPrefix) ||
     (input.status !== 'ready' && input.status !== 'failed')
+    || (input.playReadyPackaged !== undefined && typeof input.playReadyPackaged !== 'boolean')
   ) {
     return rejectCallback('invalid_body', 400, 'Callback body is invalid.')
   }
@@ -129,6 +131,7 @@ export async function POST(request: Request): Promise<Response> {
       {
         callbackId: input.callbackId,
         outputPrefix: input.outputPrefix,
+        playReadyPackaged: input.playReadyPackaged === true,
         providerJobId,
         status: input.status,
       },

@@ -14,6 +14,7 @@ export async function POST(
       await createPlaybackGrant(payload, member, mediaAssetId, {
         browser: protectedPlaybackBrowser(request.headers.get('user-agent'), {
           fairPlayAvailable: request.headers.get('x-hrizonmedia-fairplay') === 'available',
+          playReadyAvailable: request.headers.get('x-hrizonmedia-playready') === 'available',
           widevineAvailable: request.headers.get('x-hrizonmedia-widevine') === 'available',
         }),
       }),

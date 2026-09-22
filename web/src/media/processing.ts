@@ -109,12 +109,14 @@ export async function setProcessingAssetStatus(
   status: 'queued' | 'processing' | 'ready' | 'failed',
   now: Date,
   req?: PayloadRequest,
+  playReadyPackaged = false,
 ) {
   const playbackData =
     status === 'ready'
       ? {
           drmContentId: `drm_${job.processingJobId}`,
           expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          playReadyPackaged,
         }
       : {}
   await payload.update({
@@ -352,7 +354,14 @@ async function pollProcessingJobs(payload: Payload, now: Date, provider: Transco
         id: job.id,
         overrideAccess: true,
       })
-      await setProcessingAssetStatus(payload, job, 'ready', now)
+      await setProcessingAssetStatus(
+        payload,
+        job,
+        'ready',
+        now,
+        undefined,
+        provider.producesPlayReadyPackage === true,
+      )
     } catch (error) {
       if (error instanceof PermanentTranscodeError) {
         await failProcessingJob(payload, job, now, 'provider_rejected')

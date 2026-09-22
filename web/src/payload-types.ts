@@ -1182,6 +1182,7 @@ export interface MediaAsset {
   durationSeconds?: number | null;
   verifiedAt?: string | null;
   drmContentId?: string | null;
+  playReadyPackaged?: boolean | null;
   expiresAt?: string | null;
   deletedAt?: string | null;
   deletedBy?: (number | null) | PilotMember;

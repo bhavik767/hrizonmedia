@@ -59,7 +59,7 @@ async function responseJSON<T>(response: Response): Promise<T> {
 }
 
 async function keySystemAvailable(
-  keySystem: 'com.apple.fps' | 'com.widevine.alpha',
+  keySystem: 'com.apple.fps' | 'com.microsoft.playready' | 'com.widevine.alpha',
   initDataType: 'cenc' | 'skd',
 ): Promise<boolean> {
   if (!navigator.requestMediaKeySystemAccess) return false
@@ -78,16 +78,17 @@ async function keySystemAvailable(
 }
 
 async function protectedPlaybackCapabilities() {
-  const [fairPlayAvailable, widevineAvailable] = await Promise.all([
+  const [fairPlayAvailable, playReadyAvailable, widevineAvailable] = await Promise.all([
     keySystemAvailable('com.apple.fps', 'skd'),
+    keySystemAvailable('com.microsoft.playready', 'cenc'),
     keySystemAvailable('com.widevine.alpha', 'cenc'),
   ])
-  if (!fairPlayAvailable && !widevineAvailable) {
+  if (!fairPlayAvailable && !playReadyAvailable && !widevineAvailable) {
     throw new Error(
       'Secure playback is not supported by this browser. FairPlay or Widevine DRM is unavailable.',
     )
   }
-  return { fairPlayAvailable, widevineAvailable }
+  return { fairPlayAvailable, playReadyAvailable, widevineAvailable }
 }
 
 export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
@@ -159,6 +160,7 @@ export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
       const response = await fetch(`/api/demo/assets/${mediaAssetId}/playback-grants`, {
         headers: {
           'X-Hrizonmedia-Fairplay': capabilities.fairPlayAvailable ? 'available' : 'unavailable',
+          'X-Hrizonmedia-Playready': capabilities.playReadyAvailable ? 'available' : 'unavailable',
           'X-Hrizonmedia-Widevine': capabilities.widevineAvailable ? 'available' : 'unavailable',
         },
         method: 'POST',
