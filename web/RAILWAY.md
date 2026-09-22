@@ -123,8 +123,10 @@ bytes. Provider tokens, site/access keys, and licence data must never be copied 
 Railway logs or issue evidence. The policy disables persistent/offline licences and
 allows an already-issued streaming session to finish. See
 [`issue45-doverunner-drm-verification.md`](../docs/staging/issue45-doverunner-drm-verification.md)
-for the required non-secret Chrome, Edge, FairPlay, and PlayReady evidence; do not
-claim Multi-DRM until every listed verification passes.
+and [`issue77-multidrm-release-matrix.md`](../docs/staging/issue77-multidrm-release-matrix.md)
+for the required non-secret Chrome, Android, Safari, and PlayReady evidence. The
+release matrix controls product wording: claim only its completed browser/device and
+capture/output observations, and do not promise universal recording prevention.
 
 ## Deployed acceptance checks
 
