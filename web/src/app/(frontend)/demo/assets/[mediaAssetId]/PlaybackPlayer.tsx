@@ -12,7 +12,7 @@ interface PlaybackGrantContract {
   expiresAt: string
   hdcpRequired: false
   fairPlayCertificateURL?: string
-  keySystem: 'com.apple.fps' | 'com.widevine.alpha'
+  keySystem: 'com.apple.fps' | 'com.microsoft.playready' | 'com.widevine.alpha'
   licenceURL: string
   manifestFormat: 'dash' | 'hls'
   manifestURL: string

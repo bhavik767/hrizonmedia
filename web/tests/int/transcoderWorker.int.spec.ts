@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { ffmpegArguments, packagerArguments, validateJob } from '../../transcoder/worker.mjs'
+import {
+  ffmpegArguments,
+  packagerArguments,
+  validateJob,
+  verifyDashProtection,
+} from '../../transcoder/worker.mjs'
 
 const processingJobId = 'processing_00000000-0000-4000-8000-000000000000'
 const job = {
@@ -43,6 +48,20 @@ describe('Salad transcoder worker contract', () => {
         'master.m3u8',
       ]),
     )
+  })
+
+  it('rejects a DASH package that is missing PlayReady protection', () => {
+    expect(() =>
+      verifyDashProtection(
+        '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/></MPD>',
+      ),
+    ).toThrow('DoveRunner manifest is not PlayReady encrypted.')
+
+    expect(() =>
+      verifyDashProtection(
+        '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><ContentProtection schemeIdUri="urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95"/></MPD>',
+      ),
+    ).not.toThrow()
   })
 
   it('rejects a worker attempt that escapes paths or upscales', () => {
