@@ -77,6 +77,25 @@ function expectedRenditions(source: SaladJobInput['source']): Rendition[] {
     }))
 }
 
+function matchesExpectedRenditions(actual: Rendition[], expected: Rendition[]): boolean {
+  return (
+    actual.length === expected.length &&
+    actual.every((rendition, index) => {
+      const expectedRendition = expected[index]
+      if (!expectedRendition) return false
+      const keys = Object.keys(rendition)
+      return (
+        keys.length === 4 &&
+        keys.every((key) => ['audioCodec', 'height', 'videoCodec', 'width'].includes(key)) &&
+        rendition.audioCodec === expectedRendition.audioCodec &&
+        rendition.height === expectedRendition.height &&
+        rendition.videoCodec === expectedRendition.videoCodec &&
+        rendition.width === expectedRendition.width
+      )
+    })
+  )
+}
+
 function validatedInput(input: Parameters<TranscodeProvider['queue']>[0]) {
   const validSource =
     Number.isFinite(input.source.durationSeconds) &&
@@ -95,7 +114,7 @@ function validatedInput(input: Parameters<TranscodeProvider['queue']>[0]) {
     !SOURCE_OBJECT_KEY.test(input.objectKey) ||
     input.outputPrefix !== `outputs/${input.idempotencyKey}/` ||
     !validSource ||
-    JSON.stringify(input.renditions) !== JSON.stringify(expected)
+    !matchesExpectedRenditions(input.renditions, expected)
   ) {
     throw new PermanentTranscodeError('Transcode job metadata is invalid.')
   }
