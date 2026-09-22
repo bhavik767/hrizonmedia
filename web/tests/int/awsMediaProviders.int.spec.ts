@@ -342,7 +342,6 @@ describe('CloudFront delivery provider', () => {
       manifestFormat: 'dash',
       playbackGrantId: 'playback_00000000-0000-0000-0000-000000000000',
       processingJobId,
-      manifestFormat: 'dash',
       token: 'delivery-token' as never,
     })
     const signedURL = new URL(authorization.manifestURL)
