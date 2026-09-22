@@ -155,14 +155,14 @@ describe('Playback Grant authorization', () => {
     const chrome = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, {
       browser: protectedPlaybackBrowser(
         'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36',
-        { fairPlayAvailable: false, widevineAvailable: true },
+        { fairPlayAvailable: false, playReadyAvailable: false, widevineAvailable: true },
       ),
       now,
     })
     const edge = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, {
       browser: protectedPlaybackBrowser(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/126.0.0.0 Safari/537.36',
-        { fairPlayAvailable: false, widevineAvailable: true },
+        { fairPlayAvailable: false, playReadyAvailable: false, widevineAvailable: true },
       ),
       now,
     })
@@ -186,7 +186,7 @@ describe('Playback Grant authorization', () => {
     const safari = await createPlaybackGrant(payload, owner, asset.mediaAssetId!, {
       browser: protectedPlaybackBrowser(
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
-        { fairPlayAvailable: true, widevineAvailable: false },
+        { fairPlayAvailable: true, playReadyAvailable: false, widevineAvailable: false },
       ),
       now,
     })
@@ -212,19 +212,19 @@ describe('Playback Grant authorization', () => {
     expect(() =>
       protectedPlaybackBrowser(
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
-        { fairPlayAvailable: false, widevineAvailable: true },
+        { fairPlayAvailable: false, playReadyAvailable: false, widevineAvailable: true },
       ),
     ).toThrow(PlaybackCompatibilityError)
     expect(() =>
       protectedPlaybackBrowser(
         'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36',
-        { fairPlayAvailable: false, widevineAvailable: false },
+        { fairPlayAvailable: false, playReadyAvailable: false, widevineAvailable: false },
       ),
     ).toThrow(PlaybackCompatibilityError)
     expect(() =>
       protectedPlaybackBrowser(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 OPR/111.0.0.0 Safari/537.36',
-        { fairPlayAvailable: false, widevineAvailable: true },
+        { fairPlayAvailable: false, playReadyAvailable: false, widevineAvailable: true },
       ),
     ).toThrow(PlaybackCompatibilityError)
   })
