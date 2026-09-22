@@ -29,6 +29,10 @@ export default async function PilotTermsPage() {
           Pilot playback is streaming-only. Downloads, offline storage, persistent licences, and
           picture-in-picture are disabled.
         </p>
+        <p>
+          DRM, browser controls, and the watermark deter and help investigate leaks; they cannot
+          guarantee prevention of screen recording, external-output capture, or camera capture.
+        </p>
       </section>
       <Link className="text-link" href="/demo">
         Back to Demo
