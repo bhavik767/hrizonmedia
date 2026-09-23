@@ -3,10 +3,10 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
+import config from '@/payload.config'
 import { ensureDemoEnabled } from '@/pilot/demoAvailability'
 import { getPilotMember } from '@/pilot/session'
 import { getOrganisationSettingsState } from '@/organisations/settings'
-import config from '@/payload.config'
 
 import { signOut } from './actions'
 import { MediaLibrary } from './MediaLibrary'
@@ -21,10 +21,10 @@ export default async function DemoPage() {
 
   const member = await getPilotMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
-  const memberships = await (await getPayload({ config })).find({
+  const organisationMemberships = await (await getPayload({ config })).find({
     collection: 'organisation-memberships',
     depth: 0,
-    limit: 2,
+    limit: 100,
     overrideAccess: true,
     where: {
       and: [
@@ -35,10 +35,10 @@ export default async function DemoPage() {
     },
   })
   const organisationID =
-    memberships.docs.length === 1
-      ? typeof memberships.docs[0]!.organisation === 'number'
-        ? memberships.docs[0]!.organisation
-        : memberships.docs[0]!.organisation.id
+    organisationMemberships.docs.length === 1
+      ? typeof organisationMemberships.docs[0]!.organisation === 'number'
+        ? organisationMemberships.docs[0]!.organisation
+        : organisationMemberships.docs[0]!.organisation.id
       : null
   const organisationSettings = organisationID
     ? await getOrganisationSettingsState(await getPayload({ config }), member, organisationID)
@@ -75,6 +75,15 @@ export default async function DemoPage() {
             {organisationSettings.settings ? 'Organisation settings' : 'Complete Organisation setup'}
           </Link>
         )}
+        {organisationMemberships.docs.map((membership) => (
+          <Link
+            className="text-link"
+            href={`/demo/organisations/${membership.organisation}/members`}
+            key={membership.id}
+          >
+            Manage Organisation Memberships
+          </Link>
+        ))}
         <form action={signOut}>
           <button className="text-button" type="submit">
             Sign out

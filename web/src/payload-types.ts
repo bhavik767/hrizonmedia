@@ -77,6 +77,7 @@ export interface Config {
     'pilot-members': PilotMember;
     organisations: Organisation;
     'organisation-memberships': OrganisationMembership;
+    'organisation-invitations': OrganisationInvitation;
     'organisation-settings': OrganisationSetting;
     'platform-administrators': PlatformAdministrator;
     'media-assets': MediaAsset;
@@ -113,6 +114,7 @@ export interface Config {
     'pilot-members': PilotMembersSelect<false> | PilotMembersSelect<true>;
     organisations: OrganisationsSelect<false> | OrganisationsSelect<true>;
     'organisation-memberships': OrganisationMembershipsSelect<false> | OrganisationMembershipsSelect<true>;
+    'organisation-invitations': OrganisationInvitationsSelect<false> | OrganisationInvitationsSelect<true>;
     'organisation-settings': OrganisationSettingsSelect<false> | OrganisationSettingsSelect<true>;
     'platform-administrators': PlatformAdministratorsSelect<false> | PlatformAdministratorsSelect<true>;
     'media-assets': MediaAssetsSelect<false> | MediaAssetsSelect<true>;
@@ -1205,6 +1207,21 @@ export interface OrganisationMembership {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisation-invitations".
+ */
+export interface OrganisationInvitation {
+  id: number;
+  organisation: number | Organisation;
+  role: 'administrator' | 'publisher' | 'viewer';
+  tokenHash: string;
+  expiresAt: string;
+  acceptedAt?: string | null;
+  acceptedBy?: (number | null) | PilotMember;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "organisation-settings".
  */
 export interface OrganisationSetting {
@@ -1646,6 +1663,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'organisation-memberships';
         value: number | OrganisationMembership;
+      } | null)
+    | ({
+        relationTo: 'organisation-invitations';
+        value: number | OrganisationInvitation;
       } | null)
     | ({
         relationTo: 'organisation-settings';
@@ -2231,6 +2252,20 @@ export interface OrganisationMembershipsSelect<T extends boolean = true> {
   member?: T;
   role?: T;
   status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisation-invitations_select".
+ */
+export interface OrganisationInvitationsSelect<T extends boolean = true> {
+  organisation?: T;
+  role?: T;
+  tokenHash?: T;
+  expiresAt?: T;
+  acceptedAt?: T;
+  acceptedBy?: T;
   updatedAt?: T;
   createdAt?: T;
 }
