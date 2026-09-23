@@ -1,17 +1,28 @@
 import { getPayload, type Payload } from 'payload'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createOrganisation,
   createPlatformAdministrator,
+  deleteOrganisation,
   PlatformAdministrationError,
 } from '@/organisations/platform-administration'
+import { newMediaAssetId, newProcessingJobId, newUploadSessionId, type MediaAssetId } from '@/media/identifiers'
+import { runMediaLifecycle } from '@/media/lifecycle'
+import { authorizePlaybackResource, createPlaybackGrant, PlaybackAuthorizationError } from '@/media/playback'
+import { getFakeProviders } from '@/media/providers/fake'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
 
 let payload: Payload
 
 async function cleanPlatformAdministration() {
+  await payload.delete({ collection: 'audit-events', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'playback-grants', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'media-access', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'upload-sessions', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'platform-administrators', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
@@ -139,5 +150,138 @@ describe('Platform Administration', () => {
       member: expect.objectContaining({ id: target.id }),
       status: 'active',
     })
+  })
+
+  it('revokes every Organisation Playback Grant before retrying failed cleanup', async () => {
+    const now = new Date('2026-09-23T12:00:00.000Z')
+    const platformAdministrator = await createPilotMember(
+      'deleting-platform-administrator@platform-administration.test',
+    )
+    const publisher = await createPilotMember('deleting-publisher@platform-administration.test')
+    const viewer = await createPilotMember('deleting-viewer@platform-administration.test')
+    await payload.create({
+      collection: 'platform-administrators',
+      data: { member: platformAdministrator.id, status: 'active' },
+      overrideAccess: true,
+    })
+    const organisation = await payload.create({
+      collection: 'organisations',
+      data: { name: 'Deleting Organisation', status: 'active' },
+      overrideAccess: true,
+    })
+    await Promise.all([
+      payload.create({
+        collection: 'organisation-memberships',
+        data: { member: publisher.id, organisation: organisation.id, role: 'publisher', status: 'active' },
+        overrideAccess: true,
+      }),
+      payload.create({
+        collection: 'organisation-memberships',
+        data: { member: viewer.id, organisation: organisation.id, role: 'viewer', status: 'active' },
+        overrideAccess: true,
+      }),
+    ])
+    const mediaAssetId = newMediaAssetId()
+    const asset = await payload.create({
+      collection: 'media-assets',
+      data: {
+        drmContentId: `drm_${crypto.randomUUID()}`,
+        expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        fileName: 'deleting-organisation.mp4',
+        mediaAssetId,
+        mimeType: 'video/mp4',
+        organisation: organisation.id,
+        owner: publisher.id,
+        size: 1024,
+        status: 'ready',
+        statusChangedAt: now.toISOString(),
+      },
+      overrideAccess: true,
+    })
+    const viewerMembership = await payload.find({
+      collection: 'organisation-memberships',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { and: [{ member: { equals: viewer.id } }, { organisation: { equals: organisation.id } }] },
+    })
+    await payload.create({
+      collection: 'media-access',
+      data: { asset: asset.id, membership: viewerMembership.docs[0]!.id, status: 'active' },
+      overrideAccess: true,
+    })
+    const uploadSessionId = newUploadSessionId()
+    const processingJobId = newProcessingJobId()
+    await payload.create({
+      collection: 'upload-sessions',
+      data: {
+        asset: asset.id,
+        expiresAt: now.toISOString(),
+        fileFingerprint: 'deleting-organisation',
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+        objectKey: `sources/${uploadSessionId}/source.mp4`,
+        organisation: organisation.id,
+        owner: publisher.id,
+        partSize: 5 * 1024 * 1024,
+        providerUploadId: `provider_upload_${crypto.randomUUID()}`,
+        size: asset.size,
+        status: 'completed',
+        uploadSessionId,
+      },
+      overrideAccess: true,
+    })
+    await payload.create({
+      collection: 'processing-jobs',
+      data: {
+        asset: asset.id,
+        attempts: 1,
+        dispatchBy: now.toISOString(),
+        nextAttemptAt: now.toISOString(),
+        objectKey: `sources/${uploadSessionId}/source.mp4`,
+        organisation: organisation.id,
+        owner: publisher.id,
+        processingJobId,
+        providerJobId: `provider_job_${crypto.randomUUID()}`,
+        queuedAt: now.toISOString(),
+        readyAt: now.toISOString(),
+        renditions: [],
+        sourceDurationSeconds: 60,
+        sourceHeight: 1080,
+        sourceWidth: 1920,
+        status: 'ready',
+      },
+      overrideAccess: true,
+    })
+    const grant = await createPlaybackGrant(payload, viewer, mediaAssetId, { now })
+
+    await deleteOrganisation(payload, platformAdministrator, { organisationID: organisation.id, now })
+
+    await expect(
+      authorizePlaybackResource(payload, viewer, grant.deliveryToken, mediaAssetId as MediaAssetId, {
+        now: new Date(now.getTime() + 1_000),
+      }),
+    ).rejects.toBeInstanceOf(PlaybackAuthorizationError)
+    await expect(
+      payload.findByID({ collection: 'organisations', id: organisation.id, overrideAccess: true }),
+    ).resolves.toMatchObject({ status: 'deleted' })
+
+    const providers = getFakeProviders()
+    const revokeAsset = vi.fn().mockRejectedValueOnce(new Error('delivery unavailable')).mockResolvedValue(undefined)
+    const deleteObject = vi.fn(async () => undefined)
+    const deleteOutputs = vi.fn(async () => undefined)
+    providers.delivery = { ...providers.delivery, revokeAsset }
+    providers.storage = { ...providers.storage, deleteObject }
+    providers.transcode = { ...providers.transcode, deleteOutputs }
+
+    await runMediaLifecycle(payload, { now, providers })
+    expect(revokeAsset).toHaveBeenCalledOnce()
+    expect(deleteObject).not.toHaveBeenCalled()
+    expect(deleteOutputs).not.toHaveBeenCalled()
+
+    await runMediaLifecycle(payload, { now, providers })
+    expect(revokeAsset).toHaveBeenCalledTimes(2)
+    expect(deleteObject).toHaveBeenCalledOnce()
+    expect(deleteOutputs).toHaveBeenCalledOnce()
   })
 })
