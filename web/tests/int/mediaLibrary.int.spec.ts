@@ -125,7 +125,7 @@ describe('Media Asset library persistence', () => {
     await expect(listVisibleAssets(payload, secondUploader)).resolves.toEqual([])
     await expect(
       getVisibleAsset(payload, secondUploader, session.asset.mediaAssetId),
-    ).rejects.toMatchObject({ status: 404 })
+    ).rejects.toMatchObject({ status: 403 })
   })
 
   it('persists provider-native multipart state separately from the opaque provider ID', async () => {

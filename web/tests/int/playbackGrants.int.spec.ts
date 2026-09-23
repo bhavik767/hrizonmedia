@@ -272,7 +272,7 @@ describe('Playback Grant authorization', () => {
     },
   )
 
-  it('denies guessed IDs, cross-member access, disabled members, and expired assets', async () => {
+  it('denies guessed IDs, cross-Organisation access, disabled Members, and expired assets', async () => {
     const asset = await createAsset(owner)
     const expiredAsset = await createAsset(owner, 'ready', new Date(now.getTime() - 1))
     const boundaryAsset = await createAsset(owner, 'ready', now)
@@ -287,7 +287,7 @@ describe('Playback Grant authorization', () => {
 
     await expect(
       createPlaybackGrant(payload, otherUploader, asset.mediaAssetId!, { now }),
-    ).rejects.toMatchObject({ status: 404 })
+    ).rejects.toMatchObject({ status: 403 })
     await expect(
       createPlaybackGrant(payload, owner, newMediaAssetId(), { now }),
     ).rejects.toMatchObject({ status: 404 })

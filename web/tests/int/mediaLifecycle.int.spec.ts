@@ -95,7 +95,7 @@ describe('Media Asset lifecycle', () => {
 
     await expect(
       deleteMediaAsset(payload, otherUploader, ownedAsset.mediaAssetId, { now }),
-    ).rejects.toMatchObject({ status: 404 })
+    ).rejects.toMatchObject({ status: 403 })
 
     await deleteMediaAsset(payload, owner, ownedAsset.mediaAssetId, { now })
     await deleteMediaAsset(payload, operator, operatorDeletedAsset.mediaAssetId, { now })
