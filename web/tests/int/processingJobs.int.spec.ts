@@ -52,6 +52,7 @@ function fixture(source = '1920x1080:2') {
 async function clean() {
   await payload.delete({ collection: 'audit-events', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-operations', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'platform-administrators', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'upload-sessions', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })
