@@ -73,7 +73,7 @@ async function openReadyAsset(page: Page, fileName: string) {
     })
     expect(licence.status()).toBe(200)
   })
-  await page.getByRole('button', { name: 'Upload asset' }).click()
+  await page.getByRole('button', { name: 'Upload Video' }).click()
   const asset = page.getByRole('article', { name: fileName })
   await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
   await asset.getByRole('link', { name: 'Inspect asset' }).click()

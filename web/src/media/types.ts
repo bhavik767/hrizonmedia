@@ -19,6 +19,7 @@ export type MediaProtectionPolicy = (typeof mediaProtectionPolicies)[number]
 
 export interface MediaAssetSummary {
   createdAt: string
+  durationSeconds?: number | null
   folderID?: number | null
   organisationID?: number | null
   fileName: string

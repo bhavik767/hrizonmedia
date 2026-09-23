@@ -286,6 +286,10 @@ export const fakeStorageProvider: StorageProvider & {
     throw new InvalidMediaError('The completed upload is not a valid MP4 or MKV video.')
   },
 
+  async readOutputThumbnail() {
+    return null
+  },
+
   async receivePart({ bytes, checksumSHA256, partNumber, providerUploadId }) {
     if (!Number.isSafeInteger(partNumber) || partNumber < 1) {
       throw new MultipartUploadError('Part number must be a positive integer.')

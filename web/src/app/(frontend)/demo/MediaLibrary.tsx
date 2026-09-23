@@ -1,13 +1,20 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 
 import type { CompletedPart, PartUploadTarget } from '@/media/multipart'
-import type { MediaAssetSummary, MediaFolderSummary } from '@/media/types'
+import {
+  mediaAssetStatuses,
+  type MediaAssetStatus,
+  type MediaAssetSummary,
+  type MediaFolderSummary,
+} from '@/media/types'
 
 type DisplayedAsset = Omit<MediaAssetSummary, 'mediaAssetId'> & { mediaAssetId: string }
+type DateRange = 'all' | '7' | '30' | '90'
+type StatusFilter = 'all' | MediaAssetStatus
 
 interface UploadSessionResponse {
   asset: DisplayedAsset
@@ -37,6 +44,7 @@ const PENDING_UPLOAD_PREFIX = 'hrizonmedia.pending-upload.v1:'
 const MAX_PART_ATTEMPTS = 3
 const UPLOAD_CONCURRENCY = 3
 const MIN_VISIBLE_STATUS_MS = 2_000
+const dateRanges: readonly DateRange[] = ['all', '7', '30', '90']
 
 class MediaRequestError extends Error {
   constructor(
@@ -50,6 +58,35 @@ class MediaRequestError extends Error {
 function readableBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function readableDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value))
+}
+
+function readableDuration(seconds: number | null | undefined): string {
+  if (!seconds || seconds < 0) return 'Pending'
+  const wholeSeconds = Math.floor(seconds)
+  const hours = Math.floor(wholeSeconds / 3_600)
+  const minutes = Math.floor((wholeSeconds % 3_600) / 60)
+  const remainder = wholeSeconds % 60
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+    : `${minutes}:${String(remainder).padStart(2, '0')}`
+}
+
+function isDateRange(value: string): value is DateRange {
+  return dateRanges.includes(value as DateRange)
+}
+
+function isStatusFilter(value: string): value is StatusFilter {
+  return value === 'all' || mediaAssetStatuses.includes(value as MediaAssetStatus)
+}
+
+function isWithinDateRange(createdAt: string, range: DateRange): boolean {
+  if (range === 'all') return true
+  const days = Number(range)
+  return new Date(createdAt).getTime() >= Date.now() - days * 24 * 60 * 60 * 1_000
 }
 
 async function responseJSON<T>(response: Response): Promise<T> {
@@ -159,6 +196,8 @@ export function MediaLibrary({
   const [error, setError] = useState('')
   const [folders, setFolders] = useState<MediaFolderSummary[]>([])
   const [activeFolderID, setActiveFolderID] = useState<number | null>(null)
+  const [createFolderOpen, setCreateFolderOpen] = useState(false)
+  const [dateRange, setDateRange] = useState<DateRange>('all')
   const [hydrated, setHydrated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [progress, setProgress] = useState<number | null>(null)
@@ -166,6 +205,9 @@ export function MediaLibrary({
   const [selectedOrganisationID, setSelectedOrganisationID] = useState(
     () => uploadOrganisations[0]?.id ?? libraryOrganisations[0]?.id ?? 0,
   )
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState<StatusFilter>('all')
+  const [view, setView] = useState<'grid' | 'list'>('list')
 
   const selectedOrganisation =
     libraryOrganisations.find(({ id }) => id === selectedOrganisationID) ?? libraryOrganisations[0]
@@ -387,6 +429,7 @@ export function MediaLibrary({
         [...current, result.folder].sort((left, right) => left.name.localeCompare(right.name)),
       )
       setActiveFolderID(result.folder.id)
+      setCreateFolderOpen(false)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to create Folder.')
     }
@@ -448,8 +491,22 @@ export function MediaLibrary({
     }
   }
 
-  const visibleAssets =
-    activeFolderID === null ? assets : assets.filter((asset) => asset.folderID === activeFolderID)
+  const visibleAssets = useMemo(() => {
+    const normalizedSearch = search.trim().toLocaleLowerCase()
+    return assets.filter((asset) => {
+      const matchesFolder = activeFolderID === null || asset.folderID === activeFolderID
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        asset.fileName.toLocaleLowerCase().includes(normalizedSearch)
+      const matchesStatus = status === 'all' || asset.status === status
+      return (
+        matchesFolder &&
+        matchesSearch &&
+        matchesStatus &&
+        isWithinDateRange(asset.createdAt, dateRange)
+      )
+    })
+  }, [activeFolderID, assets, dateRange, search, status])
 
   return (
     <section className="media-library" aria-labelledby="media-library-title">
@@ -459,80 +516,100 @@ export function MediaLibrary({
             <span aria-hidden="true" />
             Organisation-scoped
           </p>
-          <h2 id="media-library-title">Media Assets</h2>
+          <h2 id="media-library-title">Video library</h2>
         </div>
         {selectedUploadOrganisation && (
-          <form
-            className="upload-form"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void upload(new FormData(event.currentTarget))
-            }}
-          >
-            <label htmlFor="video-file">Video file</label>
-            <input
-              accept="video/mp4,.mp4,video/x-matroska,.mkv"
-              id="video-file"
-              name="file"
-              required
-              type="file"
-            />
-            {libraryOrganisations.length > 1 && (
-              <>
-                <label htmlFor="upload-organisation">Organisation</label>
-                <select
-                  id="upload-organisation"
-                  onChange={(event) => setSelectedOrganisationID(Number(event.target.value))}
-                  value={selectedOrganisation?.id ?? ''}
-                >
-                  {libraryOrganisations.map((organisation) => (
-                    <option key={organisation.id} value={organisation.id}>
-                      {organisation.name}
-                    </option>
-                  ))}
-                </select>
-              </>
-            )}
-            <label htmlFor="media-protection-policy">Media Protection Policy</label>
-            <select
-              defaultValue={selectedUploadOrganisation.drmDefault}
-              disabled={selectedUploadOrganisation.drmRequired}
-              id="media-protection-policy"
-              key={selectedUploadOrganisation.id}
-              name="mediaProtectionPolicy"
-            >
-              <option value="protected">DRM-protected playback</option>
-              <option value="standard">Standard playback</option>
-            </select>
-            {selectedUploadOrganisation.drmRequired && (
-              <input name="mediaProtectionPolicy" type="hidden" value="protected" />
-            )}
-            <label htmlFor="retention-days">Retention period (days)</label>
-            <input
-              defaultValue={selectedUploadOrganisation.defaultRetentionDays}
-              id="retention-days"
-              key={`retention-${selectedUploadOrganisation.id}`}
-              max={selectedUploadOrganisation.defaultRetentionDays}
-              min="1"
-              name="retentionDays"
-              required
-              type="number"
-            />
-            <button className="primary-action" disabled={!hydrated || uploading} type="submit">
-              {uploading ? `Uploading${progress === null ? '…' : ` ${progress}%`}` : 'Upload asset'}
+          <div className="media-library__actions">
+            <button className="secondary-action" disabled type="button">
+              Import
             </button>
-          </form>
+            <button
+              className="primary-action"
+              disabled={!hydrated || uploading}
+              form="media-upload-form"
+              type="submit"
+            >
+              {uploading ? `Uploading${progress === null ? '…' : ` ${progress}%`}` : 'Upload Video'}
+            </button>
+          </div>
         )}
       </div>
 
+      {selectedUploadOrganisation && (
+        <form
+          id="media-upload-form"
+          className="upload-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void upload(new FormData(event.currentTarget))
+          }}
+        >
+          <label htmlFor="video-file">Video file</label>
+          <input
+            accept="video/mp4,.mp4,video/x-matroska,.mkv"
+            id="video-file"
+            name="file"
+            required
+            type="file"
+          />
+          {libraryOrganisations.length > 1 && (
+            <>
+              <label htmlFor="upload-organisation">Organisation</label>
+              <select
+                id="upload-organisation"
+                onChange={(event) => setSelectedOrganisationID(Number(event.target.value))}
+                value={selectedOrganisation?.id ?? ''}
+              >
+                {libraryOrganisations.map((organisation) => (
+                  <option key={organisation.id} value={organisation.id}>
+                    {organisation.name}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          <label htmlFor="media-protection-policy">Media Protection Policy</label>
+          <select
+            defaultValue={selectedUploadOrganisation.drmDefault}
+            disabled={selectedUploadOrganisation.drmRequired}
+            id="media-protection-policy"
+            key={selectedUploadOrganisation.id}
+            name="mediaProtectionPolicy"
+          >
+            <option value="protected">DRM-protected playback</option>
+            <option value="standard">Standard playback</option>
+          </select>
+          {selectedUploadOrganisation.drmRequired && (
+            <input name="mediaProtectionPolicy" type="hidden" value="protected" />
+          )}
+          <label htmlFor="retention-days">Retention period (days)</label>
+          <input
+            defaultValue={selectedUploadOrganisation.defaultRetentionDays}
+            id="retention-days"
+            key={`retention-${selectedUploadOrganisation.id}`}
+            max={selectedUploadOrganisation.defaultRetentionDays}
+            min="1"
+            name="retentionDays"
+            required
+            type="number"
+          />
+        </form>
+      )}
+
       {selectedOrganisation && (
-        <div className="demo-actions" aria-label="Media Library Folders">
-          <button className="text-button" onClick={() => setActiveFolderID(null)} type="button">
+        <div className="media-library__folders" aria-label="Media Library Folders">
+          <button
+            aria-pressed={activeFolderID === null}
+            className="folder-strip__item"
+            onClick={() => setActiveFolderID(null)}
+            type="button"
+          >
             All Videos
           </button>
           {folders.map((folder) => (
             <button
-              className="text-button"
+              aria-pressed={activeFolderID === folder.id}
+              className="folder-strip__item"
               key={folder.id}
               onClick={() => setActiveFolderID(folder.id)}
               type="button"
@@ -540,30 +617,25 @@ export function MediaLibrary({
               {folder.name}
             </button>
           ))}
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              void createFolder(new FormData(event.currentTarget))
-              event.currentTarget.reset()
-            }}
+          <button
+            aria-expanded={createFolderOpen}
+            className="folder-strip__create"
+            onClick={() => setCreateFolderOpen((open) => !open)}
+            type="button"
           >
-            <label htmlFor="folder-name">New Folder</label>
-            <input id="folder-name" name="name" required type="text" />
-            <button className="text-button" type="submit">
-              Create Folder
-            </button>
-          </form>
+            Create Folder
+          </button>
           {activeFolderID !== null && (
             <>
               <button
-                className="text-button"
+                className="folder-strip__action"
                 onClick={() => void renameActiveFolder()}
                 type="button"
               >
                 Rename Folder
               </button>
               <button
-                className="text-button"
+                className="folder-strip__action"
                 onClick={() => void deleteActiveFolder()}
                 type="button"
               >
@@ -574,6 +646,77 @@ export function MediaLibrary({
         </div>
       )}
 
+      {createFolderOpen && (
+        <form
+          className="folder-create-form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void createFolder(new FormData(event.currentTarget))
+            event.currentTarget.reset()
+          }}
+        >
+          <label htmlFor="folder-name">Folder name</label>
+          <input id="folder-name" name="name" required type="text" />
+          <button className="primary-action" type="submit">
+            Save Folder
+          </button>
+        </form>
+      )}
+
+      <div className="media-library__controls" aria-label="Media Asset filters">
+        <label>
+          <span>Search</span>
+          <input
+            aria-label="Search Media Assets"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search videos"
+            type="search"
+            value={search}
+          />
+        </label>
+        <label>
+          <span>Status</span>
+          <select
+            aria-label="Status"
+            onChange={(event) => {
+              if (isStatusFilter(event.target.value)) setStatus(event.target.value)
+            }}
+            value={status}
+          >
+            <option value="all">All statuses</option>
+            <option value="uploading">Uploading</option>
+            <option value="queued">Queued</option>
+            <option value="processing">Processing</option>
+            <option value="ready">Ready</option>
+            <option value="failed">Failed</option>
+            <option value="expired">Expired</option>
+          </select>
+        </label>
+        <label>
+          <span>Uploaded</span>
+          <select
+            aria-label="Upload date"
+            onChange={(event) => {
+              if (isDateRange(event.target.value)) setDateRange(event.target.value)
+            }}
+            value={dateRange}
+          >
+            <option value="all">Any time</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </label>
+        <div aria-label="Display format" className="view-toggle" role="group">
+          <button aria-pressed={view === 'grid'} onClick={() => setView('grid')} type="button">
+            Grid view
+          </button>
+          <button aria-pressed={view === 'list'} onClick={() => setView('list')} type="button">
+            List view
+          </button>
+        </div>
+      </div>
+
       {error && (
         <p className="form-message form-message--error" role="alert">
           {error}
@@ -582,44 +725,95 @@ export function MediaLibrary({
       {loading ? (
         <p>Loading your private library…</p>
       ) : visibleAssets.length === 0 ? (
-        <p>Your library is empty.</p>
+        <p>
+          {assets.length === 0 ? 'Your library is empty.' : 'No Media Assets match these filters.'}
+        </p>
       ) : (
-        <div className="asset-list" aria-live="polite">
-          {visibleAssets.map((asset) => (
-            <article aria-label={asset.fileName} className="asset-card" key={asset.mediaAssetId}>
-              <div>
-                <h3>{asset.fileName}</h3>
-                <p>{readableBytes(asset.size)}</p>
-              </div>
-              <strong className={`asset-status asset-status--${asset.status}`}>
-                {asset.status}
-              </strong>
-              {!asset.mediaAssetId.startsWith('local_') && (
-                <select
-                  aria-label={`Folder for ${asset.fileName}`}
-                  onChange={(event) =>
-                    void moveAsset(
-                      asset.mediaAssetId,
-                      event.target.value ? Number(event.target.value) : null,
-                    )
-                  }
-                  value={asset.folderID ?? ''}
-                >
-                  <option value="">All Videos</option>
-                  {folders.map((folder) => (
-                    <option key={folder.id} value={folder.id}>
-                      {folder.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {!asset.mediaAssetId.startsWith('local_') && (
-                <Link className="text-link" href={`/demo/assets/${asset.mediaAssetId}`}>
-                  Inspect asset
-                </Link>
-              )}
-            </article>
-          ))}
+        <div
+          aria-label="Media Asset results"
+          aria-live="polite"
+          className={`asset-list asset-list--${view}`}
+          data-view={view}
+          role="region"
+        >
+          {visibleAssets.map((asset) => {
+            const isTemporaryAsset = asset.mediaAssetId.startsWith('local_')
+            const thumbnail = (
+              <>
+                {asset.status === 'ready' && !isTemporaryAsset ? (
+                  // The thumbnail endpoint requires the member's browser session; Next's image optimizer cannot forward it.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    alt={`Thumbnail for ${asset.fileName}`}
+                    className="asset-card__thumbnail-image"
+                    src={`/api/demo/assets/${asset.mediaAssetId}/thumbnail`}
+                  />
+                ) : (
+                  <>
+                    <span aria-hidden="true">▶</span>
+                    <span className="asset-card__thumbnail-label">{asset.fileName}</span>
+                  </>
+                )}
+              </>
+            )
+
+            return (
+              <article aria-label={asset.fileName} className="asset-card" key={asset.mediaAssetId}>
+                {isTemporaryAsset ? (
+                  <div aria-hidden="true" className="asset-card__thumbnail">
+                    {thumbnail}
+                  </div>
+                ) : (
+                  <Link
+                    aria-label={`Open ${asset.fileName}`}
+                    className="asset-card__thumbnail"
+                    href={`/demo/assets/${asset.mediaAssetId}`}
+                  >
+                    {thumbnail}
+                  </Link>
+                )}
+                <div className="asset-card__details">
+                  {isTemporaryAsset ? (
+                    <h3>{asset.fileName}</h3>
+                  ) : (
+                    <Link href={`/demo/assets/${asset.mediaAssetId}`}>{asset.fileName}</Link>
+                  )}
+                  <p>Uploaded {readableDate(asset.createdAt)}</p>
+                  <p>Duration {readableDuration(asset.durationSeconds)}</p>
+                  <p>{readableBytes(asset.size)}</p>
+                </div>
+                <div className="asset-card__actions">
+                  <strong className={`asset-status asset-status--${asset.status}`}>
+                    {asset.status}
+                  </strong>
+                  {!isTemporaryAsset && (
+                    <select
+                      aria-label={`Folder for ${asset.fileName}`}
+                      onChange={(event) =>
+                        void moveAsset(
+                          asset.mediaAssetId,
+                          event.target.value ? Number(event.target.value) : null,
+                        )
+                      }
+                      value={asset.folderID ?? ''}
+                    >
+                      <option value="">All Videos</option>
+                      {folders.map((folder) => (
+                        <option key={folder.id} value={folder.id}>
+                          {folder.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {!isTemporaryAsset && (
+                    <Link className="asset-card__open" href={`/demo/assets/${asset.mediaAssetId}`}>
+                      Inspect asset
+                    </Link>
+                  )}
+                </div>
+              </article>
+            )
+          })}
         </div>
       )}
     </section>
