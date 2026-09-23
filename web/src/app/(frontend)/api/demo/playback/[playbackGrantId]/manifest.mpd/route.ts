@@ -1,7 +1,7 @@
 import {
   authorizePlaybackResourceRequest,
   mediaErrorResponse,
-  withAuthenticatedUploader,
+  withAuthenticatedPilotMember,
 } from '@/media/request'
 import { getVisibleAsset } from '@/media/library'
 import type { Rendition } from '@/media/providers/contracts'
@@ -30,7 +30,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ playbackGrantId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
     try {
       const { manifestFormat, mediaAssetId, playbackGrantId, token } =
         await authorizePlaybackResourceRequest({

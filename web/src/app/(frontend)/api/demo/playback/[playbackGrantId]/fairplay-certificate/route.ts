@@ -1,6 +1,6 @@
 import { parsePlaybackGrantId } from '@/media/identifiers'
 import { PlaybackAuthorizationError } from '@/media/playback'
-import { mediaErrorResponse, withAuthenticatedUploader } from '@/media/request'
+import { mediaErrorResponse, withAuthenticatedPilotMember } from '@/media/request'
 
 const DEMO_FAIRPLAY_CERTIFICATE = Uint8Array.from(
   Buffer.from('hrizonmedia-demo-fairplay-certificate', 'utf8'),
@@ -10,7 +10,7 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ playbackGrantId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
     try {
       const playbackGrantId = parsePlaybackGrantId((await context.params).playbackGrantId)
       if (!playbackGrantId) {

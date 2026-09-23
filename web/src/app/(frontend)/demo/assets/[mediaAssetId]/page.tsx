@@ -5,6 +5,7 @@ import { getPayload } from 'payload'
 
 import { parseMediaAssetId } from '@/media/identifiers'
 import { getVisibleAsset, MediaLibraryError } from '@/media/library'
+import { listMediaAccessViewers, OrganisationMediaAccessError } from '@/organisations/media-access'
 import type { MediaAssetDetail } from '@/media/types'
 import config from '@/payload.config'
 import { ensureDemoEnabled } from '@/pilot/demoAvailability'
@@ -14,6 +15,7 @@ import { signOut } from '../../actions'
 import { DeleteAssetButton } from './DeleteAssetButton'
 import { RetryProcessingButton } from './RetryProcessingButton'
 import { PlaybackPlayer } from './PlaybackPlayer'
+import { MediaAccessControls } from './MediaAccessControls'
 
 export const metadata: Metadata = { title: 'Media Asset | HrizonMedia Demo' }
 
@@ -25,11 +27,16 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
   if (!mediaAssetId) notFound()
 
   let asset: MediaAssetDetail
+  let accessViewers: Awaited<ReturnType<typeof listMediaAccessViewers>> = []
   try {
     const payload = await getPayload({ config })
     asset = await getVisibleAsset(payload, member, mediaAssetId)
+    if (asset.canShare && asset.organisationID && asset.status === 'ready') {
+      accessViewers = await listMediaAccessViewers(payload, member, asset.assetID)
+    }
   } catch (error) {
     if (error instanceof MediaLibraryError && error.status === 404) notFound()
+    if (error instanceof OrganisationMediaAccessError && error.status === 403) notFound()
     throw error
   }
 
@@ -68,14 +75,15 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
           </div>
         )}
       </dl>
-      {member.role === 'uploader' && asset.status === 'ready' && (
-        <PlaybackPlayer mediaAssetId={asset.mediaAssetId} />
+      {asset.status === 'ready' && <PlaybackPlayer mediaAssetId={asset.mediaAssetId} />}
+      {asset.canShare && (
+        <MediaAccessControls mediaAssetId={asset.mediaAssetId} viewers={accessViewers} />
       )}
       {asset.status === 'failed' && asset.failureMessage && (
         <section aria-labelledby="processing-failure-title" className="processing-failure">
           <h2 id="processing-failure-title">Processing failed</h2>
           <p>{asset.failureMessage}</p>
-          {asset.canRetry ? (
+          {asset.canManage && asset.canRetry ? (
             <RetryProcessingButton mediaAssetId={asset.mediaAssetId} />
           ) : (
             <p>The source is no longer available. Upload the video again to continue.</p>
@@ -83,7 +91,7 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
         </section>
       )}
       <div className="demo-actions">
-        <DeleteAssetButton mediaAssetId={asset.mediaAssetId} />
+        {asset.canManage && <DeleteAssetButton mediaAssetId={asset.mediaAssetId} />}
         <Link className="text-link" href="/demo">
           Back to library
         </Link>

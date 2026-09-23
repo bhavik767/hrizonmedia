@@ -2,6 +2,8 @@ export const auditActions = [
   'invitation_created',
   'invitation_accepted',
   'member_disabled',
+  'media_access_granted',
+  'media_access_revoked',
   'upload_started',
   'upload_completed',
   'upload_aborted',
