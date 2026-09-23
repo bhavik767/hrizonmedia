@@ -7,9 +7,18 @@ import {
   deleteOrganisation,
   PlatformAdministrationError,
 } from '@/organisations/platform-administration'
-import { newMediaAssetId, newProcessingJobId, newUploadSessionId, type MediaAssetId } from '@/media/identifiers'
+import {
+  newMediaAssetId,
+  newProcessingJobId,
+  newUploadSessionId,
+  type MediaAssetId,
+} from '@/media/identifiers'
 import { runMediaLifecycle } from '@/media/lifecycle'
-import { authorizePlaybackResource, createPlaybackGrant, PlaybackAuthorizationError } from '@/media/playback'
+import {
+  authorizePlaybackResource,
+  createPlaybackGrant,
+  PlaybackAuthorizationError,
+} from '@/media/playback'
 import { getFakeProviders } from '@/media/providers/fake'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
@@ -75,7 +84,10 @@ describe('Platform Administration', () => {
       name: 'Example Organisation',
     })
 
-    expect(provisioned.organisation).toMatchObject({ name: 'Example Organisation', status: 'active' })
+    expect(provisioned.organisation).toMatchObject({
+      name: 'Example Organisation',
+      status: 'active',
+    })
     expect(provisioned.initialAdministratorMembership).toMatchObject({
       member: expect.objectContaining({ id: initialAdministrator.id }),
       organisation: expect.objectContaining({ id: provisioned.organisation.id }),
@@ -134,9 +146,7 @@ describe('Platform Administration', () => {
   })
 
   it('lets a Platform Administrator appoint another active Platform Administrator', async () => {
-    const platformAdministrator = await createPilotMember(
-      'creator@platform-administration.test',
-    )
+    const platformAdministrator = await createPilotMember('creator@platform-administration.test')
     const target = await createPilotMember('appointed@platform-administration.test')
     await payload.create({
       collection: 'platform-administrators',
@@ -172,12 +182,22 @@ describe('Platform Administration', () => {
     await Promise.all([
       payload.create({
         collection: 'organisation-memberships',
-        data: { member: publisher.id, organisation: organisation.id, role: 'publisher', status: 'active' },
+        data: {
+          member: publisher.id,
+          organisation: organisation.id,
+          role: 'publisher',
+          status: 'active',
+        },
         overrideAccess: true,
       }),
       payload.create({
         collection: 'organisation-memberships',
-        data: { member: viewer.id, organisation: organisation.id, role: 'viewer', status: 'active' },
+        data: {
+          member: viewer.id,
+          organisation: organisation.id,
+          role: 'viewer',
+          status: 'active',
+        },
         overrideAccess: true,
       }),
     ])
@@ -203,7 +223,9 @@ describe('Platform Administration', () => {
       depth: 0,
       limit: 1,
       overrideAccess: true,
-      where: { and: [{ member: { equals: viewer.id } }, { organisation: { equals: organisation.id } }] },
+      where: {
+        and: [{ member: { equals: viewer.id } }, { organisation: { equals: organisation.id } }],
+      },
     })
     await payload.create({
       collection: 'media-access',
@@ -255,19 +277,31 @@ describe('Platform Administration', () => {
     })
     const grant = await createPlaybackGrant(payload, viewer, mediaAssetId, { now })
 
-    await deleteOrganisation(payload, platformAdministrator, { organisationID: organisation.id, now })
+    await deleteOrganisation(payload, platformAdministrator, {
+      organisationID: organisation.id,
+      now,
+    })
 
     await expect(
-      authorizePlaybackResource(payload, viewer, grant.deliveryToken, mediaAssetId as MediaAssetId, {
-        now: new Date(now.getTime() + 1_000),
-      }),
+      authorizePlaybackResource(
+        payload,
+        viewer,
+        grant.deliveryToken,
+        mediaAssetId as MediaAssetId,
+        {
+          now: new Date(now.getTime() + 1_000),
+        },
+      ),
     ).rejects.toBeInstanceOf(PlaybackAuthorizationError)
     await expect(
       payload.findByID({ collection: 'organisations', id: organisation.id, overrideAccess: true }),
     ).resolves.toMatchObject({ status: 'deleted' })
 
     const providers = getFakeProviders()
-    const revokeAsset = vi.fn().mockRejectedValueOnce(new Error('delivery unavailable')).mockResolvedValue(undefined)
+    const revokeAsset = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('delivery unavailable'))
+      .mockResolvedValue(undefined)
     const deleteObject = vi.fn(async () => undefined)
     const deleteOutputs = vi.fn(async () => undefined)
     providers.delivery = { ...providers.delivery, revokeAsset }

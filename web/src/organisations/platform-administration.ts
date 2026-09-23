@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { Payload } from 'payload'
+import type { Payload, PayloadRequest } from 'payload'
 
 import {
   OrganisationAuthorizationError,
@@ -121,7 +121,10 @@ export async function createPlatformAdministrator(
     where: { member: { equals: member.id } },
   })
   if (existing.docs[0]) {
-    throw new PlatformAdministrationError('This Pilot Member is already a Platform Administrator.', 409)
+    throw new PlatformAdministrationError(
+      'This Pilot Member is already a Platform Administrator.',
+      409,
+    )
   }
 
   return payload.create({
@@ -129,4 +132,70 @@ export async function createPlatformAdministrator(
     data: { member: member.id, status: 'active' },
     overrideAccess: true,
   })
+}
+
+export async function deleteOrganisation(
+  payload: Payload,
+  actor: PilotMember,
+  input: { now?: Date; organisationID: number },
+): Promise<Organisation> {
+  await requirePlatformAdministrator(payload, actor)
+  if (!validMemberID(input.organisationID)) {
+    throw new PlatformAdministrationError('A valid Organisation is required.', 400)
+  }
+
+  const organisation = await payload.findByID({
+    collection: 'organisations',
+    depth: 0,
+    id: input.organisationID,
+    overrideAccess: true,
+  })
+  if (organisation.status === 'deleted') return organisation
+
+  const now = input.now ?? new Date()
+  const transactionID = await beginTransaction(payload)
+  const req = { payload, transactionID } as PayloadRequest
+  try {
+    const assets = await payload.find({
+      collection: 'media-assets',
+      depth: 0,
+      overrideAccess: true,
+      pagination: false,
+      req,
+      where: { organisation: { equals: organisation.id } },
+    })
+    await payload.delete({
+      collection: 'playback-grants',
+      overrideAccess: true,
+      req,
+      where: { organisation: { equals: organisation.id } },
+    })
+    for (const asset of assets.docs) {
+      if (asset.status === 'deleted') continue
+      await payload.update({
+        collection: 'media-assets',
+        data: {
+          deletedAt: now.toISOString(),
+          deletedBy: actor.id,
+          status: 'deleted',
+          statusChangedAt: now.toISOString(),
+        },
+        id: asset.id,
+        overrideAccess: true,
+        req,
+      })
+    }
+    const deleted = await payload.update({
+      collection: 'organisations',
+      data: { status: 'deleted' },
+      id: organisation.id,
+      overrideAccess: true,
+      req,
+    })
+    await payload.db.commitTransaction(transactionID)
+    return deleted
+  } catch (error) {
+    await payload.db.rollbackTransaction(transactionID)
+    throw error
+  }
 }
