@@ -41,7 +41,7 @@ test.describe('Media Asset tracer bullet', () => {
       mimeType: 'video/mp4',
       name: 'private-lesson.mp4',
     })
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
 
     const asset = page.getByRole('article', { name: 'private-lesson.mp4' })
     await expect(asset.getByText('uploading', { exact: true })).toBeVisible()
@@ -69,6 +69,65 @@ test.describe('Media Asset tracer bullet', () => {
       headers: { Origin: new URL(page.url()).origin },
     })
     expect(denied.status()).toBe(404)
+  })
+
+  test('issue 109: lets a publisher browse, organize, filter, and open Media Assets', async ({
+    page,
+  }) => {
+    await signIn(page, testInvitee)
+    await expect(page.getByRole('button', { name: 'Import' })).toBeDisabled()
+    await page.getByRole('button', { name: 'Create Folder' }).click()
+    await page.getByLabel('Folder name').fill('Course library')
+    await page.getByRole('button', { name: 'Save Folder' }).click()
+    await expect(page.getByRole('button', { name: 'Course library' })).toBeVisible()
+
+    await page.getByLabel('Video file').setInputFiles({
+      buffer: mp4Fixture(),
+      mimeType: 'video/mp4',
+      name: 'library-workflow.mp4',
+    })
+    await page.getByRole('button', { name: 'Upload Video' }).click()
+
+    const asset = page.getByRole('article', { name: 'library-workflow.mp4' })
+    await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
+    await expect(asset.getByText(/Uploaded /)).toBeVisible()
+    await expect(asset.getByText(/Duration 0:01/)).toBeVisible()
+    await expect(asset.getByAltText('Thumbnail for library-workflow.mp4')).toHaveAttribute(
+      'src',
+      /\/thumbnail$/,
+    )
+    await expect(asset.getByLabel('Folder for library-workflow.mp4')).toHaveValue(/\d+/)
+
+    await page.getByRole('button', { name: 'All Videos' }).click()
+    await asset.getByLabel('Folder for library-workflow.mp4').selectOption({ label: 'All Videos' })
+    await page.getByRole('button', { name: 'Course library' }).click()
+    await expect(asset).toHaveCount(0)
+    await page.getByRole('button', { name: 'All Videos' }).click()
+    await asset
+      .getByLabel('Folder for library-workflow.mp4')
+      .selectOption({ label: 'Course library' })
+    await page.getByRole('button', { name: 'Course library' }).click()
+    await expect(asset).toBeVisible()
+
+    await page.getByRole('button', { name: 'Grid view' }).click()
+    await expect(page.getByRole('region', { name: 'Media Asset results' })).toHaveAttribute(
+      'data-view',
+      'grid',
+    )
+    await page.getByLabel('Search Media Assets').fill('no-match')
+    await expect(page.getByText('No Media Assets match these filters.')).toBeVisible()
+    await page.getByLabel('Search Media Assets').fill('library-workflow')
+    await page.getByLabel('Status').selectOption('ready')
+    await page.getByLabel('Upload date').selectOption('7')
+    await expect(asset).toBeVisible()
+    await page.getByRole('button', { name: 'List view' }).click()
+    await expect(page.getByRole('region', { name: 'Media Asset results' })).toHaveAttribute(
+      'data-view',
+      'list',
+    )
+
+    await asset.getByRole('link', { name: 'Open library-workflow.mp4' }).click()
+    await expect(page).toHaveURL(/\/demo\/assets\/asset_/, { timeout: 45_000 })
   })
 
   test('issue 40: rejects a hostile browser origin without CORS access', async ({ page }) => {
@@ -104,7 +163,7 @@ test.describe('Media Asset tracer bullet', () => {
       mimeType: 'video/mp4',
       name: 'delete-me.mp4',
     })
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
     const asset = page.getByRole('article', { name: 'delete-me.mp4' })
     await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
     await asset.getByRole('link', { name: 'Inspect asset' }).click()
@@ -125,7 +184,7 @@ test.describe('Media Asset tracer bullet', () => {
       mimeType: 'video/mp4',
       name: 'expired-lesson.mp4',
     })
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
     const asset = page.getByRole('article', { name: 'expired-lesson.mp4' })
     await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
     const detailURL = await asset.getByRole('link', { name: 'Inspect asset' }).getAttribute('href')
@@ -189,7 +248,7 @@ test.describe('Media Asset tracer bullet', () => {
       mimeType: 'video/mp4',
       name: 'expired-lesson.mp4',
     })
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
     const asset = page.getByRole('article', { name: 'expired-lesson.mp4' })
     await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
     const detailURL = await asset.getByRole('link', { name: 'Inspect asset' }).getAttribute('href')
@@ -223,7 +282,7 @@ test.describe('Media Asset tracer bullet', () => {
       mimeType: 'video/mp4',
       name: 'operator-delete.mp4',
     })
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
     const asset = page.getByRole('article', { name: 'operator-delete.mp4' })
     await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
     const payload = await getPayload({ config })
@@ -274,7 +333,7 @@ test.describe('Media Asset tracer bullet', () => {
       mimeType: 'video/mp4',
       name: 'retry-lesson.mp4',
     })
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
 
     await expect(
       page.getByRole('article', { name: 'retry-lesson.mp4' }).getByText('ready'),
@@ -300,7 +359,7 @@ test.describe('Media Asset tracer bullet', () => {
       mimeType: 'video/mp4',
       name: 'parallel-lesson.mp4',
     })
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
 
     await expect(
       page.getByRole('article', { name: 'parallel-lesson.mp4' }).getByText('ready'),
@@ -330,7 +389,7 @@ test.describe('Media Asset tracer bullet', () => {
     }
     await signIn(page, testInvitee)
     await page.getByLabel('Video file').setInputFiles(file)
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
     await expect(page.locator('.form-message[role="alert"]')).toContainText(
       'Reselect this file to resume',
       { timeout: 45_000 },
@@ -340,7 +399,7 @@ test.describe('Media Asset tracer bullet', () => {
     interruptSecondPart = false
     await page.reload()
     await page.getByLabel('Video file').setInputFiles(file)
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
 
     await expect(
       page.getByRole('article', { name: 'resume-lesson.mp4' }).getByText('ready'),
@@ -364,7 +423,7 @@ test.describe('Media Asset tracer bullet', () => {
     const file = { buffer: original, mimeType: 'video/mp4', name: 'changed-lesson.mp4' }
     await signIn(page, testInvitee)
     await page.getByLabel('Video file').setInputFiles(file)
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
     await expect(page.locator('.form-message[role="alert"]')).toContainText(
       'Reselect this file to resume',
     )
@@ -372,7 +431,7 @@ test.describe('Media Asset tracer bullet', () => {
     interruptSecondPart = false
     await page.reload()
     await page.getByLabel('Video file').setInputFiles({ ...file, buffer: changed })
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
     await expect(page.locator('.form-message[role="alert"]')).toContainText(
       'does not match the completed upload parts',
     )
@@ -387,7 +446,7 @@ test.describe('Media Asset tracer bullet', () => {
       mimeType: 'video/mp4',
       name: 'retryable-lesson.mp4',
     })
-    await page.getByRole('button', { name: 'Upload asset' }).click()
+    await page.getByRole('button', { name: 'Upload Video' }).click()
     const asset = page.getByRole('article', { name: 'retryable-lesson.mp4' })
     await expect(asset.getByText('ready', { exact: true })).toBeVisible()
     const detailLink = asset.getByRole('link', { name: 'Inspect asset' })

@@ -70,6 +70,7 @@ export interface StorageProvider {
     providerUploadData?: string,
   ): Promise<CompletedPart[]>
   probe(objectKey: string): Promise<MediaProbe>
+  readOutputThumbnail(outputPrefix: string): Promise<Uint8Array | null>
 }
 
 export interface TranscodeProvider {

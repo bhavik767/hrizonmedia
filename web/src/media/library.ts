@@ -12,6 +12,7 @@ import {
   newMediaAssetId,
   newProcessingJobId,
   newUploadSessionId,
+  processingOutputPrefix,
   type MediaAssetId,
   type ProviderUploadId,
   type UploadSessionId,
@@ -54,6 +55,7 @@ function optionalRelationID(value: number | { id: number } | null | undefined): 
 function summary(asset: MediaAsset): MediaAssetSummary {
   return {
     createdAt: asset.createdAt,
+    durationSeconds: asset.durationSeconds,
     folderID: optionalRelationID(asset.folder),
     organisationID: optionalRelationID(asset.organisation),
     fileName: asset.fileName,
@@ -298,7 +300,11 @@ async function organisationUploadDetails(
   retentionDays: number
 }> {
   const organisationID = input.organisationID
-  if (organisationID === undefined || !Number.isSafeInteger(organisationID) || organisationID <= 0) {
+  if (
+    organisationID === undefined ||
+    !Number.isSafeInteger(organisationID) ||
+    organisationID <= 0
+  ) {
     throw new MediaLibraryError('Choose an Organisation for this upload.', 400)
   }
   await authorizeOrganisationMedia(payload, owner, {
@@ -920,6 +926,17 @@ export async function getVisibleAsset(
     renditions: (jobs.docs[0]?.renditions as MediaAssetDetail['renditions']) ?? null,
     uploadSessionId: session.uploadSessionId as UploadSessionId,
   }
+}
+
+export async function getVisibleAssetThumbnail(
+  payload: Payload,
+  member: Member,
+  mediaAssetId: MediaAssetId,
+  providers: MediaProviders = getMediaProviders(),
+): Promise<Uint8Array | null> {
+  const asset = await getVisibleAsset(payload, member, mediaAssetId)
+  if (asset.status !== 'ready' || !asset.processingJobId) return null
+  return providers.storage.readOutputThumbnail(processingOutputPrefix(asset.processingJobId))
 }
 
 export async function retryVisibleAssetProcessing(

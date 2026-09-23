@@ -45,6 +45,7 @@ interface CommandClient {
 interface S3CommandResult {
   Body?: {
     pipe?: (destination: NodeJS.WritableStream) => unknown
+    transformToByteArray?: () => Promise<Uint8Array>
     transformToString?: () => Promise<string>
   }
   ChecksumSHA256?: string
@@ -510,6 +511,23 @@ export function createS3StorageProvider(
         throw new InvalidMediaError('Source object key is invalid.')
       }
       return probe(client, configuration.bucket, objectKey)
+    },
+
+    async readOutputThumbnail(outputPrefix) {
+      validateOutputPrefix(outputPrefix)
+      try {
+        const result = await client.send(
+          new GetObjectCommand({
+            Bucket: configuration.bucket,
+            Key: `${outputPrefix}thumbnail.jpg`,
+          }),
+        )
+        if (result.ContentType !== 'image/jpeg' || !result.Body?.transformToByteArray) return null
+        return result.Body.transformToByteArray()
+      } catch (error) {
+        if (isMissingUpload(error)) return null
+        throw error
+      }
     },
   }
 }

@@ -53,9 +53,27 @@ export function validateJob(value) {
 
 export function ffmpegArguments(job, sourcePath, clearDirectory) {
   return job.renditions.map(({ height, width }) => [
-    '-y', '-i', sourcePath, '-map', '0:v:0', '-map', '0:a:0?',
-    '-vf', `scale=${width}:${height}`, '-c:v', 'libx264', '-preset', 'medium',
-    '-crf', '22', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+    '-y',
+    '-i',
+    sourcePath,
+    '-map',
+    '0:v:0',
+    '-map',
+    '0:a:0?',
+    '-vf',
+    `scale=${width}:${height}`,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'medium',
+    '-crf',
+    '22',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '128k',
+    '-movflags',
+    '+faststart',
     path.join(clearDirectory, `${height}p.mp4`),
   ])
 }
@@ -114,7 +132,9 @@ async function sendCallback(job, status, environment, fetcher, { playReadyPackag
   const signature = createHmac('sha256', environment.TRANSCODER_CALLBACK_SECRET)
     .update(`${timestamp}.${body}`)
     .digest('base64url')
-  const response = await fetcher(`${environment.APPLICATION_ORIGIN}/api/internal/transcode/callback`, {
+  const response = await fetcher(
+    `${environment.APPLICATION_ORIGIN}/api/internal/transcode/callback`,
+    {
       body,
       headers: {
         'content-type': 'application/json',
@@ -122,7 +142,8 @@ async function sendCallback(job, status, environment, fetcher, { playReadyPackag
         'x-hrizon-timestamp': timestamp,
       },
       method: 'POST',
-  })
+    },
+  )
   if (!response.ok) throw new Error('Application callback was rejected.')
 }
 
@@ -154,15 +175,18 @@ export async function processJob(value, dependencies = {}) {
   const completionKey = `${job.outputPrefix}completion.json`
   if (await exists(client, bucket, completionKey)) return { deduplicated: true }
   if (await exists(client, bucket, `${controlPrefix}.failed`)) return { failed: true }
-  if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) return { cancelled: true }
+  if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`))
+    return { cancelled: true }
   try {
-    await client.send(new PutObjectCommand({
+    await client.send(
+      new PutObjectCommand({
         Body: JSON.stringify({ acquiredAt: new Date().toISOString(), nonce: randomUUID() }),
         Bucket: bucket,
         ContentType: 'application/json',
         IfNoneMatch: '*',
         Key: `${controlPrefix}.lock`,
-    }))
+      }),
+    )
   } catch (error) {
     if (error?.name === 'PreconditionFailed' || error?.$metadata?.httpStatusCode === 412) {
       throw new Error('This Processing Job attempt is already leased.')
@@ -172,9 +196,13 @@ export async function processJob(value, dependencies = {}) {
 
   const directory = await mkdtemp(path.join(tmpdir(), 'hrizon-transcode-'))
   try {
-    const sourcePath = path.join(directory, path.extname(job.objectKey) === '.mkv' ? 'source.mkv' : 'source.mp4')
+    const sourcePath = path.join(
+      directory,
+      path.extname(job.objectKey) === '.mkv' ? 'source.mkv' : 'source.mp4',
+    )
     const clearDirectory = path.join(directory, 'clear')
     const packagedDirectory = path.join(directory, 'packaged')
+    const thumbnailPath = path.join(directory, 'thumbnail.jpg')
     const source = await client.send(new GetObjectCommand({ Bucket: bucket, Key: job.objectKey }))
     const bytes = await source.Body?.transformToByteArray?.()
     if (!bytes) throw new Error('Private source could not be read.')
@@ -182,6 +210,11 @@ export async function processJob(value, dependencies = {}) {
     await mkdir(clearDirectory)
     await mkdir(packagedDirectory)
     await writeFile(sourcePath, bytes)
+    await run(
+      environment.FFMPEG_BIN ?? 'ffmpeg',
+      ['-i', sourcePath, '-frames:v', '1', '-q:v', '3', '-vf', 'scale=640:-2', '-y', thumbnailPath],
+      { timeout: 60 * 1000 },
+    )
     for (const args of ffmpegArguments(job, sourcePath, clearDirectory)) {
       await run(environment.FFMPEG_BIN ?? 'ffmpeg', args, { timeout: 12 * 60 * 1000 })
     }
@@ -192,6 +225,7 @@ export async function processJob(value, dependencies = {}) {
       { timeout: 3 * 60 * 1000 },
     )
     const packaged = await filesUnder(packagedDirectory)
+    const deliveryFiles = [...packaged, { absolute: thumbnailPath, relative: 'thumbnail.jpg' }]
     const manifest = packaged.find(({ relative }) => relative === 'manifest.mpd')
     if (!manifest) throw new Error('DoveRunner did not create manifest.mpd.')
     const hlsManifest = packaged.find(({ relative }) => relative === 'master.m3u8')
@@ -216,51 +250,72 @@ export async function processJob(value, dependencies = {}) {
       return { cancelled: true }
     }
     const attemptPrefix = `transcode-attempts/${job.processingJobId}/${job.attempt}/`
-    for (const file of packaged) {
+    for (const file of deliveryFiles) {
       const contentType = file.relative.endsWith('.mpd')
         ? 'application/dash+xml'
         : file.relative.endsWith('.m3u8')
           ? 'application/vnd.apple.mpegurl'
           : file.relative.endsWith('.m4s') || file.relative.endsWith('.mp4')
             ? 'video/mp4'
-            : 'application/octet-stream'
-      await client.send(new PutObjectCommand({
-        Body: await readFile(file.absolute),
-        Bucket: bucket,
-        ContentType: contentType,
-        Key: `${attemptPrefix}${file.relative}`,
-      }))
+            : file.relative.endsWith('.jpg')
+              ? 'image/jpeg'
+              : 'application/octet-stream'
+      await client.send(
+        new PutObjectCommand({
+          Body: await readFile(file.absolute),
+          Bucket: bucket,
+          ContentType: contentType,
+          Key: `${attemptPrefix}${file.relative}`,
+        }),
+      )
     }
-    for (const file of packaged) {
-      await client.send(new CopyObjectCommand({
-        Bucket: bucket,
-        CopySource: encodeURIComponent(`${bucket}/${attemptPrefix}${file.relative}`),
-        Key: `${job.outputPrefix}${file.relative}`,
-      }))
+    for (const file of deliveryFiles) {
+      await client.send(
+        new CopyObjectCommand({
+          Bucket: bucket,
+          CopySource: encodeURIComponent(`${bucket}/${attemptPrefix}${file.relative}`),
+          Key: `${job.outputPrefix}${file.relative}`,
+        }),
+      )
     }
     if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) {
-      for (const file of packaged) {
-        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: `${job.outputPrefix}${file.relative}` }))
+      for (const file of deliveryFiles) {
+        await client.send(
+          new DeleteObjectCommand({ Bucket: bucket, Key: `${job.outputPrefix}${file.relative}` }),
+        )
       }
       return { cancelled: true }
     }
-    await client.send(new PutObjectCommand({
-      Body: JSON.stringify({ attempt: job.attempt, outputPrefix: job.outputPrefix, renditions: job.renditions, version: 1 }),
-      Bucket: bucket,
-      ContentType: 'application/json',
-      Key: completionKey,
-    }))
+    await client.send(
+      new PutObjectCommand({
+        Body: JSON.stringify({
+          attempt: job.attempt,
+          outputPrefix: job.outputPrefix,
+          renditions: job.renditions,
+          version: 1,
+        }),
+        Bucket: bucket,
+        ContentType: 'application/json',
+        Key: completionKey,
+      }),
+    )
     await sendCallback(job, 'ready', environment, fetcher, { playReadyPackaged: true })
-    for (const file of packaged) {
-      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: `${attemptPrefix}${file.relative}` }))
+    for (const file of deliveryFiles) {
+      await client.send(
+        new DeleteObjectCommand({ Bucket: bucket, Key: `${attemptPrefix}${file.relative}` }),
+      )
     }
     return { ready: true }
   } catch (_error) {
-    await client.send(new PutObjectCommand({ Body: '{}', Bucket: bucket, Key: `${controlPrefix}.failed` }))
+    await client.send(
+      new PutObjectCommand({ Body: '{}', Bucket: bucket, Key: `${controlPrefix}.failed` }),
+    )
     await sendCallback(job, 'failed', environment, fetcher)
     return { failed: true }
   } finally {
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: `${controlPrefix}.lock` })).catch(() => undefined)
+    await client
+      .send(new DeleteObjectCommand({ Bucket: bucket, Key: `${controlPrefix}.lock` }))
+      .catch(() => undefined)
     await rm(directory, { force: true, recursive: true })
   }
 }
@@ -275,7 +330,10 @@ export function startServer(dependencies) {
     try {
       const chunks = []
       for await (const chunk of request) chunks.push(chunk)
-      const result = await processJob(JSON.parse(Buffer.concat(chunks).toString('utf8')), dependencies)
+      const result = await processJob(
+        JSON.parse(Buffer.concat(chunks).toString('utf8')),
+        dependencies,
+      )
       response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result))
     } catch {
       response.writeHead(503).end()
