@@ -22,6 +22,7 @@ export const auditActions = [
   'source_deleted',
   'outputs_deleted',
   'operations_controls_updated',
+  'platform_recovery_accessed',
 ] as const
 
 export type AuditAction = (typeof auditActions)[number]

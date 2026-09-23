@@ -13,6 +13,7 @@ export async function recordAuditEvent(
     details?: Record<string, unknown>
     eventKey: string
     memberID?: number
+    organisationID?: number
     occurredAt: Date
     req?: PayloadRequest
   },
@@ -27,6 +28,7 @@ export async function recordAuditEvent(
         details: input.details,
         eventKey: input.eventKey,
         member: input.memberID,
+        organisation: input.organisationID,
         occurredAt: input.occurredAt.toISOString(),
       },
       overrideAccess: true,

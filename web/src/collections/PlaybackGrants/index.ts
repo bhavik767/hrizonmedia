@@ -12,6 +12,7 @@ export const PlaybackGrants: CollectionConfig = {
   admin: { hidden: true, useAsTitle: 'playbackGrantId' },
   fields: [
     { name: 'playbackGrantId', type: 'text', required: true, unique: true, index: true },
+    { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
     {
       name: 'asset',
       type: 'relationship',

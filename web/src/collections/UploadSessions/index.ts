@@ -12,6 +12,7 @@ export const UploadSessions: CollectionConfig = {
   admin: { hidden: true, useAsTitle: 'uploadSessionId' },
   fields: [
     { name: 'uploadSessionId', type: 'text', required: true, unique: true, index: true },
+    { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
     {
       name: 'asset',
       type: 'relationship',

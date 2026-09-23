@@ -9,11 +9,16 @@ import { Authors } from './collections/Authors'
 import { AuditEvents } from './collections/AuditEvents'
 import { Categories } from './collections/Categories'
 import { Media } from './collections/Media'
+import { MediaAccess } from './collections/MediaAccess'
 import { MediaAssets } from './collections/MediaAssets'
 import { MediaOperations } from './collections/MediaOperations'
+import { OrganisationMemberships } from './collections/OrganisationMemberships'
+import { OrganisationSettings } from './collections/OrganisationSettings'
+import { Organisations } from './collections/Organisations'
 import { Pages } from './collections/Pages'
 import { PilotMembers } from './collections/PilotMembers'
 import { PlaybackGrants } from './collections/PlaybackGrants'
+import { PlatformAdministrators } from './collections/PlatformAdministrators'
 import { Posts } from './collections/Posts'
 import { ProcessingJobs } from './collections/ProcessingJobs'
 import { ReusableBlocks } from './collections/ReusableBlocks'
@@ -117,7 +122,12 @@ export default buildConfig({
     Authors,
     Users,
     PilotMembers,
+    Organisations,
+    OrganisationMemberships,
+    OrganisationSettings,
+    PlatformAdministrators,
     MediaAssets,
+    MediaAccess,
     MediaOperations,
     UploadSessions,
     ProcessingJobs,
