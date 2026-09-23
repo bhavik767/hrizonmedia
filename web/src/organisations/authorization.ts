@@ -51,6 +51,16 @@ async function findActivePlatformAdministrator(payload: Payload, memberID: numbe
   return result.docs[0] ?? null
 }
 
+export async function requirePlatformAdministrator(
+  payload: Payload,
+  member: PilotMember,
+): Promise<void> {
+  await requireActivePilotMember(payload, member)
+  if (!(await findActivePlatformAdministrator(payload, member.id))) {
+    throw new OrganisationAuthorizationError('Active Platform Administrator access required.', 403)
+  }
+}
+
 async function findActiveMembership(payload: Payload, memberID: number, organisationID: number) {
   const result = await payload.find({
     collection: 'organisation-memberships',
