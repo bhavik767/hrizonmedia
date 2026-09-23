@@ -29,7 +29,7 @@ export const OrganisationSettings: CollectionConfig = {
     { name: 'defaultRetentionDays', type: 'number', defaultValue: 30, required: true },
     { name: 'maximumUploadSizeBytes', type: 'number', defaultValue: 2 * 1024 * 1024 * 1024, required: true },
     { name: 'setupCompletedAt', type: 'date', required: true },
-    { name: 'logoDataURL', type: 'textarea' },
+    { name: 'logoDataUrl', type: 'textarea' },
   ],
   timestamps: true,
 }

@@ -1,12 +1,12 @@
 import { parsePlaybackGrantId, type PlaybackGrantToken } from '@/media/identifiers'
 import { PlaybackAuthorizationError, refreshPlaybackWatermark } from '@/media/playback'
-import { mediaErrorResponse, withAuthenticatedPilotMember } from '@/media/request'
+import { mediaErrorResponse, withAuthenticatedMember } from '@/media/request'
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ playbackGrantId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     try {
       const playbackGrantId = parsePlaybackGrantId((await context.params).playbackGrantId)
       const token = request.headers.get('x-playback-grant') as PlaybackGrantToken | null

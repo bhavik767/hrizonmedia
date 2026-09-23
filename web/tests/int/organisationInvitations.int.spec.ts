@@ -6,19 +6,17 @@ import {
   acceptOrganisationInvitation,
   createOrganisationInvitation,
 } from '@/organisations/invitations'
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 
 let payload: Payload
 
-async function createPilotMember(email: string): Promise<PilotMember> {
+async function createMember(email: string): Promise<Member> {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: new Date().toISOString(),
       name: email,
       password: 'organisation-invitation-password',
-      role: 'uploader',
       status: 'active',
     },
     overrideAccess: true,
@@ -30,7 +28,7 @@ async function cleanOrganisationInvitations() {
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({
-    collection: 'pilot-members',
+    collection: 'members',
     overrideAccess: true,
     where: { email: { contains: '@organisation-invitation.test' } },
   })
@@ -50,8 +48,8 @@ describe('Organisation Invitations', () => {
   })
 
   it('creates a seven-day, role-bound invitation which an authenticated person accepts once', async () => {
-    const administrator = await createPilotMember('administrator@organisation-invitation.test')
-    const recipient = await createPilotMember('recipient@organisation-invitation.test')
+    const administrator = await createMember('administrator@organisation-invitation.test')
+    const recipient = await createMember('recipient@organisation-invitation.test')
     const organisation = await payload.create({
       collection: 'organisations',
       data: { name: 'Invitation Organisation', status: 'active' },
@@ -101,8 +99,8 @@ describe('Organisation Invitations', () => {
   })
 
   it('rejects an expired Organisation Invitation', async () => {
-    const administrator = await createPilotMember('expired-admin@organisation-invitation.test')
-    const recipient = await createPilotMember('expired-recipient@organisation-invitation.test')
+    const administrator = await createMember('expired-admin@organisation-invitation.test')
+    const recipient = await createMember('expired-recipient@organisation-invitation.test')
     const organisation = await payload.create({
       collection: 'organisations',
       data: { name: 'Expired Invitation Organisation', status: 'active' },
@@ -137,8 +135,8 @@ describe('Organisation Invitations', () => {
   })
 
   it('consumes the first acceptance by an existing member and applies the invited role', async () => {
-    const administrator = await createPilotMember('existing-admin@organisation-invitation.test')
-    const recipient = await createPilotMember('existing-recipient@organisation-invitation.test')
+    const administrator = await createMember('existing-admin@organisation-invitation.test')
+    const recipient = await createMember('existing-recipient@organisation-invitation.test')
     const organisation = await payload.create({
       collection: 'organisations',
       data: { name: 'Existing Member Organisation', status: 'active' },

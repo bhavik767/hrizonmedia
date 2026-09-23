@@ -1,8 +1,8 @@
 import { createUploadSession } from '@/media/library'
-import { parseJSONBody, withAuthenticatedPilotMember } from '@/media/request'
+import { parseJSONBody, withAuthenticatedMember } from '@/media/request'
 
 export async function POST(request: Request): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const body = await parseJSONBody<Record<string, unknown>>(request)
     const organisationID = Number(body.organisationID)
     const retentionDays = Number(body.retentionDays)

@@ -21,7 +21,7 @@ import {
 } from '@/media/playback'
 import { getFakeProviders } from '@/media/providers/fake'
 import config from '@/payload.config'
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 
 let payload: Payload
 
@@ -36,21 +36,19 @@ async function cleanPlatformAdministration() {
   await payload.delete({ collection: 'platform-administrators', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({
-    collection: 'pilot-members',
+    collection: 'members',
     overrideAccess: true,
     where: { email: { contains: '@platform-administration.test' } },
   })
 }
 
-async function createPilotMember(email: string): Promise<PilotMember> {
+async function createMember(email: string): Promise<Member> {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: new Date().toISOString(),
       name: email,
       password: 'platform-administration-password',
-      role: 'uploader',
       status: 'active',
     },
     overrideAccess: true,
@@ -67,10 +65,10 @@ describe('Platform Administration', () => {
   afterAll(cleanPlatformAdministration)
 
   it('provisions an active Organisation and appoints its initial active Organisation Administrator', async () => {
-    const platformAdministrator = await createPilotMember(
+    const platformAdministrator = await createMember(
       'platform-administrator@platform-administration.test',
     )
-    const initialAdministrator = await createPilotMember(
+    const initialAdministrator = await createMember(
       'initial-administrator@platform-administration.test',
     )
     await payload.create({
@@ -97,7 +95,7 @@ describe('Platform Administration', () => {
   })
 
   it('prevents every Organisation role from creating Organisations or Platform Administrators', async () => {
-    const target = await createPilotMember('target@platform-administration.test')
+    const target = await createMember('target@platform-administration.test')
     const organisation = await payload.create({
       collection: 'organisations',
       data: { name: 'Existing Organisation', status: 'active' },
@@ -105,7 +103,7 @@ describe('Platform Administration', () => {
     })
     const organisationMembers = await Promise.all(
       (['administrator', 'publisher', 'viewer'] as const).map(async (role) => {
-        const member = await createPilotMember(`${role}@platform-administration.test`)
+        const member = await createMember(`${role}@platform-administration.test`)
         await payload.create({
           collection: 'organisation-memberships',
           data: { member: member.id, organisation: organisation.id, role, status: 'active' },
@@ -146,8 +144,8 @@ describe('Platform Administration', () => {
   })
 
   it('lets a Platform Administrator appoint another active Platform Administrator', async () => {
-    const platformAdministrator = await createPilotMember('creator@platform-administration.test')
-    const target = await createPilotMember('appointed@platform-administration.test')
+    const platformAdministrator = await createMember('creator@platform-administration.test')
+    const target = await createMember('appointed@platform-administration.test')
     await payload.create({
       collection: 'platform-administrators',
       data: { member: platformAdministrator.id, status: 'active' },
@@ -164,11 +162,11 @@ describe('Platform Administration', () => {
 
   it('revokes every Organisation Playback Grant before retrying failed cleanup', async () => {
     const now = new Date('2026-09-23T12:00:00.000Z')
-    const platformAdministrator = await createPilotMember(
+    const platformAdministrator = await createMember(
       'deleting-platform-administrator@platform-administration.test',
     )
-    const publisher = await createPilotMember('deleting-publisher@platform-administration.test')
-    const viewer = await createPilotMember('deleting-viewer@platform-administration.test')
+    const publisher = await createMember('deleting-publisher@platform-administration.test')
+    const viewer = await createMember('deleting-viewer@platform-administration.test')
     await payload.create({
       collection: 'platform-administrators',
       data: { member: platformAdministrator.id, status: 'active' },

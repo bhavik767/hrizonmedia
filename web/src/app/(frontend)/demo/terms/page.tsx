@@ -2,22 +2,22 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
-import { ensureDemoEnabled } from '@/pilot/demoAvailability'
-import { getPilotMember } from '@/pilot/session'
+import { ensureDemoEnabled } from '@/members/demoAvailability'
+import { getMember } from '@/members/session'
 
-export const metadata: Metadata = { title: 'Pilot terms | HrizonMedia Demo' }
+export const metadata: Metadata = { title: 'Workspace terms | HrizonMedia Demo' }
 
-export default async function PilotTermsPage() {
+export default async function DemoTermsPage() {
   await ensureDemoEnabled()
-  const member = await getPilotMember()
+  const member = await getMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo%2Fterms')
 
   return (
     <main className="demo-page shell" id="main-content">
       <p className="eyebrow">
-        <span aria-hidden="true" /> Private pilot
+        <span aria-hidden="true" /> Private workspace
       </p>
-      <h1>Pilot terms</h1>
+      <h1>Workspace terms</h1>
       <section aria-labelledby="playback-watermark-term">
         <h2 id="playback-watermark-term">Playback watermark</h2>
         <p>
@@ -26,7 +26,7 @@ export default async function PilotTermsPage() {
           fullscreen so that recordings can be investigated without displaying your email.
         </p>
         <p>
-          Pilot playback is streaming-only. Downloads, offline storage, persistent licences, and
+          Protected playback is streaming-only. Downloads, offline storage, persistent licences, and
           picture-in-picture are disabled.
         </p>
         <p>

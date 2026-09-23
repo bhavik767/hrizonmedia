@@ -30,7 +30,7 @@ export const OrganisationInvitations: CollectionConfig = {
     {
       name: 'acceptedBy',
       type: 'relationship',
-      relationTo: 'pilot-members',
+      relationTo: 'members',
       hidden: true,
     },
   ],

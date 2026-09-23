@@ -8,7 +8,7 @@ import {
   requireOrganisationAdministrator,
   OrganisationAuthorizationError,
 } from '@/organisations/authorization'
-import type { OrganisationMembership, PilotMember } from '@/payload-types'
+import type { OrganisationMembership, Member } from '@/payload-types'
 
 export class OrganisationMembershipError extends Error {
   constructor(
@@ -20,7 +20,7 @@ export class OrganisationMembershipError extends Error {
 }
 
 type MembershipChangeInput = {
-  actor: PilotMember
+  actor: Member
   membershipID: number
   now?: Date
   organisationID: number
@@ -39,7 +39,7 @@ function relationID(value: number | { id: number } | null | undefined): number |
   return value?.id ?? null
 }
 
-async function requireAdministrator(payload: Payload, actor: PilotMember, organisationID: number): Promise<void> {
+async function requireAdministrator(payload: Payload, actor: Member, organisationID: number): Promise<void> {
   if (!Number.isSafeInteger(organisationID) || organisationID <= 0) {
     throw new OrganisationMembershipError('A valid Organisation is required.', 400)
   }

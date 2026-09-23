@@ -1,13 +1,13 @@
 import { parseMediaAssetId } from '@/media/identifiers'
 import { createPlaybackGrant } from '@/media/playback'
 import { protectedPlaybackBrowser } from '@/media/playback-browser'
-import { withAuthenticatedPilotMember } from '@/media/request'
+import { withAuthenticatedMember } from '@/media/request'
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ mediaAssetId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const mediaAssetId = parseMediaAssetId((await context.params).mediaAssetId)
     if (!mediaAssetId) return Response.json({ error: 'Media Asset not found.' }, { status: 404 })
     return Response.json(

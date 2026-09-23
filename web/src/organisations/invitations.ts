@@ -9,7 +9,7 @@ import {
   requireOrganisationAdministrator as requireAuthorisedOrganisationAdministrator,
   OrganisationAuthorizationError,
 } from '@/organisations/authorization'
-import type { OrganisationMembership, PilotMember } from '@/payload-types'
+import type { OrganisationMembership, Member } from '@/payload-types'
 
 const INVITATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000
 const invitationRoles = ['administrator', 'publisher', 'viewer'] as const
@@ -35,7 +35,7 @@ function validRole(role: string): role is OrganisationRole {
 
 async function requireOrganisationAdministrator(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   organisationID: number,
 ): Promise<void> {
   try {
@@ -48,15 +48,15 @@ async function requireOrganisationAdministrator(
   }
 }
 
-async function requireActiveAuthenticatedMember(payload: Payload, actor: PilotMember): Promise<void> {
+async function requireActiveAuthenticatedMember(payload: Payload, actor: Member): Promise<void> {
   const current = await payload.findByID({
-    collection: 'pilot-members',
+    collection: 'members',
     depth: 0,
     id: actor.id,
     overrideAccess: true,
     showHiddenFields: true,
   })
-  if (current.status !== 'active' || !current.invitationAcceptedAt) {
+  if (current.status !== 'active') {
     throw new OrganisationInvitationError('Active authentication is required.', 401)
   }
 }
@@ -68,7 +68,7 @@ export async function createOrganisationInvitation({
   payload,
   role,
 }: {
-  actor: PilotMember
+  actor: Member
   now?: Date
   organisationID: number
   payload: Payload
@@ -103,7 +103,7 @@ export async function acceptOrganisationInvitation({
   payload,
   token,
 }: {
-  actor: PilotMember
+  actor: Member
   now?: Date
   payload: Payload
   token: string

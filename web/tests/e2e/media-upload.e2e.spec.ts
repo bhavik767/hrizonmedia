@@ -4,12 +4,12 @@ import { getPayload } from 'payload'
 import config from '@/payload.config'
 
 import {
-  cleanupPilotMembers,
-  seedPilotUploaders,
+  cleanupMembers,
+  seedUploaders,
   testInvitee,
   testOperator,
   testSecondUploader,
-} from '../helpers/seedPilotMembers'
+} from '../helpers/seedMembers'
 import { mp4Fixture } from '../helpers/mediaFixtures'
 
 async function signIn(page: Page, member: { email: string; password: string }) {
@@ -23,11 +23,11 @@ async function signIn(page: Page, member: { email: string; password: string }) {
 test.describe('Media Asset tracer bullet', () => {
   test.beforeEach(async ({ context }) => {
     await context.clearCookies()
-    await seedPilotUploaders()
+    await seedUploaders()
   })
 
   test.afterEach(async () => {
-    await cleanupPilotMembers()
+    await cleanupMembers()
   })
 
   test('uploads a valid fixture to ready while keeping it private to its uploader', async ({
@@ -214,7 +214,7 @@ test.describe('Media Asset tracer bullet', () => {
     expect(grant.status()).toBe(409)
   })
 
-  test('issue 38: lets an operator inspect and delete another uploader’s Media Asset', async ({
+  test('issue 38: lets a Platform Administrator inspect and delete another Organisation’s Media Asset', async ({
     page,
   }) => {
     await signIn(page, testInvitee)
@@ -227,22 +227,25 @@ test.describe('Media Asset tracer bullet', () => {
     const asset = page.getByRole('article', { name: 'operator-delete.mp4' })
     await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
     const payload = await getPayload({ config })
-    await payload.create({
-      collection: 'pilot-members',
+    const platformAdministrator = await payload.create({
+      collection: 'members',
       data: {
         ...testOperator,
-        invitationAcceptedAt: new Date().toISOString(),
-        role: 'operator',
         status: 'active',
       },
+      overrideAccess: true,
+    })
+    await payload.create({
+      collection: 'platform-administrators',
+      data: { member: platformAdministrator.id, status: 'active' },
       overrideAccess: true,
     })
     await page.getByRole('button', { name: 'Sign out' }).click()
     await signIn(page, testOperator)
 
     await expect(page.getByLabel('Video file')).toHaveCount(0)
-    const operatorAsset = page.getByRole('article', { name: 'operator-delete.mp4' })
-    await operatorAsset.getByRole('link', { name: 'Inspect asset' }).click()
+    const administratorAsset = page.getByRole('article', { name: 'operator-delete.mp4' })
+    await administratorAsset.getByRole('link', { name: 'Inspect asset' }).click()
     page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: 'Delete asset' }).click()
 

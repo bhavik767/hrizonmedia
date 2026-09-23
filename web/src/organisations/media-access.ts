@@ -7,7 +7,7 @@ import {
   authorizeOrganisationMedia,
   OrganisationAuthorizationError,
 } from '@/organisations/authorization'
-import type { MediaAccess, MediaAsset, OrganisationMembership, PilotMember } from '@/payload-types'
+import type { MediaAccess, MediaAsset, OrganisationMembership, Member } from '@/payload-types'
 
 export class OrganisationMediaAccessError extends Error {
   constructor(
@@ -19,7 +19,7 @@ export class OrganisationMediaAccessError extends Error {
 }
 
 type MediaAccessInput = {
-  actor: PilotMember
+  actor: Member
   assetID: number
   membershipID: number
   now?: Date
@@ -82,7 +82,7 @@ async function findViewerMembership(
 
 async function managedAsset(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   assetID: number,
 ): Promise<{
   asset: MediaAsset
@@ -202,7 +202,7 @@ export async function revokeMediaAccess(input: MediaAccessInput): Promise<void> 
 
 export async function listMediaAccessViewers(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   assetID: number,
 ): Promise<Array<{ access: 'active' | 'revoked' | 'none'; membershipID: number; name: string }>> {
   const { organisationID } = await managedAsset(payload, actor, assetID)

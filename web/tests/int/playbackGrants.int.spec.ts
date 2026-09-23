@@ -11,30 +11,36 @@ import {
 import { PlaybackCompatibilityError, protectedPlaybackBrowser } from '@/media/playback-browser'
 import { getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
 import config from '@/payload.config'
-import type { MediaAsset, PilotMember } from '@/payload-types'
-import { getOperatorOverview, updateOperationalControls } from '@/pilot/operations'
+import type { MediaAsset, Member } from '@/payload-types'
+import { getOperationalOverview, updateOperationalControls } from '@/organisations/operations'
 import { cleanMediaRecords } from '../helpers/cleanMediaRecords'
+import {
+  cleanTestOrganisations,
+  createTestOrganisation,
+  createTestPlatformAdministrator,
+} from '../helpers/organisations'
 
 let payload: Payload
-let owner: PilotMember
-let otherUploader: PilotMember
+let owner: Member
+let otherUploader: Member
+let ownerOrganisationID: number
+let otherOrganisationID: number
 
 const now = new Date('2026-09-14T12:00:00.000Z')
 
 async function cleanPlaybackRecords() {
   await cleanMediaRecords(payload)
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await cleanTestOrganisations(payload)
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }
 
 async function createUploader(email: string, status: 'active' | 'disabled' = 'active') {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: now.toISOString(),
       name: email,
       password: 'uploader-password',
-      role: 'uploader',
       status,
     },
     overrideAccess: true,
@@ -42,7 +48,7 @@ async function createUploader(email: string, status: 'active' | 'disabled' = 'ac
 }
 
 async function createAsset(
-  member: PilotMember,
+  member: Member,
   status: MediaAsset['status'] = 'ready',
   expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
 ): Promise<MediaAsset & { mediaAssetId: MediaAssetId }> {
@@ -54,6 +60,7 @@ async function createAsset(
       fileName: 'private-lesson.mp4',
       mediaAssetId: newMediaAssetId(),
       mimeType: 'video/mp4',
+      organisation: member.id === owner.id ? ownerOrganisationID : otherOrganisationID,
       owner: member.id,
       size: 1024,
       status,
@@ -73,6 +80,8 @@ describe('Playback Grant authorization', () => {
     await cleanPlaybackRecords()
     owner = await createUploader('playback-owner@example.test')
     otherUploader = await createUploader('other-playback-owner@example.test')
+    ownerOrganisationID = await createTestOrganisation(payload, owner)
+    otherOrganisationID = await createTestOrganisation(payload, otherUploader)
   })
 
   afterAll(async () => {
@@ -232,17 +241,16 @@ describe('Playback Grant authorization', () => {
   it('blocks new playback activity while the operator kill switch is enabled', async () => {
     const asset = await createAsset(owner)
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'playback-kill-switch-operator@example.test',
-        invitationAcceptedAt: now.toISOString(),
         name: 'Playback kill switch operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
     await updateOperationalControls(payload, operator, {
       killSwitchEnabled: true,
       providerConcurrency: 2,
@@ -264,7 +272,7 @@ describe('Playback Grant authorization', () => {
     },
   )
 
-  it('denies guessed IDs, cross-member access, disabled members, and expired assets', async () => {
+  it('denies guessed IDs, cross-Organisation access, disabled Members, and expired assets', async () => {
     const asset = await createAsset(owner)
     const expiredAsset = await createAsset(owner, 'ready', new Date(now.getTime() - 1))
     const boundaryAsset = await createAsset(owner, 'ready', now)
@@ -279,7 +287,7 @@ describe('Playback Grant authorization', () => {
 
     await expect(
       createPlaybackGrant(payload, otherUploader, asset.mediaAssetId!, { now }),
-    ).rejects.toMatchObject({ status: 404 })
+    ).rejects.toMatchObject({ status: 403 })
     await expect(
       createPlaybackGrant(payload, owner, newMediaAssetId(), { now }),
     ).rejects.toMatchObject({ status: 404 })
@@ -399,20 +407,19 @@ describe('Playback Grant authorization', () => {
     const grant = await createPlaybackGrant(payload, owner, asset.mediaAssetId, { now })
     await acquirePlaybackLicence(payload, owner, grant.playbackGrantToken, { now })
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'playback-audit-operator@example.test',
-        invitationAcceptedAt: now.toISOString(),
         name: 'Playback audit operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
 
     expect(
-      (await getOperatorOverview(payload, operator)).auditEvents.map(({ action }) => action),
+      (await getOperationalOverview(payload, operator)).auditEvents.map(({ action }) => action),
     ).toEqual(expect.arrayContaining(['playback_granted', 'playback_licence_acquired']))
   })
 })

@@ -12,25 +12,29 @@ import { getVisibleAsset, listVisibleAssets } from '@/media/library'
 import { createPlaybackGrant } from '@/media/playback'
 import { getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
 import config from '@/payload.config'
-import type { MediaAsset, PilotMember } from '@/payload-types'
+import type { MediaAsset, Member } from '@/payload-types'
 import { cleanMediaRecords } from '../helpers/cleanMediaRecords'
+import {
+  cleanTestOrganisations,
+  createTestOrganisation,
+  createTestPlatformAdministrator,
+} from '../helpers/organisations'
 
 let payload: Payload
-let operator: PilotMember
-let owner: PilotMember
-let otherUploader: PilotMember
+let operator: Member
+let owner: Member
+let otherUploader: Member
+const organisationIDs = new Map<number, number>()
 
 const now = new Date('2026-09-15T12:00:00.000Z')
 
-async function createMember(email: string, role: 'operator' | 'uploader') {
+async function createMember(email: string) {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: now.toISOString(),
       name: email,
-      password: 'pilot-password',
-      role,
+      password: 'member-password',
       status: 'active',
     },
     overrideAccess: true,
@@ -38,7 +42,7 @@ async function createMember(email: string, role: 'operator' | 'uploader') {
 }
 
 async function createReadyAsset(
-  member: PilotMember,
+  member: Member,
 ): Promise<MediaAsset & { mediaAssetId: MediaAssetId }> {
   return payload.create({
     collection: 'media-assets',
@@ -48,6 +52,7 @@ async function createReadyAsset(
       fileName: 'retained-lesson.mp4',
       mediaAssetId: newMediaAssetId(),
       mimeType: 'video/mp4',
+      organisation: organisationIDs.get(member.id)!,
       owner: member.id,
       size: 1024,
       status: 'ready',
@@ -59,7 +64,8 @@ async function createReadyAsset(
 
 async function cleanLifecycleRecords() {
   await cleanMediaRecords(payload)
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await cleanTestOrganisations(payload)
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }
 
 describe('Media Asset lifecycle', () => {
@@ -70,22 +76,26 @@ describe('Media Asset lifecycle', () => {
   beforeEach(async () => {
     resetFakeMediaStorage()
     await cleanLifecycleRecords()
-    operator = await createMember('lifecycle-operator@example.test', 'operator')
-    owner = await createMember('lifecycle-owner@example.test', 'uploader')
-    otherUploader = await createMember('lifecycle-other@example.test', 'uploader')
+    operator = await createMember('lifecycle-operator@example.test')
+    owner = await createMember('lifecycle-owner@example.test')
+    otherUploader = await createMember('lifecycle-other@example.test')
+    organisationIDs.set(operator.id, await createTestOrganisation(payload, operator))
+    organisationIDs.set(owner.id, await createTestOrganisation(payload, owner))
+    organisationIDs.set(otherUploader.id, await createTestOrganisation(payload, otherUploader))
+    await createTestPlatformAdministrator(payload, operator)
   })
 
   afterAll(async () => {
     await cleanLifecycleRecords()
   })
 
-  it('lets an owner or operator delete an asset and blocks playback immediately', async () => {
+  it('lets an Organisation member or Platform Administrator delete an asset and blocks playback immediately', async () => {
     const ownedAsset = await createReadyAsset(owner)
     const operatorDeletedAsset = await createReadyAsset(otherUploader)
 
     await expect(
       deleteMediaAsset(payload, otherUploader, ownedAsset.mediaAssetId, { now }),
-    ).rejects.toMatchObject({ status: 404 })
+    ).rejects.toMatchObject({ status: 403 })
 
     await deleteMediaAsset(payload, owner, ownedAsset.mediaAssetId, { now })
     await deleteMediaAsset(payload, operator, operatorDeletedAsset.mediaAssetId, { now })
@@ -129,6 +139,7 @@ describe('Media Asset lifecycle', () => {
         fileFingerprint: 'retained-lesson',
         fileName: asset.fileName,
         mimeType: asset.mimeType,
+        organisation: organisationIDs.get(owner.id),
         objectKey,
         owner: owner.id,
         partSize: 5 * 1024 * 1024,
@@ -147,6 +158,7 @@ describe('Media Asset lifecycle', () => {
         dispatchBy: readyAt.toISOString(),
         nextAttemptAt: readyAt.toISOString(),
         objectKey,
+        organisation: organisationIDs.get(owner.id),
         owner: owner.id,
         processingJobId,
         queuedAt: readyAt.toISOString(),
@@ -195,6 +207,7 @@ describe('Media Asset lifecycle', () => {
         fileFingerprint: 'failed-lesson',
         fileName: asset.fileName,
         mimeType: asset.mimeType,
+        organisation: organisationIDs.get(owner.id),
         objectKey,
         owner: owner.id,
         partSize: 5 * 1024 * 1024,
@@ -214,6 +227,7 @@ describe('Media Asset lifecycle', () => {
         failedAt: failedAt.toISOString(),
         nextAttemptAt: failedAt.toISOString(),
         objectKey,
+        organisation: organisationIDs.get(owner.id),
         owner: owner.id,
         processingJobId: newProcessingJobId(),
         queuedAt: failedAt.toISOString(),
@@ -258,6 +272,7 @@ describe('Media Asset lifecycle', () => {
         dispatchBy: readyAt.toISOString(),
         nextAttemptAt: readyAt.toISOString(),
         objectKey: 'private/raw/already-deleted.mp4',
+        organisation: organisationIDs.get(owner.id),
         owner: owner.id,
         processingJobId,
         providerJobId,
@@ -374,7 +389,7 @@ describe('Media Asset lifecycle', () => {
     ).resolves.toMatchObject({ totalDocs: 1 })
   })
 
-  it('keeps expired metadata visible to its owner and lets operators inspect every asset', async () => {
+  it('keeps expired metadata visible to its Organisation member and lets Platform Administrators inspect every asset', async () => {
     const ownedAsset = await createReadyAsset(owner)
     const expiredAsset = await createReadyAsset(owner)
     const otherAsset = await createReadyAsset(otherUploader)
@@ -392,6 +407,7 @@ describe('Media Asset lifecycle', () => {
         fileFingerprint: 'operator-visible',
         fileName: otherAsset.fileName,
         mimeType: otherAsset.mimeType,
+        organisation: organisationIDs.get(otherUploader.id),
         owner: otherUploader.id,
         partSize: 5 * 1024 * 1024,
         providerUploadId: `provider_upload_${crypto.randomUUID()}`,

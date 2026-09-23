@@ -2,14 +2,14 @@ import { getMediaProviders } from '@/media/providers'
 import {
   authorizePlaybackResourceRequest,
   mediaErrorResponse,
-  withAuthenticatedPilotMember,
+  withAuthenticatedMember,
 } from '@/media/request'
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ playbackGrantId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     try {
       const authorization = await authorizePlaybackResourceRequest({
         member,

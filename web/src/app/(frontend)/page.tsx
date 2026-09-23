@@ -41,7 +41,7 @@ export default async function HomePage() {
             Upload your video once. HrizonMedia encrypts, stores, and delivers it, then
             authorises playback only for the viewers you approve.
           </p>
-          {!demoEnabled && <p className="demo-note">Private pilot opening soon.</p>}
+          {!demoEnabled && <p className="demo-note">Private workspace opening soon.</p>}
         </div>
         <div className="control-plate" aria-label="Secure delivery flow">
           <div className="control-plate__topline">

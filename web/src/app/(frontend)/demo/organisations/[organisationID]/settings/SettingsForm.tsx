@@ -11,7 +11,7 @@ type Props = {
 
 export function SettingsForm({ action, settings, submitLabel }: Props) {
   return (
-    <form action={action} className="pilot-form" encType="multipart/form-data">
+    <form action={action} className="member-form" encType="multipart/form-data">
       <label htmlFor="drm-default">Default Media Protection Policy</label>
       <select defaultValue={settings.drmDefault} id="drm-default" name="drmDefault">
         <option value="protected">DRM-protected playback</option>

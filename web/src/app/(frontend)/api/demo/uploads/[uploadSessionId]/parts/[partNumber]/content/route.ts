@@ -1,6 +1,6 @@
 import { parseUploadSessionId } from '@/media/identifiers'
 import { receiveUploadPart } from '@/media/library'
-import { readBoundedBody, withAuthenticatedPilotMember } from '@/media/request'
+import { readBoundedBody, withAuthenticatedMember } from '@/media/request'
 
 const MAX_UPLOAD_PART_BYTES = 5 * 1024 * 1024
 
@@ -16,7 +16,7 @@ export async function PUT(
   request: Request,
   context: { params: Promise<{ partNumber: string; uploadSessionId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const { partNumber, uploadSessionId } = await context.params
     const parsedID = parseUploadSessionId(uploadSessionId)
     const parsedPartNumber = Number(partNumber)

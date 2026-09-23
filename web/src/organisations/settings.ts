@@ -5,7 +5,7 @@ import type { Payload } from 'payload'
 import sharp from 'sharp'
 
 import { authorizeOrganisationMedia, OrganisationAuthorizationError } from './authorization'
-import type { OrganisationSetting, PilotMember } from '@/payload-types'
+import type { OrganisationSetting, Member } from '@/payload-types'
 
 const MAXIMUM_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024 * 1024
 const MAXIMUM_LOGO_SIZE_BYTES = 3 * 1024 * 1024
@@ -62,7 +62,7 @@ function validateInput(input: OrganisationSettingsInput): OrganisationSettingsIn
 
 async function requireOrganisationAdministrator(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   organisationID: number,
 ): Promise<void> {
   try {
@@ -170,7 +170,7 @@ async function logoDataURL(logo: OrganisationLogoInput): Promise<string> {
 
 export async function completeInitialOrganisationSetup(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   organisationID: number,
   input: OrganisationSetupInput,
 ): Promise<OrganisationSetting> {
@@ -206,7 +206,7 @@ export async function completeInitialOrganisationSetup(
     collection: 'organisation-settings',
     data: {
       ...settings,
-      logoDataURL: input.logo ? await logoDataURL(input.logo) : undefined,
+      logoDataUrl: input.logo ? await logoDataURL(input.logo) : undefined,
       organisation: organisationID,
       setupCompletedAt: new Date().toISOString(),
     },
@@ -216,7 +216,7 @@ export async function completeInitialOrganisationSetup(
 
 export async function getOrganisationSettingsState(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   organisationID: number,
 ): Promise<{ initialAdministrator: boolean; settings: OrganisationSetting | null }> {
   await requireOrganisationAdministrator(payload, actor, organisationID)
@@ -245,7 +245,7 @@ export async function getOrganisationSettingsState(
 
 export async function updateOrganisationSettings(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   organisationID: number,
   input: OrganisationSettingsInput,
 ): Promise<OrganisationSetting> {
@@ -261,7 +261,7 @@ export async function updateOrganisationSettings(
 
 export async function updateOrganisationLogo(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   organisationID: number,
   logo: OrganisationLogoInput,
 ): Promise<OrganisationSetting> {
@@ -269,7 +269,7 @@ export async function updateOrganisationLogo(
   const settings = await findOrganisationSettings(payload, organisationID)
   return payload.update({
     collection: 'organisation-settings',
-    data: { logoDataURL: await logoDataURL(logo) },
+    data: { logoDataUrl: await logoDataURL(logo) },
     id: settings.id,
     overrideAccess: true,
   })
@@ -277,14 +277,14 @@ export async function updateOrganisationLogo(
 
 export async function removeOrganisationLogo(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   organisationID: number,
 ): Promise<OrganisationSetting> {
   await requireOrganisationAdministrator(payload, actor, organisationID)
   const settings = await findOrganisationSettings(payload, organisationID)
   return payload.update({
     collection: 'organisation-settings',
-    data: { logoDataURL: null },
+    data: { logoDataUrl: null },
     id: settings.id,
     overrideAccess: true,
   })

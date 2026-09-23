@@ -14,7 +14,7 @@ export const MediaOperations: CollectionConfig = {
     { name: 'key', type: 'text', required: true, unique: true, index: true },
     { name: 'providerConcurrency', type: 'number', required: true, min: 1, max: 100 },
     { name: 'killSwitchEnabled', type: 'checkbox', required: true, defaultValue: false },
-    { name: 'updatedBy', type: 'relationship', relationTo: 'pilot-members', index: true },
+    { name: 'updatedBy', type: 'relationship', relationTo: 'members', index: true },
   ],
   timestamps: true,
 }

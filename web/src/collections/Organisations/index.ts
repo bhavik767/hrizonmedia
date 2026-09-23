@@ -15,7 +15,7 @@ export const Organisations: CollectionConfig = {
     {
       name: 'initialAdministrator',
       type: 'relationship',
-      relationTo: 'pilot-members',
+      relationTo: 'members',
     },
     {
       name: 'status',

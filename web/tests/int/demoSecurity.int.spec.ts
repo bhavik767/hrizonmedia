@@ -31,15 +31,13 @@ describe('Demo mutation security', () => {
   })
 
   beforeEach(async () => {
-    await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+    await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
     const member = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'security-uploader@example.test',
-        invitationAcceptedAt: new Date().toISOString(),
         name: 'Security uploader',
         password: 'uploader-password',
-        role: 'uploader',
         status: 'active',
       },
       overrideAccess: true,
@@ -49,7 +47,7 @@ describe('Demo mutation security', () => {
 
   afterAll(async () => {
     vi.restoreAllMocks()
-    await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+    await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
   })
 
   it('rejects a cross-origin mutation without granting CORS access', async () => {

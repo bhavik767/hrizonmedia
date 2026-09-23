@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import config from '@/payload.config'
-import { getPilotMember } from '@/pilot/session'
+import { getMember } from '@/members/session'
 import { guardDemoActionMutation } from '@/media/requestSecurity'
 import {
   completeInitialOrganisationSetup,
@@ -45,7 +45,7 @@ async function logoInput(formData: FormData): Promise<OrganisationLogoInput | un
 }
 
 async function actionContext() {
-  const actor = await getPilotMember()
+  const actor = await getMember()
   if (!actor) throw new OrganisationSettingsError('Sign in as an Organisation Administrator.', 401)
   guardDemoActionMutation(await headers(), actor.id)
   return { actor, payload: await getPayload({ config }) }

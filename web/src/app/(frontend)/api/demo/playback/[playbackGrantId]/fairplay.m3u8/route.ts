@@ -1,11 +1,11 @@
-import { mediaErrorResponse, withAuthenticatedPilotMember } from '@/media/request'
+import { mediaErrorResponse, withAuthenticatedMember } from '@/media/request'
 import { authorizeHlsPlaylistRequest, hlsResponse } from '../hls'
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ playbackGrantId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     try {
       const { mediaAssetId, playbackGrantId, query } = await authorizeHlsPlaylistRequest({
         member,

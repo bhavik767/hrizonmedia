@@ -1,12 +1,12 @@
 import { parseUploadSessionId } from '@/media/identifiers'
 import { renewUploadPart } from '@/media/library'
-import { parseJSONBody, withAuthenticatedPilotMember } from '@/media/request'
+import { parseJSONBody, withAuthenticatedMember } from '@/media/request'
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ partNumber: string; uploadSessionId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const { partNumber, uploadSessionId } = await context.params
     const parsedID = parseUploadSessionId(uploadSessionId)
     const parsedPartNumber = Number(partNumber)
