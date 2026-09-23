@@ -1,5 +1,5 @@
 import { deleteMediaFolder, renameMediaFolder } from '@/media/library'
-import { parseJSONBody, withAuthenticatedPilotMember } from '@/media/request'
+import { parseJSONBody, withAuthenticatedMember } from '@/media/request'
 
 function folderID(value: string): number | null {
   const id = Number(value)
@@ -10,7 +10,7 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ folderID: string }> },
 ): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const id = folderID((await context.params).folderID)
     if (!id) return Response.json({ error: 'Folder not found.' }, { status: 404 })
     const body = await parseJSONBody<Record<string, unknown>>(request)
@@ -24,7 +24,7 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ folderID: string }> },
 ): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const id = folderID((await context.params).folderID)
     if (!id) return Response.json({ error: 'Folder not found.' }, { status: 404 })
     await deleteMediaFolder(payload, member, id)

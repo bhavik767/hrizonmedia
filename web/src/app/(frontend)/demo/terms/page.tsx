@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { ensureDemoEnabled } from '@/members/demoAvailability'
 import { getMember } from '@/members/session'
 
-import { DashboardShell } from './DashboardShell'
+import { DashboardShell } from '../DashboardShell'
 
 export const metadata: Metadata = { title: 'Workspace terms | WeCloud Dashboard' }
 

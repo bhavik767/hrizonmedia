@@ -11,12 +11,12 @@ import {
   renameMediaFolder,
 } from '@/media/library'
 import config from '@/payload.config'
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 
 let payload: Payload
-let administrator: PilotMember
-let publisher: PilotMember
-let otherPublisher: PilotMember
+let administrator: Member
+let publisher: Member
+let otherPublisher: Member
 let organisationID: number
 
 async function clean() {
@@ -32,28 +32,26 @@ async function clean() {
     await payload.delete({ collection, overrideAccess: true, where: {} })
   }
   await payload.delete({
-    collection: 'pilot-members',
+    collection: 'members',
     overrideAccess: true,
     where: { email: { contains: '@media-folders.test' } },
   })
 }
 
-async function member(email: string): Promise<PilotMember> {
+async function member(email: string): Promise<Member> {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: new Date().toISOString(),
       name: email,
       password: 'folder-password',
-      role: 'uploader',
       status: 'active',
     },
     overrideAccess: true,
   })
 }
 
-async function upload(owner: PilotMember, folderID?: number) {
+async function upload(owner: Member, folderID?: number) {
   return createUploadSession(payload, owner, {
     fileFingerprint: crypto.randomUUID(),
     fileName: 'lesson.mp4',
@@ -131,7 +129,7 @@ describe('Media Library Folders', () => {
     const folder = await createMediaFolder(payload, publisher, organisationID, 'Publisher videos')
     const session = await upload(publisher, folder.id)
     await deleteMediaFolder(payload, administrator, folder.id)
-    await expect(listVisibleAssets(payload, publisher, {}, organisationID)).resolves.toEqual([
+    await expect(listVisibleAssets(payload, publisher, organisationID)).resolves.toEqual([
       expect.objectContaining({ folderID: null, mediaAssetId: session.asset.mediaAssetId }),
     ])
     const asset = await payload.find({
