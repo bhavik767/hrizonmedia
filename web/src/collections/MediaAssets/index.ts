@@ -13,6 +13,7 @@ export const MediaAssets: CollectionConfig = {
   fields: [
     { name: 'mediaAssetId', type: 'text', required: true, unique: true, index: true },
     { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
+    { name: 'folder', type: 'relationship', relationTo: 'media-folders', index: true },
     {
       name: 'mediaProtectionPolicy',
       type: 'select',

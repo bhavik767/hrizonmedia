@@ -81,6 +81,7 @@ export interface Config {
     'organisation-settings': OrganisationSetting;
     'platform-administrators': PlatformAdministrator;
     'media-assets': MediaAsset;
+    'media-folders': MediaFolder;
     'media-access': MediaAccess;
     'media-operations': MediaOperation;
     'upload-sessions': UploadSession;
@@ -118,6 +119,7 @@ export interface Config {
     'organisation-settings': OrganisationSettingsSelect<false> | OrganisationSettingsSelect<true>;
     'platform-administrators': PlatformAdministratorsSelect<false> | PlatformAdministratorsSelect<true>;
     'media-assets': MediaAssetsSelect<false> | MediaAssetsSelect<true>;
+    'media-folders': MediaFoldersSelect<false> | MediaFoldersSelect<true>;
     'media-access': MediaAccessSelect<false> | MediaAccessSelect<true>;
     'media-operations': MediaOperationsSelect<false> | MediaOperationsSelect<true>;
     'upload-sessions': UploadSessionsSelect<false> | UploadSessionsSelect<true>;
@@ -1251,6 +1253,7 @@ export interface MediaAsset {
   id: number;
   mediaAssetId: string;
   organisation?: (number | null) | Organisation;
+  folder?: (number | null) | MediaFolder;
   mediaProtectionPolicy?: ('protected' | 'standard') | null;
   owner: number | Member;
   fileName: string;
@@ -1268,6 +1271,14 @@ export interface MediaAsset {
   outputsDeletedAt?: string | null;
   status: 'uploading' | 'queued' | 'processing' | 'ready' | 'failed' | 'expired' | 'deleted';
   statusChangedAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+export interface MediaFolder {
+  id: number;
+  organisation: number | Organisation;
+  name: string;
+  owner: number | PilotMember;
   updatedAt: string;
   createdAt: string;
 }
@@ -1304,6 +1315,7 @@ export interface UploadSession {
   id: number;
   uploadSessionId: string;
   organisation?: (number | null) | Organisation;
+  folder?: (number | null) | MediaFolder;
   mediaProtectionPolicy?: ('protected' | 'standard') | null;
   retentionDays?: number | null;
   asset: number | MediaAsset;
@@ -2298,6 +2310,7 @@ export interface PlatformAdministratorsSelect<T extends boolean = true> {
 export interface MediaAssetsSelect<T extends boolean = true> {
   mediaAssetId?: T;
   organisation?: T;
+  folder?: T;
   mediaProtectionPolicy?: T;
   owner?: T;
   fileName?: T;
@@ -2315,6 +2328,13 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   outputsDeletedAt?: T;
   status?: T;
   statusChangedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+export interface MediaFoldersSelect<T extends boolean = true> {
+  organisation?: T;
+  name?: T;
+  owner?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -2348,6 +2368,7 @@ export interface MediaOperationsSelect<T extends boolean = true> {
 export interface UploadSessionsSelect<T extends boolean = true> {
   uploadSessionId?: T;
   organisation?: T;
+  folder?: T;
   mediaProtectionPolicy?: T;
   retentionDays?: T;
   asset?: T;

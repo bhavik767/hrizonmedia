@@ -25,6 +25,12 @@ export interface MediaAssetSummary {
   status: MediaAssetStatus
 }
 
+export interface MediaFolderSummary {
+  id: number
+  name: string
+  organisationID: number
+}
+
 export interface MediaAssetDetail extends MediaAssetSummary {
   assetID: number
   canRetry: boolean
@@ -47,6 +53,7 @@ export interface UploadMetadata {
   mediaProtectionPolicy?: MediaProtectionPolicy
   mimeType: string
   organisationID?: number
+  folderID?: number
   retentionDays?: number
   size: number
 }

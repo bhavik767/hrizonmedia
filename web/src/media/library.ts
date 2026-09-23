@@ -25,6 +25,7 @@ import type {
   MediaAssetDetail,
   MediaAssetStatus,
   MediaAssetSummary,
+  MediaFolderSummary,
   MediaProtectionPolicy,
   UploadMetadata,
 } from './types'
@@ -58,6 +59,64 @@ function summary(asset: MediaAsset): MediaAssetSummary {
     size: asset.size,
     status: asset.status as MediaAssetStatus,
   }
+}
+
+function folderSummary(folder: { id: number; name: string; organisation: number | { id: number } }): MediaFolderSummary {
+  return { id: folder.id, name: folder.name, organisationID: relationID(folder.organisation) }
+}
+
+async function folderForOrganisation(payload: Payload, organisationID: number, folderID: number) {
+  const folder = await payload.findByID({ collection: 'media-folders', depth: 0, id: folderID, overrideAccess: true })
+  if (relationID(folder.organisation) !== organisationID) throw new MediaLibraryError('Folder not found.', 404)
+  return folder
+}
+
+async function folderForUpload(payload: Payload, owner: PilotMember, input: UploadMetadata, organisationID?: number) {
+  if (input.folderID === undefined) return undefined
+  if (!organisationID || !Number.isSafeInteger(input.folderID) || input.folderID <= 0) {
+    throw new MediaLibraryError('Choose a Folder in this Organisation.', 400)
+  }
+  await authorizeOrganisationMedia(payload, owner, { operation: 'create', organisationID })
+  return folderForOrganisation(payload, organisationID, input.folderID)
+}
+
+export async function createMediaFolder(payload: Payload, member: PilotMember, organisationID: number, name: string): Promise<MediaFolderSummary> {
+  if (!Number.isSafeInteger(organisationID) || organisationID <= 0 || name.trim().length === 0 || name.trim() !== name || name.length > 120) {
+    throw new MediaLibraryError('Choose a valid Folder name.', 400)
+  }
+  await authorizeOrganisationMedia(payload, member, { operation: 'create', organisationID })
+  return folderSummary(await payload.create({ collection: 'media-folders', data: { name, organisation: organisationID, owner: member.id }, overrideAccess: true }))
+}
+
+export async function renameMediaFolder(payload: Payload, member: PilotMember, folderID: number, name: string): Promise<MediaFolderSummary> {
+  if (name.trim().length === 0 || name.trim() !== name || name.length > 120) throw new MediaLibraryError('Choose a valid Folder name.', 400)
+  const folder = await payload.findByID({ collection: 'media-folders', depth: 0, id: folderID, overrideAccess: true })
+  const authorisation = await authorizeOrganisationMedia(payload, member, { operation: 'create', organisationID: relationID(folder.organisation) })
+  const assets = await payload.find({ collection: 'media-assets', depth: 0, limit: 1000, overrideAccess: true, where: { folder: { equals: folderID } } })
+  if (authorisation.role === 'publisher' && assets.docs.some((asset) => relationID(asset.owner) !== member.id)) throw new MediaLibraryError('Publishers cannot rename a Folder containing another Publisher’s Media Assets.', 403)
+  return folderSummary(await payload.update({ collection: 'media-folders', id: folderID, data: { name }, overrideAccess: true }))
+}
+
+export async function moveMediaAssetToFolder(payload: Payload, member: PilotMember, mediaAssetId: MediaAssetId, folderID: number | null): Promise<MediaAssetSummary> {
+  const found = await payload.find({ collection: 'media-assets', depth: 0, limit: 1, overrideAccess: true, where: { mediaAssetId: { equals: mediaAssetId } } })
+  const asset = found.docs[0]
+  if (!asset || !asset.organisation) throw new MediaLibraryError('Media Asset not found.', 404)
+  await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
+  if (folderID !== null) await folderForOrganisation(payload, relationID(asset.organisation), folderID)
+  return summary(await payload.update({ collection: 'media-assets', id: asset.id, data: { folder: folderID }, overrideAccess: true }))
+}
+
+export async function deleteMediaFolder(payload: Payload, member: PilotMember, folderID: number): Promise<void> {
+  const folder = await payload.findByID({ collection: 'media-folders', depth: 0, id: folderID, overrideAccess: true })
+  const organisationID = relationID(folder.organisation)
+  const authorization = await authorizeOrganisationMedia(payload, member, { operation: 'create', organisationID })
+  const assets = await payload.find({ collection: 'media-assets', depth: 0, limit: 1000, overrideAccess: true, where: { folder: { equals: folderID } } })
+  if (authorization.role === 'publisher' && assets.docs.some((asset) => relationID(asset.owner) !== member.id)) {
+    throw new MediaLibraryError('Publishers cannot delete a Folder containing another Publisher’s Media Assets.', 403)
+  }
+  await payload.update({ collection: 'media-assets', data: { folder: null }, overrideAccess: true, where: { folder: { equals: folderID } } })
+  await payload.update({ collection: 'upload-sessions', data: { folder: null }, overrideAccess: true, where: { folder: { equals: folderID } } })
+  await payload.delete({ collection: 'media-folders', id: folderID, overrideAccess: true })
 }
 
 function validateMetadata(
@@ -218,6 +277,7 @@ export async function createUploadSession(
 ) {
   await assertMediaActivityAllowed(payload)
   const organisation = await organisationUploadDetails(payload, owner, input)
+  const folder = await folderForUpload(payload, owner, input, organisation?.organisationID)
   const metadata = validateMetadata(input, organisation?.maximumUploadSizeBytes ?? MAX_ASSET_BYTES)
   await cleanupAbandonedUploads(payload, new Date(), providers)
   const now = new Date()
@@ -232,6 +292,7 @@ export async function createUploadSession(
       data: {
         expiresAt: organisation?.expiresAt,
         fileName: metadata.fileName,
+        folder: folder?.id,
         mediaAssetId,
         mediaProtectionPolicy: organisation?.mediaProtectionPolicy ?? 'protected',
         mimeType: metadata.mimeType,
@@ -251,6 +312,7 @@ export async function createUploadSession(
         expiresAt: new Date(now.getTime() + UPLOAD_SESSION_LIFETIME_MS).toISOString(),
         fileFingerprint: metadata.fileFingerprint,
         fileName: metadata.fileName,
+        folder: folder?.id,
         mediaProtectionPolicy: organisation?.mediaProtectionPolicy ?? 'protected',
         mimeType: metadata.mimeType,
         organisation: organisation?.organisationID,
