@@ -11,30 +11,28 @@ import {
 import { PlaybackCompatibilityError, protectedPlaybackBrowser } from '@/media/playback-browser'
 import { getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
 import config from '@/payload.config'
-import type { MediaAsset, PilotMember } from '@/payload-types'
-import { getOperatorOverview, updateOperationalControls } from '@/pilot/operations'
+import type { MediaAsset, Member } from '@/payload-types'
+import { getOperationalOverview, updateOperationalControls } from '@/organisations/operations'
 import { cleanMediaRecords } from '../helpers/cleanMediaRecords'
 
 let payload: Payload
-let owner: PilotMember
-let otherUploader: PilotMember
+let owner: Member
+let otherUploader: Member
 
 const now = new Date('2026-09-14T12:00:00.000Z')
 
 async function cleanPlaybackRecords() {
   await cleanMediaRecords(payload)
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }
 
 async function createUploader(email: string, status: 'active' | 'disabled' = 'active') {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: now.toISOString(),
       name: email,
       password: 'uploader-password',
-      role: 'uploader',
       status,
     },
     overrideAccess: true,
@@ -42,7 +40,7 @@ async function createUploader(email: string, status: 'active' | 'disabled' = 'ac
 }
 
 async function createAsset(
-  member: PilotMember,
+  member: Member,
   status: MediaAsset['status'] = 'ready',
   expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
 ): Promise<MediaAsset & { mediaAssetId: MediaAssetId }> {
@@ -232,13 +230,11 @@ describe('Playback Grant authorization', () => {
   it('blocks new playback activity while the operator kill switch is enabled', async () => {
     const asset = await createAsset(owner)
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'playback-kill-switch-operator@example.test',
-        invitationAcceptedAt: now.toISOString(),
         name: 'Playback kill switch operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
@@ -399,20 +395,18 @@ describe('Playback Grant authorization', () => {
     const grant = await createPlaybackGrant(payload, owner, asset.mediaAssetId, { now })
     await acquirePlaybackLicence(payload, owner, grant.playbackGrantToken, { now })
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'playback-audit-operator@example.test',
-        invitationAcceptedAt: now.toISOString(),
         name: 'Playback audit operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
     })
 
     expect(
-      (await getOperatorOverview(payload, operator)).auditEvents.map(({ action }) => action),
+      (await getOperationalOverview(payload, operator)).auditEvents.map(({ action }) => action),
     ).toEqual(expect.arrayContaining(['playback_granted', 'playback_licence_acquired']))
   })
 })

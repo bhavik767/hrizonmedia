@@ -4,57 +4,53 @@ import config from '../../src/payload.config.js'
 import { cleanMediaRecords } from './cleanMediaRecords.js'
 
 export const testOperator = {
-  email: 'operator@pilot.test',
-  name: 'Pilot Operator',
+  email: 'operator@members.test',
+  name: 'Platform Administrator',
   password: 'operator-password',
 }
 
 export const testInvitee = {
-  email: 'uploader@pilot.test',
-  name: 'Pilot Uploader',
+  email: 'uploader@members.test',
+  name: 'Organisation Publisher',
   password: 'uploader-password',
 }
 
 export const testSecondUploader = {
-  email: 'second-uploader@pilot.test',
-  name: 'Second Pilot Uploader',
+  email: 'second-uploader@members.test',
+  name: 'Second Organisation Publisher',
   password: 'second-uploader-password',
 }
 
-export async function seedPilotOperator(): Promise<void> {
+export async function seedOperator(): Promise<void> {
   const payload = await getPayload({ config })
   await cleanMediaRecords(payload)
   await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
   await payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       ...testOperator,
-      invitationAcceptedAt: new Date().toISOString(),
-      role: 'operator',
       status: 'active',
     },
     overrideAccess: true,
   })
 }
 
-export async function seedPilotUploaders(): Promise<void> {
+export async function seedUploaders(): Promise<void> {
   const payload = await getPayload({ config })
   await cleanMediaRecords(payload)
   await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 
   for (const member of [testInvitee, testSecondUploader]) {
     const publisher = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         ...member,
-        invitationAcceptedAt: new Date().toISOString(),
-        role: 'uploader',
         status: 'active',
       },
       overrideAccess: true,
@@ -93,11 +89,11 @@ export async function seedPilotUploaders(): Promise<void> {
   }
 }
 
-export async function cleanupPilotMembers(): Promise<void> {
+export async function cleanupMembers(): Promise<void> {
   const payload = await getPayload({ config })
   await cleanMediaRecords(payload)
   await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }

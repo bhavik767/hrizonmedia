@@ -14,7 +14,7 @@ export const PlatformAdministrators: CollectionConfig = {
     {
       name: 'member',
       type: 'relationship',
-      relationTo: 'pilot-members',
+      relationTo: 'members',
       required: true,
       unique: true,
     },

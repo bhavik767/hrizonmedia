@@ -2,9 +2,9 @@ import 'server-only'
 
 import { createLocalReq, type Payload } from 'payload'
 
-import type { MediaAsset, PilotMember, UploadSession } from '@/payload-types'
+import type { MediaAsset, Member, UploadSession } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
-import { assertMediaActivityAllowed } from '@/pilot/operations'
+import { assertMediaActivityAllowed } from '@/organisations/operations'
 import { authorizeOrganisationMedia } from '@/organisations/authorization'
 import { getOrganisationUploadPolicy } from '@/organisations/settings'
 
@@ -97,27 +97,24 @@ function mediaProtectionPolicy(value: unknown): MediaProtectionPolicy | null {
 
 async function organisationUploadDetails(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   input: UploadMetadata,
-): Promise<
-  | {
-      expiresAt: string
-      maximumUploadSizeBytes: number
-      mediaProtectionPolicy: MediaProtectionPolicy
-      organisationID: number
-      retentionDays: number
-    }
-  | undefined
-> {
-  if (input.organisationID === undefined) return undefined
-  if (!Number.isSafeInteger(input.organisationID) || input.organisationID <= 0) {
+): Promise<{
+  expiresAt: string
+  maximumUploadSizeBytes: number
+  mediaProtectionPolicy: MediaProtectionPolicy
+  organisationID: number
+  retentionDays: number
+}> {
+  const organisationID = input.organisationID
+  if (organisationID === undefined || !Number.isSafeInteger(organisationID) || organisationID <= 0) {
     throw new MediaLibraryError('Choose an Organisation for this upload.', 400)
   }
   await authorizeOrganisationMedia(payload, owner, {
     operation: 'create',
-    organisationID: input.organisationID,
+    organisationID,
   })
-  const policy = await getOrganisationUploadPolicy(payload, input.organisationID)
+  const policy = await getOrganisationUploadPolicy(payload, organisationID)
   const requestedPolicy = mediaProtectionPolicy(input.mediaProtectionPolicy)
   if (input.mediaProtectionPolicy !== undefined && !requestedPolicy) {
     throw new MediaLibraryError('Choose a valid Media Protection Policy.', 400)
@@ -136,7 +133,7 @@ async function organisationUploadDetails(
     mediaProtectionPolicy: policy.drmRequired
       ? 'protected'
       : (requestedPolicy ?? policy.drmDefault),
-    organisationID: input.organisationID,
+    organisationID,
     retentionDays,
   }
 }
@@ -197,7 +194,7 @@ async function terminateUpload(
 
 async function requirePendingSession(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   providers: MediaProviders,
 ): Promise<UploadSession> {
@@ -215,7 +212,7 @@ async function requirePendingSession(
 
 export async function createUploadSession(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   input: UploadMetadata,
   providers: MediaProviders = getMediaProviders(),
 ) {
@@ -288,7 +285,7 @@ export async function createUploadSession(
 
 async function findAccessibleSession(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   uploadSessionId: UploadSessionId,
 ): Promise<UploadSession> {
   const result = await payload.find({
@@ -322,7 +319,7 @@ async function findAccessibleSession(
 
 export async function resumeUploadSession(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   fileFingerprint: string,
   providers: MediaProviders = getMediaProviders(),
@@ -361,7 +358,7 @@ function validatePartNumber(session: UploadSession, partNumber: number): void {
 
 export async function renewUploadPart(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   partNumber: number,
   part: { checksumSHA256?: string; size?: number } = {},
@@ -389,7 +386,7 @@ export async function renewUploadPart(
 
 export async function receiveUploadPart(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   partNumber: number,
   bytes: Uint8Array,
@@ -439,7 +436,7 @@ async function rejectCompletedUpload(
 
 export async function completeUpload(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   parts: CompletedPart[],
   providers: MediaProviders = getMediaProviders(),
@@ -593,7 +590,7 @@ export async function completeUpload(
 
 export async function abortUpload(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   providers: MediaProviders = getMediaProviders(),
 ): Promise<void> {
@@ -636,7 +633,7 @@ export async function cleanupAbandonedUploads(
 
 export async function listVisibleAssets(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
 ): Promise<MediaAssetSummary[]> {
   const result = await payload.find({
     collection: 'media-assets',
@@ -648,18 +645,13 @@ export async function listVisibleAssets(
   })
   const visible = await Promise.all(
     result.docs.map(async (asset) => {
-      if (asset.organisation) {
-        try {
-          await authorizeOrganisationMedia(payload, member, {
-            assetID: asset.id,
-            operation: 'read',
-          })
-          return asset
-        } catch {
-          return null
-        }
+      if (!asset.organisation) return null
+      try {
+        await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'read' })
+        return asset
+      } catch {
+        return null
       }
-      return member.role === 'operator' || relationID(asset.owner) === member.id ? asset : null
     }),
   )
   return visible.filter((asset): asset is MediaAsset => asset !== null).map(summary)
@@ -667,7 +659,7 @@ export async function listVisibleAssets(
 
 export async function getVisibleAsset(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
 ): Promise<MediaAssetDetail> {
   const result = await payload.find({
@@ -681,18 +673,13 @@ export async function getVisibleAsset(
   })
   const asset = result.docs[0]
   if (!asset) throw new MediaLibraryError('Media Asset not found.', 404)
-  let canManage = member.role === 'operator' || relationID(asset.owner) === member.id
-  let canShare = false
-  if (asset.organisation) {
-    const authorization = await authorizeOrganisationMedia(payload, member, {
-      assetID: asset.id,
-      operation: 'read',
-    })
-    canManage = authorization.role !== 'viewer'
-    canShare = authorization.role === 'administrator' || authorization.role === 'publisher'
-  } else if (member.role !== 'operator' && relationID(asset.owner) !== member.id) {
-    throw new MediaLibraryError('Media Asset not found.', 404)
-  }
+  if (!asset.organisation) throw new MediaLibraryError('Media Asset not found.', 404)
+  const authorization = await authorizeOrganisationMedia(payload, member, {
+    assetID: asset.id,
+    operation: 'read',
+  })
+  const canManage = authorization.role !== 'viewer'
+  const canShare = authorization.role === 'administrator' || authorization.role === 'publisher'
   const [sessions, jobs] = await Promise.all([
     payload.find({
       collection: 'upload-sessions',
@@ -731,7 +718,7 @@ export async function getVisibleAsset(
 
 export async function retryVisibleAssetProcessing(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
   processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary> {
@@ -745,11 +732,8 @@ export async function retryVisibleAssetProcessing(
   })
   const asset = result.docs[0]
   if (!asset) throw new MediaLibraryError('Media Asset not found.', 404)
-  if (asset.organisation) {
-    await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
-  } else if (member.role !== 'operator' && relationID(asset.owner) !== member.id) {
-    throw new MediaLibraryError('Media Asset not found.', 404)
-  }
+  if (!asset.organisation) throw new MediaLibraryError('Media Asset not found.', 404)
+  await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
   if (asset.status !== 'failed')
     throw new MediaLibraryError('Only failed assets can be retried.', 409)
 

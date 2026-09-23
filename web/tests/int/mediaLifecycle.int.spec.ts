@@ -12,25 +12,23 @@ import { getVisibleAsset, listVisibleAssets } from '@/media/library'
 import { createPlaybackGrant } from '@/media/playback'
 import { getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
 import config from '@/payload.config'
-import type { MediaAsset, PilotMember } from '@/payload-types'
+import type { MediaAsset, Member } from '@/payload-types'
 import { cleanMediaRecords } from '../helpers/cleanMediaRecords'
 
 let payload: Payload
-let operator: PilotMember
-let owner: PilotMember
-let otherUploader: PilotMember
+let operator: Member
+let owner: Member
+let otherUploader: Member
 
 const now = new Date('2026-09-15T12:00:00.000Z')
 
-async function createMember(email: string, role: 'operator' | 'uploader') {
+async function createMember(email: string) {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: now.toISOString(),
       name: email,
-      password: 'pilot-password',
-      role,
+      password: 'member-password',
       status: 'active',
     },
     overrideAccess: true,
@@ -38,7 +36,7 @@ async function createMember(email: string, role: 'operator' | 'uploader') {
 }
 
 async function createReadyAsset(
-  member: PilotMember,
+  member: Member,
 ): Promise<MediaAsset & { mediaAssetId: MediaAssetId }> {
   return payload.create({
     collection: 'media-assets',
@@ -59,7 +57,7 @@ async function createReadyAsset(
 
 async function cleanLifecycleRecords() {
   await cleanMediaRecords(payload)
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }
 
 describe('Media Asset lifecycle', () => {
@@ -70,9 +68,9 @@ describe('Media Asset lifecycle', () => {
   beforeEach(async () => {
     resetFakeMediaStorage()
     await cleanLifecycleRecords()
-    operator = await createMember('lifecycle-operator@example.test', 'operator')
-    owner = await createMember('lifecycle-owner@example.test', 'uploader')
-    otherUploader = await createMember('lifecycle-other@example.test', 'uploader')
+    operator = await createMember('lifecycle-operator@example.test')
+    owner = await createMember('lifecycle-owner@example.test')
+    otherUploader = await createMember('lifecycle-other@example.test')
   })
 
   afterAll(async () => {

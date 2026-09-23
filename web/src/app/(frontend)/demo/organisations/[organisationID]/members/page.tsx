@@ -4,8 +4,8 @@ import { getPayload } from 'payload'
 
 import { requireOrganisationAdministrator } from '@/organisations/authorization'
 import config from '@/payload.config'
-import { ensureDemoEnabled } from '@/pilot/demoAvailability'
-import { getPilotMember } from '@/pilot/session'
+import { ensureDemoEnabled } from '@/members/demoAvailability'
+import { getMember } from '@/members/session'
 
 import { MembershipControls } from './MembershipControls'
 import { OrganisationInvitationForm } from './OrganisationInvitationForm'
@@ -21,7 +21,7 @@ export default async function OrganisationMembersPage({
   const organisationID = Number((await params).organisationID)
   if (!Number.isSafeInteger(organisationID) || organisationID <= 0) notFound()
 
-  const actor = await getPilotMember()
+  const actor = await getMember()
   if (!actor) redirect(`/demo/sign-in?returnTo=%2Fdemo%2Forganisations%2F${organisationID}%2Fmembers`)
   const payload = await getPayload({ config })
   try {

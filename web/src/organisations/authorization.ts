@@ -3,7 +3,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import type { Payload } from 'payload'
 
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
 
 export type OrganisationMediaOperation = 'create' | 'manage' | 'play' | 'read'
@@ -29,9 +29,9 @@ function relationID(value: number | { id: number } | null | undefined): number |
   return value?.id ?? null
 }
 
-async function requireActivePilotMember(payload: Payload, member: PilotMember): Promise<void> {
+async function requireActiveMember(payload: Payload, member: Member): Promise<void> {
   const current = await payload.findByID({
-    collection: 'pilot-members',
+    collection: 'members',
     id: member.id,
     overrideAccess: true,
   })
@@ -53,9 +53,9 @@ async function findActivePlatformAdministrator(payload: Payload, memberID: numbe
 
 export async function requirePlatformAdministrator(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
 ): Promise<void> {
-  await requireActivePilotMember(payload, member)
+  await requireActiveMember(payload, member)
   if (!(await findActivePlatformAdministrator(payload, member.id))) {
     throw new OrganisationAuthorizationError('Active Platform Administrator access required.', 403)
   }
@@ -63,7 +63,7 @@ export async function requirePlatformAdministrator(
 
 export async function requireOrganisationAdministrator(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   organisationID: number,
 ): Promise<OrganisationMediaAuthorization> {
   const authorization = await authorizeOrganisationMedia(payload, member, {
@@ -95,10 +95,10 @@ async function findActiveMembership(payload: Payload, memberID: number, organisa
 
 export async function authorizeOrganisationMedia(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   input: { assetID?: number; operation: OrganisationMediaOperation; organisationID?: number },
 ): Promise<OrganisationMediaAuthorization> {
-  await requireActivePilotMember(payload, member)
+  await requireActiveMember(payload, member)
 
   if (Boolean(input.assetID) === Boolean(input.organisationID)) {
     throw new OrganisationAuthorizationError(

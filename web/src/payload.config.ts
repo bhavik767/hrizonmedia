@@ -17,7 +17,7 @@ import { OrganisationInvitations } from './collections/OrganisationInvitations'
 import { OrganisationSettings } from './collections/OrganisationSettings'
 import { Organisations } from './collections/Organisations'
 import { Pages } from './collections/Pages'
-import { PilotMembers } from './collections/PilotMembers'
+import { Members } from './collections/Members'
 import { PlaybackGrants } from './collections/PlaybackGrants'
 import { PlatformAdministrators } from './collections/PlatformAdministrators'
 import { Posts } from './collections/Posts'
@@ -122,7 +122,7 @@ export default buildConfig({
     Categories,
     Authors,
     Users,
-    PilotMembers,
+    Members,
     Organisations,
     OrganisationMemberships,
     OrganisationInvitations,

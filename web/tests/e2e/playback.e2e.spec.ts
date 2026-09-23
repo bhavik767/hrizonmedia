@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { cleanupPilotMembers, seedPilotUploaders, testInvitee } from '../helpers/seedPilotMembers'
+import { cleanupMembers, seedUploaders, testInvitee } from '../helpers/seedMembers'
 import { mp4Fixture } from '../helpers/mediaFixtures'
 
 async function signIn(page: Page) {
@@ -82,11 +82,11 @@ async function openReadyAsset(page: Page, fileName: string) {
 test.describe('encrypted playback contract', () => {
   test.beforeEach(async ({ context }) => {
     await context.clearCookies()
-    await seedPilotUploaders()
+    await seedUploaders()
   })
 
   test.afterEach(async () => {
-    await cleanupPilotMembers()
+    await cleanupMembers()
   })
 
   test('initializes Shaka with temporary Widevine playback and restricted controls', async ({
@@ -272,13 +272,13 @@ test.describe('encrypted playback contract', () => {
       maxDiffPixelRatio: 0.015,
     })
 
-    await expect(page.getByRole('link', { name: 'Pilot terms' })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: 'Workspace terms' })).toHaveAttribute(
       'href',
       '/demo/terms',
     )
     await page.goto('/demo/terms')
     await expect(page).toHaveURL('/demo/terms')
-    await expect(page.getByRole('heading', { name: 'Pilot terms' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Workspace terms' })).toBeVisible()
     await expect(
       page.getByText(/compact, opaque Leak ID and a server-issued timestamp/),
     ).toBeVisible()

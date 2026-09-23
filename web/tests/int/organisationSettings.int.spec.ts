@@ -8,7 +8,7 @@ import {
   updateOrganisationSettings,
 } from '@/organisations/settings'
 import config from '@/payload.config'
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 
 let payload: Payload
 
@@ -17,21 +17,19 @@ async function cleanOrganisationSettings() {
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({
-    collection: 'pilot-members',
+    collection: 'members',
     overrideAccess: true,
     where: { email: { contains: '@organisation-settings.test' } },
   })
 }
 
-async function createPilotMember(email: string): Promise<PilotMember> {
+async function createMember(email: string): Promise<Member> {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: new Date().toISOString(),
       name: email,
       password: 'organisation-settings-password',
-      role: 'uploader',
       status: 'active',
     },
     overrideAccess: true,
@@ -47,7 +45,7 @@ describe('Organisation Settings', () => {
   afterAll(cleanOrganisationSettings)
 
   it('lets the initial Organisation Administrator complete setup with DRM-protected playback', async () => {
-    const initialAdministrator = await createPilotMember(
+    const initialAdministrator = await createMember(
       'initial-administrator@organisation-settings.test',
     )
     const organisation = await payload.create({
@@ -83,7 +81,7 @@ describe('Organisation Settings', () => {
   })
 
   it('lets Organisation Administrators change the policy used by future Upload Sessions', async () => {
-    const initialAdministrator = await createPilotMember(
+    const initialAdministrator = await createMember(
       'settings-administrator@organisation-settings.test',
     )
     const organisation = await payload.create({
@@ -124,7 +122,7 @@ describe('Organisation Settings', () => {
   })
 
   it('accepts a PNG Organisation Logo up to 3 MB and lets an Organisation Administrator remove it', async () => {
-    const initialAdministrator = await createPilotMember(
+    const initialAdministrator = await createMember(
       'logo-administrator@organisation-settings.test',
     )
     const organisation = await payload.create({
@@ -154,14 +152,14 @@ describe('Organisation Settings', () => {
       mimeType: 'image/png',
     })
 
-    expect(logo.logoDataURL).toMatch(/^data:image\/png;base64,/)
+    expect(logo.logoDataUrl).toMatch(/^data:image\/png;base64,/)
     await expect(
       removeOrganisationLogo(payload, initialAdministrator, organisation.id),
-    ).resolves.toMatchObject({ logoDataURL: null })
+    ).resolves.toMatchObject({ logoDataUrl: null })
   })
 
   it('rejects SVG and oversized Organisation Logos', async () => {
-    const initialAdministrator = await createPilotMember('invalid-logo@organisation-settings.test')
+    const initialAdministrator = await createMember('invalid-logo@organisation-settings.test')
     const organisation = await payload.create({
       collection: 'organisations',
       data: { initialAdministrator: initialAdministrator.id, name: 'Validated Organisation', status: 'active' },

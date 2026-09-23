@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 import { getServerSideURL } from '@/utilities/getURL'
 
 const MUTATION_METHODS = new Set(['DELETE', 'PATCH', 'POST', 'PUT'])
@@ -47,7 +47,7 @@ export function assertDemoMutationOrigin(request: Request): void {
 
 export function enforceDemoMutationRateLimit(
   request: Request,
-  member: Pick<PilotMember, 'id'>,
+  member: Pick<Member, 'id'>,
   now = Date.now(),
 ): void {
   if (!MUTATION_METHODS.has(request.method.toUpperCase())) return

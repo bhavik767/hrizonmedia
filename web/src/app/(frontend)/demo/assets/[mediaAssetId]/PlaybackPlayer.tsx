@@ -357,7 +357,7 @@ export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
         A compact Leak ID and server-issued timestamp move across playback to support recording
         investigations without displaying your email. Streaming-only playback uses temporary rights;
         downloads, offline playback, persistent licences, and picture-in-picture are disabled. Read
-        the <Link href="/demo/terms">Pilot terms</Link>.
+        the <Link href="/demo/terms">Workspace terms</Link>.
       </p>
     </section>
   )

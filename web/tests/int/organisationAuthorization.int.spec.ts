@@ -8,10 +8,10 @@ import {
 import { authorizePlaybackResource, createPlaybackGrant } from '@/media/playback'
 import type { MediaAssetId } from '@/media/identifiers'
 import config from '@/payload.config'
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 
 let payload: Payload
-let publisher: PilotMember
+let publisher: Member
 let organisationID: number
 let assetID: number
 
@@ -33,21 +33,19 @@ async function cleanOrganisationFoundation() {
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({
-    collection: 'pilot-members',
+    collection: 'members',
     overrideAccess: true,
     where: { email: { contains: '@organisation-foundation.test' } },
   })
 }
 
-async function createPilotMember(email: string): Promise<PilotMember> {
+async function createMember(email: string): Promise<Member> {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: new Date().toISOString(),
       name: email,
       password: 'organisation-foundation-password',
-      role: 'uploader',
       status: 'active',
     },
     overrideAccess: true,
@@ -61,7 +59,7 @@ describe('Organisation media authorization', () => {
 
   beforeEach(async () => {
     await cleanOrganisationFoundation()
-    publisher = await createPilotMember('publisher@organisation-foundation.test')
+    publisher = await createMember('publisher@organisation-foundation.test')
     const organisation = await payload.create({
       collection: 'organisations',
       data: { name: 'Example Organisation', status: 'active' },
@@ -124,7 +122,7 @@ describe('Organisation media authorization', () => {
   })
 
   it('lets a Viewer read only a Media Asset explicitly shared through Media Access', async () => {
-    const viewer = await createPilotMember('viewer@organisation-foundation.test')
+    const viewer = await createMember('viewer@organisation-foundation.test')
     const membership = await payload.create({
       collection: 'organisation-memberships',
       data: { member: viewer.id, organisation: organisationID, role: 'viewer', status: 'active' },
@@ -157,7 +155,7 @@ describe('Organisation media authorization', () => {
   })
 
   it('revokes an Organisation Viewer Playback Grant when their Membership is disabled', async () => {
-    const viewer = await createPilotMember('revoked-viewer@organisation-foundation.test')
+    const viewer = await createMember('revoked-viewer@organisation-foundation.test')
     const membership = await payload.create({
       collection: 'organisation-memberships',
       data: { member: viewer.id, organisation: organisationID, role: 'viewer', status: 'active' },
@@ -195,7 +193,7 @@ describe('Organisation media authorization', () => {
   })
 
   it('gives an active Platform Administrator audited recovery access without a Membership', async () => {
-    const administrator = await createPilotMember('platform-admin@organisation-foundation.test')
+    const administrator = await createMember('platform-admin@organisation-foundation.test')
     await payload.create({
       collection: 'platform-administrators',
       data: { member: administrator.id, status: 'active' },

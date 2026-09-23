@@ -9,25 +9,23 @@ import {
 import { authorizeOrganisationMedia, OrganisationAuthorizationError } from '@/organisations/authorization'
 import { createPlaybackGrant } from '@/media/playback'
 import type { MediaAssetId } from '@/media/identifiers'
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 
 let payload: Payload
-let administrator: PilotMember
+let administrator: Member
 let organisationID: number
-let viewer: PilotMember
+let viewer: Member
 let viewerMembershipID: number
 let mediaAssetDatabaseID: number
 let mediaAssetID: MediaAssetId
 
-async function createPilotMember(email: string): Promise<PilotMember> {
+async function createMember(email: string): Promise<Member> {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: new Date().toISOString(),
       name: email,
       password: 'organisation-membership-password',
-      role: 'uploader',
       status: 'active',
     },
     overrideAccess: true,
@@ -45,7 +43,7 @@ async function cleanOrganisationMemberships() {
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({
-    collection: 'pilot-members',
+    collection: 'members',
     overrideAccess: true,
     where: { email: { contains: '@organisation-membership.test' } },
   })
@@ -58,8 +56,8 @@ describe('Organisation Membership management', () => {
 
   beforeEach(async () => {
     await cleanOrganisationMemberships()
-    administrator = await createPilotMember('administrator@organisation-membership.test')
-    viewer = await createPilotMember('viewer@organisation-membership.test')
+    administrator = await createMember('administrator@organisation-membership.test')
+    viewer = await createMember('viewer@organisation-membership.test')
     const organisation = await payload.create({
       collection: 'organisations',
       data: { name: 'Membership Organisation', status: 'active' },

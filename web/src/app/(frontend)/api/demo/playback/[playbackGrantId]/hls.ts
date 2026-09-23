@@ -1,14 +1,11 @@
-import type { PilotMember } from '@/payload-types'
-import {
-  authorizePlaybackResourceRequest,
-  type authenticatedUploader,
-} from '@/media/request'
+import type { Member } from '@/payload-types'
+import { authorizePlaybackResourceRequest, type authenticatedMember } from '@/media/request'
 import { PlaybackAuthorizationError } from '@/media/playback'
 
-type Payload = Awaited<ReturnType<typeof authenticatedUploader>>['payload']
+type Payload = Awaited<ReturnType<typeof authenticatedMember>>['payload']
 
 export async function authorizeHlsPlaylistRequest(input: {
-  member: PilotMember
+  member: Member
   payload: Payload
   rawPlaybackGrantId: string
   request: Request

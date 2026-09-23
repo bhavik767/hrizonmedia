@@ -9,7 +9,7 @@ import {
 import type {
   Organisation,
   OrganisationMembership,
-  PilotMember,
+  Member,
   PlatformAdministrator,
 } from '@/payload-types'
 
@@ -26,7 +26,7 @@ function validEntityID(entityID: number): boolean {
   return Number.isSafeInteger(entityID) && entityID > 0
 }
 
-async function requirePlatformAdministrator(payload: Payload, actor: PilotMember): Promise<void> {
+async function requirePlatformAdministrator(payload: Payload, actor: Member): Promise<void> {
   try {
     await requireAuthorisedPlatformAdministrator(payload, actor)
   } catch (error) {
@@ -37,19 +37,19 @@ async function requirePlatformAdministrator(payload: Payload, actor: PilotMember
   }
 }
 
-async function requireActiveMember(payload: Payload, memberID: number): Promise<PilotMember> {
+async function requireActiveMember(payload: Payload, memberID: number): Promise<Member> {
   if (!validEntityID(memberID)) {
-    throw new PlatformAdministrationError('A valid Pilot Member is required.', 400)
+    throw new PlatformAdministrationError('A valid Member is required.', 400)
   }
 
   const member = await payload.findByID({
-    collection: 'pilot-members',
+    collection: 'members',
     depth: 0,
     id: memberID,
     overrideAccess: true,
   })
   if (member.status !== 'active') {
-    throw new PlatformAdministrationError('The appointed Pilot Member must be active.', 409)
+    throw new PlatformAdministrationError('The appointed Member must be active.', 409)
   }
   return member
 }
@@ -64,7 +64,7 @@ async function beginTransaction(payload: Payload): Promise<number | string> {
 
 export async function createOrganisation(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   input: { initialAdministratorID: number; name: string },
 ): Promise<{
   initialAdministratorMembership: OrganisationMembership
@@ -108,7 +108,7 @@ export async function createOrganisation(
 
 export async function createPlatformAdministrator(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   input: { memberID: number },
 ): Promise<PlatformAdministrator> {
   await requirePlatformAdministrator(payload, actor)
@@ -122,7 +122,7 @@ export async function createPlatformAdministrator(
   })
   if (existing.docs[0]) {
     throw new PlatformAdministrationError(
-      'This Pilot Member is already a Platform Administrator.',
+      'This Member is already a Platform Administrator.',
       409,
     )
   }
@@ -136,7 +136,7 @@ export async function createPlatformAdministrator(
 
 export async function deleteOrganisation(
   payload: Payload,
-  actor: PilotMember,
+  actor: Member,
   input: { now?: Date; organisationID: number },
 ): Promise<Organisation> {
   await requirePlatformAdministrator(payload, actor)

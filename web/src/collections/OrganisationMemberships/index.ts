@@ -21,7 +21,7 @@ export const OrganisationMemberships: CollectionConfig = {
     {
       name: 'member',
       type: 'relationship',
-      relationTo: 'pilot-members',
+      relationTo: 'members',
       required: true,
       index: true,
     },

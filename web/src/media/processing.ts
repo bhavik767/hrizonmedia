@@ -7,7 +7,7 @@ import type { Payload, PayloadRequest, Where } from 'payload'
 
 import type { MediaAsset, ProcessingJob } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
-import { getOperationalControls } from '@/pilot/operations'
+import { getOperationalControls } from '@/organisations/operations'
 
 import {
   processingOutputPrefix,

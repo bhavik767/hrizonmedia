@@ -4,12 +4,12 @@ import { getPayload } from 'payload'
 import config from '@/payload.config'
 
 import {
-  cleanupPilotMembers,
-  seedPilotUploaders,
+  cleanupMembers,
+  seedUploaders,
   testInvitee,
   testOperator,
   testSecondUploader,
-} from '../helpers/seedPilotMembers'
+} from '../helpers/seedMembers'
 import { mp4Fixture } from '../helpers/mediaFixtures'
 
 async function signIn(page: Page, member: { email: string; password: string }) {
@@ -23,11 +23,11 @@ async function signIn(page: Page, member: { email: string; password: string }) {
 test.describe('Media Asset tracer bullet', () => {
   test.beforeEach(async ({ context }) => {
     await context.clearCookies()
-    await seedPilotUploaders()
+    await seedUploaders()
   })
 
   test.afterEach(async () => {
-    await cleanupPilotMembers()
+    await cleanupMembers()
   })
 
   test('uploads a valid fixture to ready while keeping it private to its uploader', async ({
@@ -228,11 +228,9 @@ test.describe('Media Asset tracer bullet', () => {
     await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
     const payload = await getPayload({ config })
     await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         ...testOperator,
-        invitationAcceptedAt: new Date().toISOString(),
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,

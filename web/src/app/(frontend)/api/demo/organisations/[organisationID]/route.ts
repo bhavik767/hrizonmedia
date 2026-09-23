@@ -1,5 +1,5 @@
 import { deleteOrganisation } from '@/organisations/platform-administration'
-import { withAuthenticatedPilotMember } from '@/media/request'
+import { withAuthenticatedMember } from '@/media/request'
 
 function parseOrganisationID(value: string): number | null {
   const organisationID = Number(value)
@@ -10,7 +10,7 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ organisationID: string }> },
 ): Promise<Response> {
-  return withAuthenticatedPilotMember(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const organisationID = parseOrganisationID((await context.params).organisationID)
     if (!organisationID) return Response.json({ error: 'Organisation not found.' }, { status: 404 })
     await deleteOrganisation(payload, member, { organisationID })

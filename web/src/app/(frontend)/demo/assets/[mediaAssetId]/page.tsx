@@ -8,8 +8,8 @@ import { getVisibleAsset, MediaLibraryError } from '@/media/library'
 import { listMediaAccessViewers, OrganisationMediaAccessError } from '@/organisations/media-access'
 import type { MediaAssetDetail } from '@/media/types'
 import config from '@/payload.config'
-import { ensureDemoEnabled } from '@/pilot/demoAvailability'
-import { getPilotMember } from '@/pilot/session'
+import { ensureDemoEnabled } from '@/members/demoAvailability'
+import { getMember } from '@/members/session'
 
 import { signOut } from '../../actions'
 import { DeleteAssetButton } from './DeleteAssetButton'
@@ -21,7 +21,7 @@ export const metadata: Metadata = { title: 'Media Asset | HrizonMedia Demo' }
 
 export default async function AssetPage({ params }: { params: Promise<{ mediaAssetId: string }> }) {
   await ensureDemoEnabled()
-  const member = await getPilotMember()
+  const member = await getMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
   const mediaAssetId = parseMediaAssetId((await params).mediaAssetId)
   if (!mediaAssetId) notFound()

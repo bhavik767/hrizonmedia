@@ -13,28 +13,23 @@ import {
   OrganisationMediaAccessError,
   revokeMediaAccess,
 } from '@/organisations/media-access'
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 
 let payload: Payload
-let administrator: PilotMember
+let administrator: Member
 let organisationID: number
 let assetDatabaseID: number
 let assetID: MediaAssetId
-let viewer: PilotMember
+let viewer: Member
 let viewerMembershipID: number
 
-async function createPilotMember(
-  email: string,
-  role: 'operator' | 'uploader' = 'uploader',
-): Promise<PilotMember> {
+async function createMember(email: string): Promise<Member> {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: new Date().toISOString(),
       name: email,
       password: 'organisation-media-access-password',
-      role,
       status: 'active',
     },
     overrideAccess: true,
@@ -53,7 +48,7 @@ async function cleanOrganisationMediaAccess() {
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({
-    collection: 'pilot-members',
+    collection: 'members',
     overrideAccess: true,
     where: { email: { contains: '@organisation-media-access.test' } },
   })
@@ -66,8 +61,8 @@ describe('Organisation Media Access', () => {
 
   beforeEach(async () => {
     await cleanOrganisationMediaAccess()
-    administrator = await createPilotMember('administrator@organisation-media-access.test')
-    viewer = await createPilotMember('viewer@organisation-media-access.test', 'operator')
+    administrator = await createMember('administrator@organisation-media-access.test')
+    viewer = await createMember('viewer@organisation-media-access.test')
     const organisation = await payload.create({
       collection: 'organisations',
       data: { name: 'Media Access Organisation', status: 'active' },

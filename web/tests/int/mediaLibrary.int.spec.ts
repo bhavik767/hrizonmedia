@@ -18,13 +18,13 @@ import {
 import { MultipartUploadError } from '@/media/providers/errors'
 import { runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
-import type { PilotMember } from '@/payload-types'
-import { getOperatorOverview, updateOperationalControls } from '@/pilot/operations'
+import type { Member } from '@/payload-types'
+import { getOperationalOverview, updateOperationalControls } from '@/organisations/operations'
 import { mkvFixture, mp4Fixture } from '../helpers/mediaFixtures'
 
 let payload: Payload
-let firstUploader: PilotMember
-let secondUploader: PilotMember
+let firstUploader: Member
+let secondUploader: Member
 
 const metadataFor = (bytes: Uint8Array, fileName = 'fixture.mp4') => ({
   fileFingerprint: `${fileName}:${bytes.length}:1234`,
@@ -62,18 +62,16 @@ async function cleanMediaLibrary() {
   await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'upload-sessions', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }
 
-async function createUploader(email: string): Promise<PilotMember> {
+async function createUploader(email: string): Promise<Member> {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: new Date().toISOString(),
       name: email,
       password: 'uploader-password',
-      role: 'uploader',
       status: 'active',
     },
     overrideAccess: true,
@@ -183,13 +181,11 @@ describe('Media Asset library persistence', () => {
     const fixture = mp4Fixture()
     const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'upload-kill-switch-operator@example.test',
-        invitationAcceptedAt: new Date().toISOString(),
         name: 'Upload kill switch operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
@@ -340,19 +336,17 @@ describe('Media Asset library persistence', () => {
     })
     await runProcessingCycle(payload, { now: new Date(startedAt.getTime() + 10_000) })
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'audit-viewer@example.test',
-        invitationAcceptedAt: startedAt.toISOString(),
         name: 'Audit viewer',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
     })
 
-    const actions = (await getOperatorOverview(payload, operator)).auditEvents.map(
+    const actions = (await getOperationalOverview(payload, operator)).auditEvents.map(
       ({ action }) => action,
     )
     expect(actions).toEqual(

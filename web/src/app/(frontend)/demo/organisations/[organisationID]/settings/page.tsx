@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
-import { ensureDemoEnabled } from '@/pilot/demoAvailability'
-import { getPilotMember } from '@/pilot/session'
+import { ensureDemoEnabled } from '@/members/demoAvailability'
+import { getMember } from '@/members/session'
 import { getOrganisationSettingsState } from '@/organisations/settings'
 import config from '@/payload.config'
 
@@ -21,7 +21,7 @@ export default async function OrganisationSettingsPage({
 }) {
   await ensureDemoEnabled()
   const { organisationID } = await params
-  const actor = await getPilotMember()
+  const actor = await getMember()
   if (!actor) redirect(`/demo/sign-in?returnTo=${encodeURIComponent(`/demo/organisations/${organisationID}/settings`)}`)
   const state = await getOrganisationSettingsState(await getPayload({ config }), actor, Number(organisationID))
   if (!state.settings && state.initialAdministrator) redirect(`/demo/organisations/${organisationID}/setup`)
@@ -33,7 +33,7 @@ export default async function OrganisationSettingsPage({
       <h1>Media policy and branding</h1>
       <p>Changes affect only future Upload Sessions.</p>
       <SettingsForm action={saveSettings.bind(null, organisationID)} settings={state.settings} submitLabel="Save settings" />
-      {state.settings.logoDataURL && <form action={clearLogo.bind(null, organisationID)}><button className="text-button" type="submit">Remove Organisation Logo</button></form>}
+      {state.settings.logoDataUrl && <form action={clearLogo.bind(null, organisationID)}><button className="text-button" type="submit">Remove Organisation Logo</button></form>}
       {error && <p className="form-message form-message--error" role="alert">{error}</p>}
     </main>
   )

@@ -4,8 +4,8 @@ import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import config from '@/payload.config'
-import { ensureDemoEnabled } from '@/pilot/demoAvailability'
-import { getPilotMember } from '@/pilot/session'
+import { ensureDemoEnabled } from '@/members/demoAvailability'
+import { getMember } from '@/members/session'
 import { getOrganisationSettingsState } from '@/organisations/settings'
 
 import { signOut } from './actions'
@@ -13,13 +13,13 @@ import { MediaLibrary } from './MediaLibrary'
 
 export const metadata: Metadata = {
   title: 'Demo | HrizonMedia',
-  description: 'Private HrizonMedia secure-video pilot Demo.',
+  description: 'Private HrizonMedia secure-video workspace.',
 }
 
 export default async function DemoPage() {
   await ensureDemoEnabled()
 
-  const member = await getPilotMember()
+  const member = await getMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
   const payload = await getPayload({ config })
   const organisationMemberships = await payload.find({
@@ -98,30 +98,20 @@ export default async function DemoPage() {
   return (
     <main className="demo-page shell" id="main-content">
       <p className="eyebrow">
-        <span aria-hidden="true" /> Private pilot
+        <span aria-hidden="true" /> Private workspace
       </p>
       <h1>HrizonMedia Demo</h1>
       <p>
         Signed in as {member.name} ({member.email}). The secure-video workspace is ready.
       </p>
-      {organisationSettings?.settings?.logoDataURL && (
+      {organisationSettings?.settings?.logoDataUrl && (
         <img
           alt="Organisation Logo"
           className="organisation-logo"
-          src={organisationSettings.settings.logoDataURL}
+          src={organisationSettings.settings.logoDataUrl}
         />
       )}
       <div className="demo-actions">
-        {member.role === 'operator' && (
-          <>
-            <Link className="text-link" href="/demo/operations">
-              Operator oversight
-            </Link>
-            <Link className="text-link" href="/demo/members">
-              Invite Pilot Members
-            </Link>
-          </>
-        )}
         {organisationSettings && (
           <Link
             className="text-link"

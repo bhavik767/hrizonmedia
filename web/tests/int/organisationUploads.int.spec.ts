@@ -3,11 +3,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createUploadSession, MediaLibraryError, resumeUploadSession } from '@/media/library'
 import config from '@/payload.config'
-import type { PilotMember } from '@/payload-types'
+import type { Member } from '@/payload-types'
 
 let payload: Payload
-let firstPublisher: PilotMember
-let secondPublisher: PilotMember
+let firstPublisher: Member
+let secondPublisher: Member
 let firstOrganisationID: number
 let secondOrganisationID: number
 
@@ -22,21 +22,19 @@ async function cleanOrganisationUploads() {
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({
-    collection: 'pilot-members',
+    collection: 'members',
     overrideAccess: true,
     where: { email: { contains: '@organisation-uploads.test' } },
   })
 }
 
-async function createPublisher(email: string): Promise<PilotMember> {
+async function createPublisher(email: string): Promise<Member> {
   return payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email,
-      invitationAcceptedAt: new Date().toISOString(),
       name: email,
       password: 'organisation-upload-password',
-      role: 'uploader',
       status: 'active',
     },
     overrideAccess: true,
@@ -44,7 +42,7 @@ async function createPublisher(email: string): Promise<PilotMember> {
 }
 
 async function createOrganisationFor(
-  publisher: PilotMember,
+  publisher: Member,
   name: string,
   input: {
     drmDefault?: 'protected' | 'standard'

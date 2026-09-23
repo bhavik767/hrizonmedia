@@ -2,7 +2,7 @@ import 'server-only'
 
 import type { Payload } from 'payload'
 
-import type { MediaAsset, PilotMember } from '@/payload-types'
+import type { MediaAsset, Member } from '@/payload-types'
 import { authorizeOrganisationMedia } from '@/organisations/authorization'
 
 import {
@@ -114,14 +114,9 @@ async function reconcileLifecycleEvents(payload: Payload, assetID?: number): Pro
   }
 }
 
-function canManageAsset(member: PilotMember, asset: MediaAsset): boolean {
-  const ownerID = typeof asset.owner === 'number' ? asset.owner : asset.owner.id
-  return member.status === 'active' && (member.role === 'operator' || ownerID === member.id)
-}
-
 async function manageableAsset(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
 ): Promise<MediaAsset> {
   const result = await payload.find({
@@ -135,17 +130,14 @@ async function manageableAsset(
   if (!asset) {
     throw new MediaLibraryError('Media Asset not found.', 404)
   }
-  if (asset.organisation) {
-    await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
-  } else if (!canManageAsset(member, asset)) {
-    throw new MediaLibraryError('Media Asset not found.', 404)
-  }
+  if (!asset.organisation) throw new MediaLibraryError('Media Asset not found.', 404)
+  await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
   return asset
 }
 
 export async function deleteMediaAsset(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
   options: { now?: Date; providers?: MediaProviders } = {},
 ): Promise<void> {

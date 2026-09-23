@@ -10,7 +10,7 @@ export function OrganisationInvitationForm({ organisationID }: { organisationID:
   const [state, action, pending] = useActionState(inviteOrganisationMember, initialState)
 
   return (
-    <form action={action} className="pilot-form">
+    <form action={action} className="member-form">
       <input name="organisationID" type="hidden" value={organisationID} />
       <label htmlFor="organisation-role">Organisation role</label>
       <select defaultValue="viewer" id="organisation-role" name="role">

@@ -3,10 +3,11 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import type { Payload } from 'payload'
 
-import type { PilotMember } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
+import { requirePlatformAdministrator } from './authorization'
+import type { Member } from '@/payload-types'
 
-export class OperatorAuthorizationError extends Error {
+export class OperationalControlsError extends Error {
   constructor(
     message: string,
     public readonly status: number,
@@ -46,38 +47,23 @@ export async function getOperationalControls(payload: Payload): Promise<Operatio
 
 export async function assertMediaActivityAllowed(payload: Payload): Promise<void> {
   if ((await getOperationalControls(payload)).killSwitchEnabled) {
-    throw new OperatorAuthorizationError(
-      'Media activity is temporarily paused by an operator.',
+    throw new OperationalControlsError(
+      'Media activity is temporarily paused by a Platform Administrator.',
       503,
     )
   }
 }
 
-async function requireActiveOperator(
+async function requireActivePlatformAdministrator(
   payload: Payload,
-  member: PilotMember,
-): Promise<PilotMember> {
-  const current = await payload.findByID({
-    collection: 'pilot-members',
-    id: member.id,
-    overrideAccess: true,
-  })
-  if (current.status !== 'active' || current.role !== 'operator') {
-    throw new OperatorAuthorizationError('Active operator access required.', 403)
-  }
-  return current
+  member: Member,
+): Promise<Member> {
+  await requirePlatformAdministrator(payload, member)
+  return member
 }
-
-export async function getOperatorOverview(payload: Payload, member: PilotMember) {
-  await requireActiveOperator(payload, member)
-  const [members, assets, auditEvents, controls] = await Promise.all([
-    payload.find({
-      collection: 'pilot-members',
-      depth: 0,
-      overrideAccess: true,
-      pagination: false,
-      sort: 'email',
-    }),
+export async function getOperationalOverview(payload: Payload, member: Member) {
+  await requireActivePlatformAdministrator(payload, member)
+  const [assets, auditEvents, controls] = await Promise.all([
     payload.find({
       collection: 'media-assets',
       depth: 1,
@@ -113,30 +99,23 @@ export async function getOperatorOverview(payload: Payload, member: PilotMember)
       status: asset.status,
     })),
     controls,
-    members: members.docs.map((pilotMember) => ({
-      email: pilotMember.email,
-      id: pilotMember.id,
-      name: pilotMember.name,
-      role: pilotMember.role,
-      status: pilotMember.status,
-    })),
   }
 }
 
 export async function updateOperationalControls(
   payload: Payload,
-  operator: PilotMember,
+  platformAdministrator: Member,
   controls: OperationalControls,
   options: { now?: Date } = {},
 ): Promise<OperationalControls> {
-  const actor = await requireActiveOperator(payload, operator)
+  const actor = await requireActivePlatformAdministrator(payload, platformAdministrator)
   if (
     typeof controls.killSwitchEnabled !== 'boolean' ||
     !Number.isSafeInteger(controls.providerConcurrency) ||
     controls.providerConcurrency < 1 ||
     controls.providerConcurrency > 100
   ) {
-    throw new OperatorAuthorizationError('Provider concurrency must be between 1 and 100.', 400)
+    throw new OperationalControlsError('Provider concurrency must be between 1 and 100.', 400)
   }
   const existing = await payload.find({
     collection: 'media-operations',
@@ -173,37 +152,4 @@ export async function updateOperationalControls(
     occurredAt: now,
   })
   return controls
-}
-
-export async function disablePilotMember(
-  payload: Payload,
-  operator: PilotMember,
-  memberID: number,
-  options: { now?: Date } = {},
-): Promise<void> {
-  const actor = await requireActiveOperator(payload, operator)
-  if (memberID === actor.id) {
-    throw new OperatorAuthorizationError('Operators cannot disable their own account.', 409)
-  }
-  const target = await payload.findByID({
-    collection: 'pilot-members',
-    id: memberID,
-    overrideAccess: true,
-  })
-  const now = options.now ?? new Date()
-  if (target.status !== 'disabled') {
-    await payload.update({
-      collection: 'pilot-members',
-      data: { status: 'disabled' },
-      id: target.id,
-      overrideAccess: true,
-    })
-  }
-  await recordAuditEvent(payload, {
-    action: 'member_disabled',
-    actorID: actor.id,
-    eventKey: `pilot-member:${target.id}:disabled`,
-    memberID: target.id,
-    occurredAt: now,
-  })
 }

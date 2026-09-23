@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 
-import { ensureDemoEnabled } from '@/pilot/demoAvailability'
+import { ensureDemoEnabled } from '@/members/demoAvailability'
 
 import { acceptOrganisationInvitationAction } from '../../actions'
 
@@ -21,7 +21,7 @@ export default async function AcceptOrganisationInvitationPage({
       </p>
       <h1>Accept Organisation Invitation</h1>
       {token ? (
-        <form action={acceptOrganisationInvitationAction} className="pilot-form">
+        <form action={acceptOrganisationInvitationAction} className="member-form">
           <input name="token" type="hidden" value={token} />
           <p>Sign in to accept the role assigned by this one-time invitation.</p>
           <button className="primary-action" type="submit">

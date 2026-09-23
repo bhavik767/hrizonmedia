@@ -4,10 +4,10 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 
 import type { Payload } from 'payload'
 
-import type { MediaAsset, PilotMember, PlaybackGrant } from '@/payload-types'
+import type { MediaAsset, Member, PlaybackGrant } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
 import { authorizeOrganisationMedia } from '@/organisations/authorization'
-import { assertMediaActivityAllowed } from '@/pilot/operations'
+import { assertMediaActivityAllowed } from '@/organisations/operations'
 import {
   isProtectedPlaybackBrowser,
   type ProtectedPlaybackBrowser,
@@ -135,9 +135,9 @@ function decodeClaims(
   return claims
 }
 
-async function activePlaybackMember(payload: Payload, member: PilotMember): Promise<PilotMember> {
+async function activePlaybackMember(payload: Payload, member: Member): Promise<Member> {
   const current = await payload.findByID({
-    collection: 'pilot-members',
+    collection: 'members',
     id: member.id,
     overrideAccess: true,
   })
@@ -149,7 +149,7 @@ async function activePlaybackMember(payload: Payload, member: PilotMember): Prom
 
 async function accessiblePlaybackAsset(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
 ): Promise<MediaAsset> {
   const result = await payload.find({
@@ -163,13 +163,8 @@ async function accessiblePlaybackAsset(
   if (!asset || asset.status === 'deleted') {
     throw new PlaybackAuthorizationError('Media Asset not found.', 404)
   }
-  if (asset.organisation) {
-    await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'play' })
-  } else if (member.role !== 'uploader') {
-    throw new PlaybackAuthorizationError('Uploader authentication required.', 401)
-  } else if (relationID(asset.owner) !== member.id) {
-    throw new PlaybackAuthorizationError('Media Asset not found.', 404)
-  }
+  if (!asset.organisation) throw new PlaybackAuthorizationError('Media Asset not found.', 404)
+  await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'play' })
   return asset
 }
 
@@ -250,7 +245,7 @@ async function recordLeakIdIssued(
 
 export async function createPlaybackGrant(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
   options: { browser?: ProtectedPlaybackBrowser; now?: Date; providers?: MediaProviders } = {},
 ): Promise<PlaybackGrantResponse> {
@@ -337,7 +332,7 @@ export async function createPlaybackGrant(
 
 export async function refreshPlaybackWatermark(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   token: PlaybackGrantToken,
   options: { now?: Date; requestedPlaybackGrantId?: PlaybackGrantId } = {},
 ): Promise<PlaybackWatermark> {
@@ -377,7 +372,7 @@ export async function refreshPlaybackWatermark(
 
 export async function acquirePlaybackLicence(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   token: PlaybackGrantToken,
   options: {
     challenge?: Uint8Array
@@ -423,7 +418,7 @@ export async function acquirePlaybackLicence(
 
 export async function authorizePlaybackResource(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   token: DeliveryToken,
   requestedAssetId: MediaAssetId,
   options: { now?: Date } = {},

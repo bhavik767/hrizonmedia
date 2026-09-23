@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
-import { ensureDemoEnabled } from '@/pilot/demoAvailability'
-import { getPilotMember } from '@/pilot/session'
+import { ensureDemoEnabled } from '@/members/demoAvailability'
+import { getMember } from '@/members/session'
 import { getOrganisationSettingsState } from '@/organisations/settings'
 import config from '@/payload.config'
 
@@ -22,7 +22,7 @@ export default async function OrganisationSetupPage({
   await ensureDemoEnabled()
   const { organisationID } = await params
   const id = Number(organisationID)
-  const actor = await getPilotMember()
+  const actor = await getMember()
   if (!actor) redirect(`/demo/sign-in?returnTo=${encodeURIComponent(`/demo/organisations/${organisationID}/setup`)}`)
   const state = await getOrganisationSettingsState(await getPayload({ config }), actor, id)
   if (state.settings || !state.initialAdministrator) redirect(`/demo/organisations/${organisationID}/settings`)

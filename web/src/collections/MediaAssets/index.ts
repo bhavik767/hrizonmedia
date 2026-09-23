@@ -22,7 +22,7 @@ export const MediaAssets: CollectionConfig = {
     {
       name: 'owner',
       type: 'relationship',
-      relationTo: 'pilot-members',
+      relationTo: 'members',
       required: true,
       index: true,
     },
@@ -35,7 +35,7 @@ export const MediaAssets: CollectionConfig = {
     { name: 'playReadyPackaged', type: 'checkbox', defaultValue: false },
     { name: 'expiresAt', type: 'date', index: true },
     { name: 'deletedAt', type: 'date', index: true },
-    { name: 'deletedBy', type: 'relationship', relationTo: 'pilot-members', index: true },
+    { name: 'deletedBy', type: 'relationship', relationTo: 'members', index: true },
     { name: 'accessRevokedAt', type: 'date', index: true },
     { name: 'sourceDeletedAt', type: 'date', index: true },
     { name: 'outputsDeletedAt', type: 'date', index: true },

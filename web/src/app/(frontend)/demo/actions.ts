@@ -7,7 +7,6 @@ import { headers } from 'next/headers'
 import { getPayload } from 'payload'
 
 import config from '@/payload.config'
-import { acceptPilotInvitation, createPilotInvitation, InvitationError } from '@/pilot/invitations'
 import {
   acceptOrganisationInvitation,
   createOrganisationInvitation,
@@ -24,11 +23,10 @@ import {
   revokeMediaAccess,
 } from '@/organisations/media-access'
 import { parseMediaAssetId } from '@/media/identifiers'
-import { safeReturnTo } from '@/pilot/returnTo'
-import { getPilotMember } from '@/pilot/session'
+import { safeReturnTo } from '@/members/returnTo'
+import { getMember } from '@/members/session'
 import { guardDemoActionMutation } from '@/media/requestSecurity'
 
-export type InviteMemberState = { error?: string; setupUrl?: string }
 export type OrganisationInvitationState = { error?: string; invitationURL?: string }
 export type OrganisationMembershipState = { error?: string; success?: string }
 export type MediaAccessState = { error?: string; success?: string }
@@ -43,7 +41,7 @@ export async function signIn(formData: FormData) {
 
   try {
     guardDemoActionMutation(await headers())
-    await login({ collection: 'pilot-members', config, email, password })
+    await login({ collection: 'members', config, email, password })
   } catch (caught) {
     if (caught instanceof Response && caught.status === 429)
       error = 'Too many sign-in attempts. Try again shortly.'
@@ -58,57 +56,9 @@ export async function signIn(formData: FormData) {
 }
 
 export async function signOut() {
-  guardDemoActionMutation(await headers(), (await getPilotMember())?.id)
+  guardDemoActionMutation(await headers(), (await getMember())?.id)
   await logout({ config })
   redirect('/demo/sign-in?signedOut=true')
-}
-
-export async function setPilotPassword(formData: FormData) {
-  const payload = await getPayload({ config })
-  const token = String(formData.get('token') || '')
-
-  try {
-    guardDemoActionMutation(await headers())
-    await acceptPilotInvitation({
-      password: String(formData.get('password') || ''),
-      payload,
-      token,
-    })
-  } catch (caught) {
-    const message =
-      caught instanceof InvitationError ? caught.message : 'Unable to use this setup link.'
-    redirect(`/demo/setup?token=${encodeURIComponent(token)}&error=${encodeURIComponent(message)}`)
-  }
-
-  redirect('/demo/sign-in?setup=complete')
-}
-
-export async function invitePilotMember(
-  _state: InviteMemberState,
-  formData: FormData,
-): Promise<InviteMemberState> {
-  const actor = await getPilotMember()
-  if (!actor) return { error: 'Sign in as an operator to invite a Pilot Member.' }
-
-  try {
-    guardDemoActionMutation(await headers(), actor.id)
-    const payload = await getPayload({ config })
-    const invitation = await createPilotInvitation({
-      actor,
-      email: String(formData.get('email') || ''),
-      name: String(formData.get('name') || ''),
-      payload,
-      role: formData.get('role') === 'operator' ? 'operator' : 'uploader',
-    })
-    const serverURL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
-
-    return { setupUrl: `${serverURL}/demo/setup?token=${invitation.token}` }
-  } catch (caught) {
-    return {
-      error:
-        caught instanceof InvitationError ? caught.message : 'Unable to create the invitation.',
-    }
-  }
 }
 
 function organisationRole(
@@ -127,7 +77,7 @@ export async function inviteOrganisationMember(
   _state: OrganisationInvitationState,
   formData: FormData,
 ): Promise<OrganisationInvitationState> {
-  const actor = await getPilotMember()
+  const actor = await getMember()
   if (!actor) return { error: 'Sign in to create an Organisation Invitation.' }
 
   const organisationID = positiveInteger(formData.get('organisationID'))
@@ -160,7 +110,7 @@ export async function inviteOrganisationMember(
 export async function acceptOrganisationInvitationAction(formData: FormData): Promise<void> {
   const token = String(formData.get('token') || '')
   const returnTo = `/demo/invitations/accept?token=${encodeURIComponent(token)}`
-  const actor = await getPilotMember()
+  const actor = await getMember()
   if (!actor) redirect(`/demo/sign-in?returnTo=${encodeURIComponent(returnTo)}`)
 
   try {
@@ -185,7 +135,7 @@ async function changeOrganisationMembership(
   formData: FormData,
   mutation: typeof disableOrganisationMembership | typeof removeOrganisationMembership,
 ): Promise<OrganisationMembershipState> {
-  const actor = await getPilotMember()
+  const actor = await getMember()
   if (!actor) return { error: 'Sign in to manage Organisation Memberships.' }
 
   const organisationID = positiveInteger(formData.get('organisationID'))
@@ -230,7 +180,7 @@ async function changeMediaAccess(
   formData: FormData,
   mutation: typeof grantMediaAccess | typeof revokeMediaAccess,
 ): Promise<MediaAccessState> {
-  const actor = await getPilotMember()
+  const actor = await getMember()
   if (!actor) return { error: 'Sign in to manage Media Access.' }
 
   const mediaAssetId = parseMediaAssetId(String(formData.get('mediaAssetId') || ''))

@@ -23,7 +23,7 @@ export const PlaybackGrants: CollectionConfig = {
     {
       name: 'owner',
       type: 'relationship',
-      relationTo: 'pilot-members',
+      relationTo: 'members',
       required: true,
       index: true,
     },
