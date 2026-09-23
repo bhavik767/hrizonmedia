@@ -175,10 +175,12 @@ export default buildConfig({
     tasks: [
       {
         handler: async ({ req }) => {
+          const { cleanupAbandonedUploads } = await import('./media/library')
           const { runMediaLifecycle } = await import('./media/lifecycle')
           const { runProcessingCycle } = await import('./media/processing')
           const { logMediaDiagnostic } = await import('./media/diagnostics')
           try {
+            await cleanupAbandonedUploads(req.payload)
             await runProcessingCycle(req.payload)
             await runMediaLifecycle(req.payload)
             logMediaDiagnostic('info', 'media_cycle_completed')

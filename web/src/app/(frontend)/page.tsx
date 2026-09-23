@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { connection } from 'next/server'
 
 const safeguards = [
   {
@@ -23,8 +22,9 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
 }
 
+export const dynamic = 'force-static'
+
 export default async function HomePage() {
-  await connection()
   const demoEnabled = process.env.HRIZONMEDIA_DEMO_ENABLED === 'true'
 
   return (

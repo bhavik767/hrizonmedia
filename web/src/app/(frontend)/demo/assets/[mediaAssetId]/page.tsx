@@ -4,7 +4,6 @@ import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { parseMediaAssetId } from '@/media/identifiers'
-import { runMediaLifecycle } from '@/media/lifecycle'
 import { getVisibleAsset, MediaLibraryError } from '@/media/library'
 import type { MediaAssetDetail } from '@/media/types'
 import config from '@/payload.config'
@@ -28,7 +27,6 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
   let asset: MediaAssetDetail
   try {
     const payload = await getPayload({ config })
-    await runMediaLifecycle(payload)
     asset = await getVisibleAsset(payload, member, mediaAssetId)
   } catch (error) {
     if (error instanceof MediaLibraryError && error.status === 404) notFound()
