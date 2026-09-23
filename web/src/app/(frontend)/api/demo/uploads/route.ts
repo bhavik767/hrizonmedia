@@ -18,6 +18,7 @@ export async function POST(request: Request): Promise<Response> {
     const result = await createUploadSession(payload, member, {
       fileFingerprint: String(body.fileFingerprint || ''),
       fileName: String(body.fileName || ''),
+      folderID: body.folderID === undefined ? undefined : Number(body.folderID),
       mediaProtectionPolicy: body.mediaProtectionPolicy,
       mimeType: String(body.mimeType || ''),
       organisationID,

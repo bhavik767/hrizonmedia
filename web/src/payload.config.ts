@@ -11,6 +11,7 @@ import { Categories } from './collections/Categories'
 import { Media } from './collections/Media'
 import { MediaAccess } from './collections/MediaAccess'
 import { MediaAssets } from './collections/MediaAssets'
+import { MediaFolders } from './collections/MediaFolders'
 import { MediaOperations } from './collections/MediaOperations'
 import { OrganisationMemberships } from './collections/OrganisationMemberships'
 import { OrganisationInvitations } from './collections/OrganisationInvitations'
@@ -129,6 +130,7 @@ export default buildConfig({
     OrganisationSettings,
     PlatformAdministrators,
     MediaAssets,
+    MediaFolders,
     MediaAccess,
     MediaOperations,
     UploadSessions,

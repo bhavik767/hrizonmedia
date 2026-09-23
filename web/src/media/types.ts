@@ -19,10 +19,18 @@ export type MediaProtectionPolicy = (typeof mediaProtectionPolicies)[number]
 
 export interface MediaAssetSummary {
   createdAt: string
+  folderID?: number | null
+  organisationID?: number | null
   fileName: string
   mediaAssetId: MediaAssetId
   size: number
   status: MediaAssetStatus
+}
+
+export interface MediaFolderSummary {
+  id: number
+  name: string
+  organisationID: number
 }
 
 export interface MediaAssetDetail extends MediaAssetSummary {
@@ -47,6 +55,7 @@ export interface UploadMetadata {
   mediaProtectionPolicy?: MediaProtectionPolicy
   mimeType: string
   organisationID?: number
+  folderID?: number
   retentionDays?: number
   size: number
 }
