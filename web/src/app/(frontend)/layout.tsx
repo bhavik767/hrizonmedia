@@ -69,9 +69,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 export const metadata: Metadata = {
   metadataBase: new URL(getServerSideURL()),
-  title: 'HrizonMedia | Secure video. Precisely controlled.',
+  title: 'WeCloud | Secure video. Precisely controlled.',
   description:
-    'HrizonMedia is the secure video platform for controlled upload, encrypted delivery, and authorised playback.',
+    'WeCloud is the secure video platform for controlled upload, encrypted delivery, and authorised playback.',
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
@@ -81,14 +81,14 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
-    title: 'HrizonMedia | Secure video. Precisely controlled.',
+    title: 'WeCloud | Secure video. Precisely controlled.',
     description:
-      'Upload once. Deliver encrypted video. Authorise every playback with HrizonMedia.',
-    siteName: 'HrizonMedia',
+      'Upload once. Deliver encrypted video. Authorise every playback with WeCloud.',
+    siteName: 'WeCloud',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'HrizonMedia | Secure video. Precisely controlled.',
-    description: 'Plays where you allow it. Nowhere else.',
+    title: 'WeCloud | Secure video. Precisely controlled.',
+    description: 'WeCloud keeps secure video under your control.',
   },
 }

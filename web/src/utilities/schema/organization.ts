@@ -34,7 +34,7 @@ export function getOrganizationSchema(org: OrganizationGlobal | null | undefined
 
   return {
     '@type': org.organizationType || 'Organization',
-    name: org.name || 'HrizonMedia',
+    name: org.name || 'WeCloud',
     url: org.url || getServerSideURL(),
     ...(logo ? { logo } : {}),
     ...(org.sameAs && org.sameAs.length > 0

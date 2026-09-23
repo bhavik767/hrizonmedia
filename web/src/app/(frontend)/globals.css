@@ -460,6 +460,10 @@ h1 span {
   max-width: 58ch;
 }
 
+.hero__action {
+  margin-top: 2rem;
+}
+
 .demo-note {
   color: var(--caption);
   margin-top: 2rem;

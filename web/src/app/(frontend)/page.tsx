@@ -1,46 +1,69 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
+
+import { StructuredData } from '@/utilities/schema/StructuredData'
 
 const safeguards = [
   {
     number: '01',
-    title: 'Encrypted from storage to screen',
-    copy: 'Your source becomes adaptive, encrypted video before it reaches a viewer.',
+    title: 'Secure upload',
+    copy: 'Start with a secure upload session that keeps your source on a protected path.',
   },
   {
     number: '02',
-    title: 'Playback starts with permission',
-    copy: 'Every licence begins with an ownership and access decision on the server.',
+    title: 'Protected playback',
+    copy: 'Encrypted delivery and DRM keep playback where your organisation allows it.',
   },
   {
     number: '03',
-    title: 'Delivery stays short-lived',
-    copy: 'Asset-scoped access keeps manifests, segments, and licences on a tight leash.',
+    title: 'Controlled access',
+    copy: 'Asset-scoped access keeps each viewer and every playback decision accountable.',
   },
 ]
 
 export const metadata: Metadata = {
-  alternates: { canonical: '/' },
+  alternates: { canonical: 'https://wecloud.biz/' },
 }
 
 export const dynamic = 'force-static'
+
+const publicSiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'WeCloud',
+  url: 'https://wecloud.biz/',
+}
 
 export default async function HomePage() {
   const demoEnabled = process.env.HRIZONMEDIA_DEMO_ENABLED === 'true'
 
   return (
     <main id="main-content">
+      <StructuredData schema={publicSiteSchema} />
       <section className="hero shell" aria-labelledby="hero-title">
         <div className="hero__glow" aria-hidden="true" />
         <div className="hero__copy">
           <p className="eyebrow"><span aria-hidden="true" /> Secure video platform</p>
           <h1 id="hero-title">
-            <span>Plays where you allow it.</span>
-            <span className="signal-text">Nowhere else.</span>
+            <span>Secure video,</span>
+            <span className="signal-text">under your control.</span>
           </h1>
           <p className="hero__lede">
-            Upload your video once. HrizonMedia encrypts, stores, and delivers it, then
-            authorises playback only for the viewers you approve.
+            WeCloud gives your organisation a secure path from upload to protected playback,
+            with access you can control at every step.
           </p>
+          {demoEnabled && (
+            <Link
+              aria-label="Open WeCloud Dashboard"
+              className="primary-action hero__action"
+              href="/demo"
+            >
+              Dashboard
+              <svg aria-hidden="true" className="action-arrow" viewBox="0 0 16 16">
+                <path d="M3 13 13 3M6 3h7v7" />
+              </svg>
+            </Link>
+          )}
           {!demoEnabled && <p className="demo-note">Private workspace opening soon.</p>}
         </div>
         <div className="control-plate" aria-label="Secure delivery flow">
@@ -64,8 +87,8 @@ export default async function HomePage() {
 
       <section className="safeguards shell" aria-labelledby="safeguards-title">
         <div className="section-heading">
-          <p className="eyebrow">How control travels</p>
-          <h2 id="safeguards-title">Security at every handoff.</h2>
+          <p className="eyebrow">Built for secure video</p>
+          <h2 id="safeguards-title">Control every step, without slowing down.</h2>
         </div>
         <div className="safeguard-grid">
           {safeguards.map((safeguard) => (
@@ -80,10 +103,10 @@ export default async function HomePage() {
 
       <section className="promise shell" aria-labelledby="promise-title">
         <p className="eyebrow">One platform, one policy</p>
-        <h2 id="promise-title">The video and its permission stay together.</h2>
+        <h2 id="promise-title">Your video and its access policy stay together.</h2>
         <p>
-          From upload to licence exchange, HrizonMedia keeps each Media Asset encrypted and
-          each playback accountable.
+          From upload to licence exchange, WeCloud keeps each Media Asset encrypted and every
+          playback accountable.
         </p>
       </section>
     </main>

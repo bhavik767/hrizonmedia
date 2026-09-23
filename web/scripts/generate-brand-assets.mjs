@@ -24,7 +24,7 @@ const iconSvg = (radius) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 </svg>`
 
 const font = fontkit.openSync(manropePath)
-const run = font.layout('HrizonMedia')
+const run = font.layout('WeCloud')
 let cursor = 0
 const glyphs = run.glyphs
   .map((glyph, index) => {
@@ -40,7 +40,7 @@ const lockupWidth = Math.ceil(110 + cursor * wordScale)
 const lockupSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${lockupWidth} 180">
   <g transform="translate(0 20) scale(.6)">${mark}</g>
   <g fill="#fff" transform="translate(110 130) scale(${wordScale} -${wordScale})">${glyphs}</g>
-</svg>`
+</svg>\n`
 
 await mkdir(publicDirectory, { recursive: true })
 await writeFile(path.join(publicDirectory, 'brand-lockup.svg'), lockupSvg)
