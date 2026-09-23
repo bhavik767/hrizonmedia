@@ -171,6 +171,7 @@ describe('S3 storage provider', () => {
       ChecksumAlgorithm: 'SHA256',
       ContentType: 'video/mp4',
       Key: `sources/${uploadSessionId}/source.mp4`,
+      ServerSideEncryption: 'AES256',
     })
     expect(create.input).not.toHaveProperty('ACL')
 
@@ -405,6 +406,26 @@ describe('CloudFront delivery provider', () => {
       pathPrefix: `/${processingJobId}/`,
       query: signedURL.search,
     })
+  })
+
+  it('rejects a delivery scope that is not one canonical Processing Job', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 })
+    const provider = createCloudFrontDeliveryProvider({
+      domain: 'media.example.test',
+      keyPairId: 'K123',
+      privateKey: privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
+    })
+
+    await expect(
+      provider.authorize({
+        expiresAt: new Date('2026-09-16T12:01:00.000Z'),
+        mediaAssetId: newMediaAssetId(),
+        manifestFormat: 'dash',
+        playbackGrantId: 'playback_00000000-0000-0000-0000-000000000000',
+        processingJobId: 'outputs/another-asset' as never,
+        token: 'delivery-token' as never,
+      }),
+    ).rejects.toThrow('Media Asset delivery is not ready.')
   })
 })
 
