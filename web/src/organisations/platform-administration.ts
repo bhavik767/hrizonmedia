@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { Payload } from 'payload'
+import type { Payload, PayloadRequest } from 'payload'
 
 import {
   OrganisationAuthorizationError,
@@ -22,8 +22,8 @@ export class PlatformAdministrationError extends Error {
   }
 }
 
-function validMemberID(memberID: number): boolean {
-  return Number.isSafeInteger(memberID) && memberID > 0
+function validEntityID(entityID: number): boolean {
+  return Number.isSafeInteger(entityID) && entityID > 0
 }
 
 async function requirePlatformAdministrator(payload: Payload, actor: PilotMember): Promise<void> {
@@ -38,7 +38,7 @@ async function requirePlatformAdministrator(payload: Payload, actor: PilotMember
 }
 
 async function requireActiveMember(payload: Payload, memberID: number): Promise<PilotMember> {
-  if (!validMemberID(memberID)) {
+  if (!validEntityID(memberID)) {
     throw new PlatformAdministrationError('A valid Pilot Member is required.', 400)
   }
 
@@ -57,7 +57,7 @@ async function requireActiveMember(payload: Payload, memberID: number): Promise<
 async function beginTransaction(payload: Payload): Promise<number | string> {
   const transactionID = await payload.db.beginTransaction()
   if (!transactionID) {
-    throw new Error('Organisation provisioning requires database transactions.')
+    throw new Error('Organisation administration requires database transactions.')
   }
   return transactionID
 }
@@ -121,7 +121,10 @@ export async function createPlatformAdministrator(
     where: { member: { equals: member.id } },
   })
   if (existing.docs[0]) {
-    throw new PlatformAdministrationError('This Pilot Member is already a Platform Administrator.', 409)
+    throw new PlatformAdministrationError(
+      'This Pilot Member is already a Platform Administrator.',
+      409,
+    )
   }
 
   return payload.create({
@@ -129,4 +132,70 @@ export async function createPlatformAdministrator(
     data: { member: member.id, status: 'active' },
     overrideAccess: true,
   })
+}
+
+export async function deleteOrganisation(
+  payload: Payload,
+  actor: PilotMember,
+  input: { now?: Date; organisationID: number },
+): Promise<Organisation> {
+  await requirePlatformAdministrator(payload, actor)
+  if (!validEntityID(input.organisationID)) {
+    throw new PlatformAdministrationError('A valid Organisation is required.', 400)
+  }
+
+  const organisation = await payload.findByID({
+    collection: 'organisations',
+    depth: 0,
+    id: input.organisationID,
+    overrideAccess: true,
+  })
+  if (organisation.status === 'deleted') return organisation
+
+  const now = input.now ?? new Date()
+  const transactionID = await beginTransaction(payload)
+  const req = { payload, transactionID } as PayloadRequest
+  try {
+    const assets = await payload.find({
+      collection: 'media-assets',
+      depth: 0,
+      overrideAccess: true,
+      pagination: false,
+      req,
+      where: { organisation: { equals: organisation.id } },
+    })
+    await payload.delete({
+      collection: 'playback-grants',
+      overrideAccess: true,
+      req,
+      where: { organisation: { equals: organisation.id } },
+    })
+    for (const asset of assets.docs) {
+      if (asset.status === 'deleted') continue
+      await payload.update({
+        collection: 'media-assets',
+        data: {
+          deletedAt: now.toISOString(),
+          deletedBy: actor.id,
+          status: 'deleted',
+          statusChangedAt: now.toISOString(),
+        },
+        id: asset.id,
+        overrideAccess: true,
+        req,
+      })
+    }
+    const deleted = await payload.update({
+      collection: 'organisations',
+      data: { status: 'deleted' },
+      id: organisation.id,
+      overrideAccess: true,
+      req,
+    })
+    await payload.db.commitTransaction(transactionID)
+    return deleted
+  } catch (error) {
+    await payload.db.rollbackTransaction(transactionID)
+    throw error
+  }
 }
