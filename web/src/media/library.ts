@@ -54,6 +54,8 @@ function optionalRelationID(value: number | { id: number } | null | undefined): 
 function summary(asset: MediaAsset): MediaAssetSummary {
   return {
     createdAt: asset.createdAt,
+    folderID: optionalRelationID(asset.folder),
+    organisationID: optionalRelationID(asset.organisation),
     fileName: asset.fileName,
     mediaAssetId: asset.mediaAssetId as MediaAssetId,
     size: asset.size,
@@ -61,17 +63,32 @@ function summary(asset: MediaAsset): MediaAssetSummary {
   }
 }
 
-function folderSummary(folder: { id: number; name: string; organisation: number | { id: number } }): MediaFolderSummary {
+function folderSummary(folder: {
+  id: number
+  name: string
+  organisation: number | { id: number }
+}): MediaFolderSummary {
   return { id: folder.id, name: folder.name, organisationID: relationID(folder.organisation) }
 }
 
 async function folderForOrganisation(payload: Payload, organisationID: number, folderID: number) {
-  const folder = await payload.findByID({ collection: 'media-folders', depth: 0, id: folderID, overrideAccess: true })
-  if (relationID(folder.organisation) !== organisationID) throw new MediaLibraryError('Folder not found.', 404)
+  const folder = await payload.findByID({
+    collection: 'media-folders',
+    depth: 0,
+    id: folderID,
+    overrideAccess: true,
+  })
+  if (relationID(folder.organisation) !== organisationID)
+    throw new MediaLibraryError('Folder not found.', 404)
   return folder
 }
 
-async function folderForUpload(payload: Payload, owner: PilotMember, input: UploadMetadata, organisationID?: number) {
+async function folderForUpload(
+  payload: Payload,
+  owner: Member,
+  input: UploadMetadata,
+  organisationID?: number,
+) {
   if (input.folderID === undefined) return undefined
   if (!organisationID || !Number.isSafeInteger(input.folderID) || input.folderID <= 0) {
     throw new MediaLibraryError('Choose a Folder in this Organisation.', 400)
@@ -80,42 +97,157 @@ async function folderForUpload(payload: Payload, owner: PilotMember, input: Uplo
   return folderForOrganisation(payload, organisationID, input.folderID)
 }
 
-export async function createMediaFolder(payload: Payload, member: PilotMember, organisationID: number, name: string): Promise<MediaFolderSummary> {
-  if (!Number.isSafeInteger(organisationID) || organisationID <= 0 || name.trim().length === 0 || name.trim() !== name || name.length > 120) {
+export async function createMediaFolder(
+  payload: Payload,
+  member: Member,
+  organisationID: number,
+  name: string,
+): Promise<MediaFolderSummary> {
+  if (
+    !Number.isSafeInteger(organisationID) ||
+    organisationID <= 0 ||
+    name.trim().length === 0 ||
+    name.trim() !== name ||
+    name.length > 120
+  ) {
     throw new MediaLibraryError('Choose a valid Folder name.', 400)
   }
   await authorizeOrganisationMedia(payload, member, { operation: 'create', organisationID })
-  return folderSummary(await payload.create({ collection: 'media-folders', data: { name, organisation: organisationID, owner: member.id }, overrideAccess: true }))
+  return folderSummary(
+    await payload.create({
+      collection: 'media-folders',
+      data: { name, organisation: organisationID, owner: member.id },
+      overrideAccess: true,
+    }),
+  )
 }
 
-export async function renameMediaFolder(payload: Payload, member: PilotMember, folderID: number, name: string): Promise<MediaFolderSummary> {
-  if (name.trim().length === 0 || name.trim() !== name || name.length > 120) throw new MediaLibraryError('Choose a valid Folder name.', 400)
-  const folder = await payload.findByID({ collection: 'media-folders', depth: 0, id: folderID, overrideAccess: true })
-  const authorisation = await authorizeOrganisationMedia(payload, member, { operation: 'create', organisationID: relationID(folder.organisation) })
-  const assets = await payload.find({ collection: 'media-assets', depth: 0, limit: 1000, overrideAccess: true, where: { folder: { equals: folderID } } })
-  if (authorisation.role === 'publisher' && assets.docs.some((asset) => relationID(asset.owner) !== member.id)) throw new MediaLibraryError('Publishers cannot rename a Folder containing another Publisher’s Media Assets.', 403)
-  return folderSummary(await payload.update({ collection: 'media-folders', id: folderID, data: { name }, overrideAccess: true }))
+export async function listMediaFolders(
+  payload: Payload,
+  member: Member,
+  organisationID: number,
+): Promise<MediaFolderSummary[]> {
+  await authorizeOrganisationMedia(payload, member, { operation: 'browse', organisationID })
+  const folders = await payload.find({
+    collection: 'media-folders',
+    depth: 0,
+    limit: 1000,
+    overrideAccess: true,
+    sort: 'name',
+    where: { organisation: { equals: organisationID } },
+  })
+  return folders.docs.map(folderSummary)
 }
 
-export async function moveMediaAssetToFolder(payload: Payload, member: PilotMember, mediaAssetId: MediaAssetId, folderID: number | null): Promise<MediaAssetSummary> {
-  const found = await payload.find({ collection: 'media-assets', depth: 0, limit: 1, overrideAccess: true, where: { mediaAssetId: { equals: mediaAssetId } } })
+export async function renameMediaFolder(
+  payload: Payload,
+  member: Member,
+  folderID: number,
+  name: string,
+): Promise<MediaFolderSummary> {
+  if (name.trim().length === 0 || name.trim() !== name || name.length > 120)
+    throw new MediaLibraryError('Choose a valid Folder name.', 400)
+  const folder = await payload.findByID({
+    collection: 'media-folders',
+    depth: 0,
+    id: folderID,
+    overrideAccess: true,
+  })
+  const authorisation = await authorizeOrganisationMedia(payload, member, {
+    operation: 'create',
+    organisationID: relationID(folder.organisation),
+  })
+  const assets = await payload.find({
+    collection: 'media-assets',
+    depth: 0,
+    limit: 1,
+    overrideAccess: true,
+    where: { and: [{ folder: { equals: folderID } }, { owner: { not_equals: member.id } }] },
+  })
+  if (authorisation.role === 'publisher' && assets.docs[0])
+    throw new MediaLibraryError(
+      'Publishers cannot rename a Folder containing another Publisher’s Media Assets.',
+      403,
+    )
+  return folderSummary(
+    await payload.update({
+      collection: 'media-folders',
+      id: folderID,
+      data: { name },
+      overrideAccess: true,
+    }),
+  )
+}
+
+export async function moveMediaAssetToFolder(
+  payload: Payload,
+  member: Member,
+  mediaAssetId: MediaAssetId,
+  folderID: number | null,
+): Promise<MediaAssetSummary> {
+  const found = await payload.find({
+    collection: 'media-assets',
+    depth: 0,
+    limit: 1,
+    overrideAccess: true,
+    where: { mediaAssetId: { equals: mediaAssetId } },
+  })
   const asset = found.docs[0]
   if (!asset || !asset.organisation) throw new MediaLibraryError('Media Asset not found.', 404)
   await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
-  if (folderID !== null) await folderForOrganisation(payload, relationID(asset.organisation), folderID)
-  return summary(await payload.update({ collection: 'media-assets', id: asset.id, data: { folder: folderID }, overrideAccess: true }))
+  if (folderID !== null)
+    await folderForOrganisation(payload, relationID(asset.organisation), folderID)
+  return summary(
+    await payload.update({
+      collection: 'media-assets',
+      id: asset.id,
+      data: { folder: folderID },
+      overrideAccess: true,
+    }),
+  )
 }
 
-export async function deleteMediaFolder(payload: Payload, member: PilotMember, folderID: number): Promise<void> {
-  const folder = await payload.findByID({ collection: 'media-folders', depth: 0, id: folderID, overrideAccess: true })
+export async function deleteMediaFolder(
+  payload: Payload,
+  member: Member,
+  folderID: number,
+): Promise<void> {
+  const folder = await payload.findByID({
+    collection: 'media-folders',
+    depth: 0,
+    id: folderID,
+    overrideAccess: true,
+  })
   const organisationID = relationID(folder.organisation)
-  const authorization = await authorizeOrganisationMedia(payload, member, { operation: 'create', organisationID })
-  const assets = await payload.find({ collection: 'media-assets', depth: 0, limit: 1000, overrideAccess: true, where: { folder: { equals: folderID } } })
-  if (authorization.role === 'publisher' && assets.docs.some((asset) => relationID(asset.owner) !== member.id)) {
-    throw new MediaLibraryError('Publishers cannot delete a Folder containing another Publisher’s Media Assets.', 403)
+  const authorization = await authorizeOrganisationMedia(payload, member, {
+    operation: 'create',
+    organisationID,
+  })
+  const otherPublisherAsset = await payload.find({
+    collection: 'media-assets',
+    depth: 0,
+    limit: 1,
+    overrideAccess: true,
+    where: { and: [{ folder: { equals: folderID } }, { owner: { not_equals: member.id } }] },
+  })
+  if (authorization.role === 'publisher' && otherPublisherAsset.docs[0]) {
+    throw new MediaLibraryError(
+      'Publishers cannot delete a Folder containing another Publisher’s Media Assets.',
+      403,
+    )
   }
-  await payload.update({ collection: 'media-assets', data: { folder: null }, overrideAccess: true, where: { folder: { equals: folderID } } })
-  await payload.update({ collection: 'upload-sessions', data: { folder: null }, overrideAccess: true, where: { folder: { equals: folderID } } })
+  await payload.update({
+    collection: 'media-assets',
+    data: { folder: null },
+    overrideAccess: true,
+    where: { folder: { equals: folderID } },
+  })
+  await payload.update({
+    collection: 'upload-sessions',
+    data: { folder: null },
+    overrideAccess: true,
+    where: { folder: { equals: folderID } },
+  })
   await payload.delete({ collection: 'media-folders', id: folderID, overrideAccess: true })
 }
 
@@ -696,14 +828,26 @@ export async function cleanupAbandonedUploads(
 export async function listVisibleAssets(
   payload: Payload,
   member: Member,
+  organisationID?: number,
 ): Promise<MediaAssetSummary[]> {
+  if (organisationID !== undefined) {
+    await authorizeOrganisationMedia(payload, member, { operation: 'browse', organisationID })
+  }
   const result = await payload.find({
     collection: 'media-assets',
     depth: 0,
     limit: 100,
     overrideAccess: true,
     sort: '-createdAt',
-    where: { status: { not_equals: 'deleted' } },
+    where:
+      organisationID === undefined
+        ? { status: { not_equals: 'deleted' } }
+        : {
+            and: [
+              { organisation: { equals: organisationID } },
+              { status: { not_equals: 'deleted' } },
+            ],
+          },
   })
   const visible = await Promise.all(
     result.docs.map(async (asset) => {

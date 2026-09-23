@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
 
 import type { CompletedPart, PartUploadTarget } from '@/media/multipart'
-import type { MediaAssetSummary } from '@/media/types'
+import type { MediaAssetSummary, MediaFolderSummary } from '@/media/types'
 
 type DisplayedAsset = Omit<MediaAssetSummary, 'mediaAssetId'> & { mediaAssetId: string }
 
@@ -25,6 +25,11 @@ interface UploadOrganisation {
   drmRequired: boolean
   id: number
   maximumUploadSizeBytes: number
+  name: string
+}
+
+interface LibraryOrganisation {
+  id: number
   name: string
 }
 
@@ -144,38 +149,61 @@ async function uploadPartWithRetry(targetURL: string, bytes: Blob): Promise<Comp
 }
 
 export function MediaLibrary({
+  libraryOrganisations,
   uploadOrganisations,
 }: {
+  libraryOrganisations: LibraryOrganisation[]
   uploadOrganisations: UploadOrganisation[]
 }) {
   const [assets, setAssets] = useState<DisplayedAsset[]>([])
   const [error, setError] = useState('')
+  const [folders, setFolders] = useState<MediaFolderSummary[]>([])
+  const [activeFolderID, setActiveFolderID] = useState<number | null>(null)
   const [hydrated, setHydrated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [progress, setProgress] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [selectedOrganisationID, setSelectedOrganisationID] = useState(
-    () => uploadOrganisations[0]?.id ?? 0,
+    () => uploadOrganisations[0]?.id ?? libraryOrganisations[0]?.id ?? 0,
   )
 
   const selectedOrganisation =
-    uploadOrganisations.find(({ id }) => id === selectedOrganisationID) ?? uploadOrganisations[0]
+    libraryOrganisations.find(({ id }) => id === selectedOrganisationID) ?? libraryOrganisations[0]
+  const selectedUploadOrganisation = uploadOrganisations.find(
+    ({ id }) => id === selectedOrganisation?.id,
+  )
 
-  const refresh = useCallback(async () => {
-    const response = await fetch('/api/demo/assets', { cache: 'no-store' })
+  const refresh = useCallback(async (organisationID: number) => {
+    const response = await fetch(`/api/demo/assets?organisationID=${organisationID}`, {
+      cache: 'no-store',
+    })
     const result = await responseJSON<{ assets: MediaAssetSummary[] }>(response)
     setAssets(result.assets)
     setLoading(false)
   }, [])
 
+  const refreshFolders = useCallback(async (organisationID: number) => {
+    const response = await fetch(`/api/demo/folders?organisationID=${organisationID}`, {
+      cache: 'no-store',
+    })
+    const result = await responseJSON<{ folders: MediaFolderSummary[] }>(response)
+    setFolders(result.folders)
+  }, [])
+
   useEffect(() => setHydrated(true), [])
 
   useEffect(() => {
-    void refresh().catch((caught: Error) => {
+    if (!selectedOrganisation) return
+    void refresh(selectedOrganisation.id).catch((caught: Error) => {
       setError(caught.message)
       setLoading(false)
     })
-  }, [refresh])
+  }, [refresh, selectedOrganisation])
+
+  useEffect(() => {
+    if (!selectedOrganisation) return
+    void refreshFolders(selectedOrganisation.id).catch((caught: Error) => setError(caught.message))
+  }, [refreshFolders, selectedOrganisation])
 
   const hasActiveProcessing = assets.some(
     ({ status }) => status === 'queued' || status === 'processing',
@@ -188,7 +216,7 @@ export function MediaLibrary({
     let timer: number | undefined
     const poll = async () => {
       try {
-        await refresh()
+        if (selectedOrganisation) await refresh(selectedOrganisation.id)
       } catch {
         // The next poll can recover from a transient request failure.
       }
@@ -200,7 +228,7 @@ export function MediaLibrary({
       cancelled = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [hasActiveProcessing, refresh, uploading])
+  }, [hasActiveProcessing, refresh, selectedOrganisation, uploading])
 
   async function upload(formData: FormData) {
     const file = formData.get('file')
@@ -210,13 +238,13 @@ export function MediaLibrary({
     setProgress(0)
     setUploading(true)
     const fingerprint = await fileFingerprint(file)
-    if (!selectedOrganisation) {
+    if (!selectedUploadOrganisation) {
       setError('Complete Organisation setup before uploading Media Assets.')
       setProgress(null)
       setUploading(false)
       return
     }
-    if (file.size > selectedOrganisation.maximumUploadSizeBytes) {
+    if (file.size > selectedUploadOrganisation.maximumUploadSizeBytes) {
       setError("The video exceeds this Organisation's upload limit.")
       setProgress(null)
       setUploading(false)
@@ -257,7 +285,8 @@ export function MediaLibrary({
             fileName: file.name,
             mediaProtectionPolicy: formData.get('mediaProtectionPolicy'),
             mimeType: file.type,
-            organisationID: selectedOrganisation.id,
+            organisationID: selectedUploadOrganisation.id,
+            folderID: activeFolderID ?? undefined,
             retentionDays: Number(formData.get('retentionDays')),
             size: file.size,
           }),
@@ -341,6 +370,87 @@ export function MediaLibrary({
     }
   }
 
+  async function createFolder(formData: FormData) {
+    if (!selectedOrganisation) return
+    try {
+      const result = await responseJSON<{ folder: MediaFolderSummary }>(
+        await fetch('/api/demo/folders', {
+          body: JSON.stringify({
+            name: formData.get('name'),
+            organisationID: selectedOrganisation.id,
+          }),
+          headers: { 'content-type': 'application/json' },
+          method: 'POST',
+        }),
+      )
+      setFolders((current) =>
+        [...current, result.folder].sort((left, right) => left.name.localeCompare(right.name)),
+      )
+      setActiveFolderID(result.folder.id)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to create Folder.')
+    }
+  }
+
+  async function renameActiveFolder() {
+    const folder = folders.find(({ id }) => id === activeFolderID)
+    const name = folder && window.prompt('Folder name', folder.name)
+    if (!folder || !name) return
+    try {
+      const result = await responseJSON<{ folder: MediaFolderSummary }>(
+        await fetch(`/api/demo/folders/${folder.id}`, {
+          body: JSON.stringify({ name }),
+          headers: { 'content-type': 'application/json' },
+          method: 'PATCH',
+        }),
+      )
+      setFolders((current) => current.map((item) => (item.id === folder.id ? result.folder : item)))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to rename Folder.')
+    }
+  }
+
+  async function deleteActiveFolder() {
+    if (
+      activeFolderID === null ||
+      !window.confirm('Move this Folder’s Media Assets to All Videos?')
+    )
+      return
+    try {
+      const response = await fetch(`/api/demo/folders/${activeFolderID}`, { method: 'DELETE' })
+      if (!response.ok) await responseJSON(response)
+      setAssets((current) =>
+        current.map((asset) =>
+          asset.folderID === activeFolderID ? { ...asset, folderID: null } : asset,
+        ),
+      )
+      setFolders((current) => current.filter(({ id }) => id !== activeFolderID))
+      setActiveFolderID(null)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to delete Folder.')
+    }
+  }
+
+  async function moveAsset(mediaAssetId: string, folderID: number | null) {
+    try {
+      const result = await responseJSON<{ asset: MediaAssetSummary }>(
+        await fetch(`/api/demo/assets/${mediaAssetId}`, {
+          body: JSON.stringify({ folderID }),
+          headers: { 'content-type': 'application/json' },
+          method: 'PATCH',
+        }),
+      )
+      setAssets((current) =>
+        current.map((asset) => (asset.mediaAssetId === mediaAssetId ? result.asset : asset)),
+      )
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to move Media Asset.')
+    }
+  }
+
+  const visibleAssets =
+    activeFolderID === null ? assets : assets.filter((asset) => asset.folderID === activeFolderID)
+
   return (
     <section className="media-library" aria-labelledby="media-library-title">
       <div className="media-library__heading">
@@ -351,7 +461,7 @@ export function MediaLibrary({
           </p>
           <h2 id="media-library-title">Media Assets</h2>
         </div>
-        {uploadOrganisations.length > 0 && (
+        {selectedUploadOrganisation && (
           <form
             className="upload-form"
             onSubmit={(event) => {
@@ -367,7 +477,7 @@ export function MediaLibrary({
               required
               type="file"
             />
-            {uploadOrganisations.length > 1 && (
+            {libraryOrganisations.length > 1 && (
               <>
                 <label htmlFor="upload-organisation">Organisation</label>
                 <select
@@ -375,7 +485,7 @@ export function MediaLibrary({
                   onChange={(event) => setSelectedOrganisationID(Number(event.target.value))}
                   value={selectedOrganisation?.id ?? ''}
                 >
-                  {uploadOrganisations.map((organisation) => (
+                  {libraryOrganisations.map((organisation) => (
                     <option key={organisation.id} value={organisation.id}>
                       {organisation.name}
                     </option>
@@ -385,24 +495,24 @@ export function MediaLibrary({
             )}
             <label htmlFor="media-protection-policy">Media Protection Policy</label>
             <select
-              defaultValue={selectedOrganisation?.drmDefault ?? 'protected'}
-              disabled={selectedOrganisation?.drmRequired ?? false}
+              defaultValue={selectedUploadOrganisation.drmDefault}
+              disabled={selectedUploadOrganisation.drmRequired}
               id="media-protection-policy"
-              key={selectedOrganisation?.id}
+              key={selectedUploadOrganisation.id}
               name="mediaProtectionPolicy"
             >
               <option value="protected">DRM-protected playback</option>
               <option value="standard">Standard playback</option>
             </select>
-            {selectedOrganisation?.drmRequired && (
+            {selectedUploadOrganisation.drmRequired && (
               <input name="mediaProtectionPolicy" type="hidden" value="protected" />
             )}
             <label htmlFor="retention-days">Retention period (days)</label>
             <input
-              defaultValue={selectedOrganisation?.defaultRetentionDays ?? 1}
+              defaultValue={selectedUploadOrganisation.defaultRetentionDays}
               id="retention-days"
-              key={`retention-${selectedOrganisation?.id}`}
-              max={selectedOrganisation?.defaultRetentionDays ?? 1}
+              key={`retention-${selectedUploadOrganisation.id}`}
+              max={selectedUploadOrganisation.defaultRetentionDays}
               min="1"
               name="retentionDays"
               required
@@ -415,6 +525,55 @@ export function MediaLibrary({
         )}
       </div>
 
+      {selectedOrganisation && (
+        <div className="demo-actions" aria-label="Media Library Folders">
+          <button className="text-button" onClick={() => setActiveFolderID(null)} type="button">
+            All Videos
+          </button>
+          {folders.map((folder) => (
+            <button
+              className="text-button"
+              key={folder.id}
+              onClick={() => setActiveFolderID(folder.id)}
+              type="button"
+            >
+              {folder.name}
+            </button>
+          ))}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              void createFolder(new FormData(event.currentTarget))
+              event.currentTarget.reset()
+            }}
+          >
+            <label htmlFor="folder-name">New Folder</label>
+            <input id="folder-name" name="name" required type="text" />
+            <button className="text-button" type="submit">
+              Create Folder
+            </button>
+          </form>
+          {activeFolderID !== null && (
+            <>
+              <button
+                className="text-button"
+                onClick={() => void renameActiveFolder()}
+                type="button"
+              >
+                Rename Folder
+              </button>
+              <button
+                className="text-button"
+                onClick={() => void deleteActiveFolder()}
+                type="button"
+              >
+                Delete Folder
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {error && (
         <p className="form-message form-message--error" role="alert">
           {error}
@@ -422,11 +581,11 @@ export function MediaLibrary({
       )}
       {loading ? (
         <p>Loading your private library…</p>
-      ) : assets.length === 0 ? (
+      ) : visibleAssets.length === 0 ? (
         <p>Your library is empty.</p>
       ) : (
         <div className="asset-list" aria-live="polite">
-          {assets.map((asset) => (
+          {visibleAssets.map((asset) => (
             <article aria-label={asset.fileName} className="asset-card" key={asset.mediaAssetId}>
               <div>
                 <h3>{asset.fileName}</h3>
@@ -435,6 +594,25 @@ export function MediaLibrary({
               <strong className={`asset-status asset-status--${asset.status}`}>
                 {asset.status}
               </strong>
+              {!asset.mediaAssetId.startsWith('local_') && (
+                <select
+                  aria-label={`Folder for ${asset.fileName}`}
+                  onChange={(event) =>
+                    void moveAsset(
+                      asset.mediaAssetId,
+                      event.target.value ? Number(event.target.value) : null,
+                    )
+                  }
+                  value={asset.folderID ?? ''}
+                >
+                  <option value="">All Videos</option>
+                  {folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               {!asset.mediaAssetId.startsWith('local_') && (
                 <Link className="text-link" href={`/demo/assets/${asset.mediaAssetId}`}>
                   Inspect asset

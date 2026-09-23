@@ -1274,6 +1274,10 @@ export interface MediaAsset {
   updatedAt: string;
   createdAt: string;
 }
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-folders".
+ */
 export interface MediaFolder {
   id: number;
   organisation: number | Organisation;
@@ -1692,6 +1696,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media-assets';
         value: number | MediaAsset;
+      } | null)
+    | ({
+        relationTo: 'media-folders';
+        value: number | MediaFolder;
       } | null)
     | ({
         relationTo: 'media-access';
@@ -2319,7 +2327,6 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   durationSeconds?: T;
   verifiedAt?: T;
   drmContentId?: T;
-  playReadyPackaged?: T;
   expiresAt?: T;
   deletedAt?: T;
   deletedBy?: T;
@@ -2331,6 +2338,10 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   updatedAt?: T;
   createdAt?: T;
 }
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-folders_select".
+ */
 export interface MediaFoldersSelect<T extends boolean = true> {
   organisation?: T;
   name?: T;

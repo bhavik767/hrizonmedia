@@ -6,7 +6,7 @@ import type { Payload } from 'payload'
 import type { Member } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
 
-export type OrganisationMediaOperation = 'create' | 'manage' | 'play' | 'read'
+export type OrganisationMediaOperation = 'browse' | 'create' | 'manage' | 'play' | 'read'
 
 export interface OrganisationMediaAuthorization {
   membershipID: number | null
@@ -71,7 +71,10 @@ export async function requireOrganisationAdministrator(
     organisationID,
   })
   if (authorization.role !== 'administrator' || authorization.membershipID === null) {
-    throw new OrganisationAuthorizationError('Active Organisation Administrator access required.', 403)
+    throw new OrganisationAuthorizationError(
+      'Active Organisation Administrator access required.',
+      403,
+    )
   }
   return authorization
 }
@@ -156,6 +159,9 @@ export async function authorizeOrganisationMedia(
   const role = membership.role
   const ownsAsset = relationID(asset?.owner) === member.id
   const canManage = role === 'administrator' || (role === 'publisher' && ownsAsset)
+  if (input.operation === 'browse') {
+    return { membershipID: membership.id, organisationID, recoveryAccess: false, role }
+  }
   if (input.operation === 'create' && (role === 'administrator' || role === 'publisher')) {
     return { membershipID: membership.id, organisationID, recoveryAccess: false, role }
   }

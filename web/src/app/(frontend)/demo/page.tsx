@@ -57,6 +57,34 @@ export default async function DemoPage() {
       ],
     },
   })
+  const libraryMemberships = await payload.find({
+    collection: 'organisation-memberships',
+    depth: 0,
+    limit: 100,
+    overrideAccess: true,
+    where: { and: [{ member: { equals: member.id } }, { status: { equals: 'active' } }] },
+  })
+  const libraryOrganisations = (
+    await Promise.all(
+      libraryMemberships.docs.map(async (membership) => {
+        const id =
+          typeof membership.organisation === 'number'
+            ? membership.organisation
+            : membership.organisation.id
+        const organisation = await payload.findByID({
+          collection: 'organisations',
+          depth: 0,
+          id,
+          overrideAccess: true,
+        })
+        return organisation.status === 'active'
+          ? { id: organisation.id, name: organisation.name }
+          : null
+      }),
+    )
+  ).filter(
+    (organisation): organisation is NonNullable<typeof organisation> => organisation !== null,
+  )
   const uploadOrganisations = (
     await Promise.all(
       uploadMemberships.docs.map(async (membership) => {
@@ -137,7 +165,10 @@ export default async function DemoPage() {
           </button>
         </form>
       </div>
-      <MediaLibrary uploadOrganisations={uploadOrganisations} />
+      <MediaLibrary
+        libraryOrganisations={libraryOrganisations}
+        uploadOrganisations={uploadOrganisations}
+      />
     </main>
   )
 }
