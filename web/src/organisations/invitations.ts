@@ -2,7 +2,7 @@ import 'server-only'
 
 import { createHash, randomBytes } from 'node:crypto'
 import { sql } from '@payloadcms/db-postgres'
-import type { Payload } from 'payload'
+import type { Payload, PayloadRequest } from 'payload'
 
 import { recordAuditEvent } from '@/audit/events'
 import {
@@ -154,23 +154,28 @@ export async function acceptOrganisationInvitation({
         ],
       },
     })
-    if (existingMembership.docs[0]) {
-      throw new OrganisationInvitationError('You already have an Organisation Membership.', 409)
-    }
-
     const acceptedAt = now.toISOString()
-    const req = { payload, transactionID }
-    const membership = await payload.create({
-      collection: 'organisation-memberships',
-      data: {
-        member: actor.id,
-        organisation: invitation.organisation_id,
-        role: invitation.role,
-        status: 'active',
-      },
-      overrideAccess: true,
-      req,
-    })
+    const req = { payload, transactionID } as PayloadRequest
+    const existing = existingMembership.docs[0]
+    const membership = existing
+      ? await payload.update({
+          collection: 'organisation-memberships',
+          data: { role: invitation.role, status: 'active' },
+          id: existing.id,
+          overrideAccess: true,
+          req,
+        })
+      : await payload.create({
+          collection: 'organisation-memberships',
+          data: {
+            member: actor.id,
+            organisation: invitation.organisation_id,
+            role: invitation.role,
+            status: 'active',
+          },
+          overrideAccess: true,
+          req,
+        })
     await payload.update({
       collection: 'organisation-invitations',
       data: { acceptedAt, acceptedBy: actor.id },

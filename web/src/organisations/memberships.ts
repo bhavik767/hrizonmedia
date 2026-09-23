@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from '@payloadcms/db-postgres'
-import type { Payload } from 'payload'
+import type { Payload, PayloadRequest } from 'payload'
 
 import { recordAuditEvent } from '@/audit/events'
 import {
@@ -17,6 +17,21 @@ export class OrganisationMembershipError extends Error {
   ) {
     super(message)
   }
+}
+
+type MembershipChangeInput = {
+  actor: PilotMember
+  membershipID: number
+  now?: Date
+  organisationID: number
+  payload: Payload
+}
+
+type MembershipChangeContext = {
+  membership: OrganisationMembership
+  now: Date
+  transaction: { execute: (query: unknown) => Promise<unknown> }
+  transactionID: number | string
 }
 
 function relationID(value: number | { id: number } | null | undefined): number | null {
@@ -120,19 +135,11 @@ async function revokeMembershipAccess(
   })
 }
 
-export async function disableOrganisationMembership({
-  actor,
-  membershipID,
-  now = new Date(),
-  organisationID,
-  payload,
-}: {
-  actor: PilotMember
-  membershipID: number
-  now?: Date
-  organisationID: number
-  payload: Payload
-}): Promise<OrganisationMembership> {
+async function changeMembership<T>(
+  input: MembershipChangeInput,
+  mutate: (context: MembershipChangeContext) => Promise<T>,
+): Promise<T> {
+  const { actor, membershipID, now = new Date(), organisationID, payload } = input
   await requireAdministrator(payload, actor, organisationID)
   const transactionID = await payload.db.beginTransaction()
   if (!transactionID) throw new Error('Organisation Membership changes require database transactions.')
@@ -144,29 +151,42 @@ export async function disableOrganisationMembership({
     if (!transaction) throw new Error('Unable to start the Organisation Membership transaction.')
     const membership = await findMembership(payload, organisationID, membershipID, transactionID)
     await preventFinalAdministratorLoss(payload, membership, transaction)
-    await revokeMembershipAccess(payload, membership, {}, transactionID)
-    const disabled = await payload.update({
-      collection: 'organisation-memberships',
-      data: { status: 'disabled' },
-      id: membership.id,
-      overrideAccess: true,
-      req: { payload, transactionID },
-    })
-    await recordAuditEvent(payload, {
-      action: 'member_disabled',
-      actorID: actor.id,
-      eventKey: `organisation-membership:${membership.id}:disabled:${now.toISOString()}`,
-      memberID: relationID(membership.member) ?? undefined,
-      organisationID,
-      occurredAt: now,
-      req: { payload, transactionID },
-    })
+    const result = await mutate({ membership, now, transaction, transactionID })
     await payload.db.commitTransaction(transactionID)
-    return disabled
+    return result
   } catch (error) {
     await payload.db.rollbackTransaction(transactionID)
     throw error
   }
+}
+
+export async function disableOrganisationMembership({
+  actor,
+  membershipID,
+  now = new Date(),
+  organisationID,
+  payload,
+}: MembershipChangeInput): Promise<OrganisationMembership> {
+  return changeMembership({ actor, membershipID, now, organisationID, payload }, async (context) => {
+    await revokeMembershipAccess(payload, context.membership, {}, context.transactionID)
+    const disabled = await payload.update({
+      collection: 'organisation-memberships',
+      data: { status: 'disabled' },
+      id: context.membership.id,
+      overrideAccess: true,
+      req: { payload, transactionID: context.transactionID } as PayloadRequest,
+    })
+    await recordAuditEvent(payload, {
+      action: 'member_disabled',
+      actorID: actor.id,
+      eventKey: `organisation-membership:${context.membership.id}:disabled:${context.now.toISOString()}`,
+      memberID: relationID(context.membership.member) ?? undefined,
+      organisationID,
+      occurredAt: context.now,
+      req: { payload, transactionID: context.transactionID } as PayloadRequest,
+    })
+    return disabled
+  })
 }
 
 export async function removeOrganisationMembership({
@@ -175,44 +195,24 @@ export async function removeOrganisationMembership({
   now = new Date(),
   organisationID,
   payload,
-}: {
-  actor: PilotMember
-  membershipID: number
-  now?: Date
-  organisationID: number
-  payload: Payload
-}): Promise<void> {
-  await requireAdministrator(payload, actor, organisationID)
-  const transactionID = await payload.db.beginTransaction()
-  if (!transactionID) throw new Error('Organisation Membership changes require database transactions.')
-
-  try {
-    const transaction = payload.db.sessions?.[String(transactionID)]?.db as
-      | { execute: (query: unknown) => Promise<unknown> }
-      | undefined
-    if (!transaction) throw new Error('Unable to start the Organisation Membership transaction.')
-    const membership = await findMembership(payload, organisationID, membershipID, transactionID)
-    await preventFinalAdministratorLoss(payload, membership, transaction)
-    await revokeMembershipAccess(payload, membership, { removeMediaAccess: true }, transactionID)
+}: MembershipChangeInput): Promise<void> {
+  await changeMembership({ actor, membershipID, now, organisationID, payload }, async (context) => {
+    await revokeMembershipAccess(payload, context.membership, { removeMediaAccess: true }, context.transactionID)
     await payload.delete({
       collection: 'organisation-memberships',
-      id: membership.id,
+      id: context.membership.id,
       overrideAccess: true,
-      req: { payload, transactionID },
+      req: { payload, transactionID: context.transactionID } as PayloadRequest,
     })
     await recordAuditEvent(payload, {
       action: 'member_disabled',
       actorID: actor.id,
       details: { removed: true },
-      eventKey: `organisation-membership:${membership.id}:removed:${now.toISOString()}`,
-      memberID: relationID(membership.member) ?? undefined,
+      eventKey: `organisation-membership:${context.membership.id}:removed:${context.now.toISOString()}`,
+      memberID: relationID(context.membership.member) ?? undefined,
       organisationID,
-      occurredAt: now,
-      req: { payload, transactionID },
+      occurredAt: context.now,
+      req: { payload, transactionID: context.transactionID } as PayloadRequest,
     })
-    await payload.db.commitTransaction(transactionID)
-  } catch (error) {
-    await payload.db.rollbackTransaction(transactionID)
-    throw error
-  }
+  })
 }

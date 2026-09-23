@@ -135,4 +135,47 @@ describe('Organisation Invitations', () => {
       }),
     ).rejects.toThrow('expired')
   })
+
+  it('consumes the first acceptance by an existing member and applies the invited role', async () => {
+    const administrator = await createPilotMember('existing-admin@organisation-invitation.test')
+    const recipient = await createPilotMember('existing-recipient@organisation-invitation.test')
+    const organisation = await payload.create({
+      collection: 'organisations',
+      data: { name: 'Existing Member Organisation', status: 'active' },
+      overrideAccess: true,
+    })
+    await payload.create({
+      collection: 'organisation-memberships',
+      data: {
+        member: administrator.id,
+        organisation: organisation.id,
+        role: 'administrator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    await payload.create({
+      collection: 'organisation-memberships',
+      data: {
+        member: recipient.id,
+        organisation: organisation.id,
+        role: 'viewer',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    const invitation = await createOrganisationInvitation({
+      actor: administrator,
+      organisationID: organisation.id,
+      payload,
+      role: 'publisher',
+    })
+
+    await expect(
+      acceptOrganisationInvitation({ actor: recipient, payload, token: invitation.token }),
+    ).resolves.toMatchObject({ role: 'publisher', status: 'active' })
+    await expect(
+      acceptOrganisationInvitation({ actor: administrator, payload, token: invitation.token }),
+    ).rejects.toThrow('invalid or has already been used')
+  })
 })
