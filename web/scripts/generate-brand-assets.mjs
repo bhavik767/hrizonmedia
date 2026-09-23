@@ -24,7 +24,7 @@ const iconSvg = (radius) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 
 </svg>`
 
 const font = fontkit.openSync(manropePath)
-const run = font.layout('HrizonMedia')
+const run = font.layout('WeCloud')
 let cursor = 0
 const glyphs = run.glyphs
   .map((glyph, index) => {
