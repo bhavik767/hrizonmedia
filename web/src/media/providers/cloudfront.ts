@@ -22,7 +22,9 @@ export function createCloudFrontDeliveryProvider(
 
   return {
     async authorize({ expiresAt, manifestFormat, processingJobId }) {
-      if (!processingJobId) throw new Error('Media Asset delivery is not ready.')
+      if (!processingJobId || !/^processing_[0-9a-f-]{36}$/.test(processingJobId)) {
+        throw new Error('Media Asset delivery is not ready.')
+      }
       const issuedAt = now()
       const authorizationExpiresAt = new Date(
         Math.min(expiresAt.getTime(), issuedAt.getTime() + AUTHORIZATION_LIFETIME_MS),

@@ -476,6 +476,7 @@ export function createS3StorageProvider(
           ChecksumAlgorithm: 'SHA256',
           ContentType: mimeType,
           Key: key,
+          ServerSideEncryption: 'AES256',
         }),
       )
       if (!result.UploadId) throw new MultipartUploadError('Storage did not create an upload.')

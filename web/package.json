@@ -27,7 +27,8 @@
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.config.ts",
     "test:staging": "cross-env NODE_OPTIONS=\"--no-deprecation --import=tsx/esm\" playwright test --config=playwright.staging.config.ts",
     "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts",
-    "validate:env": "node src/config/validate-environment.mjs"
+    "validate:env": "node src/config/validate-environment.mjs",
+    "verify:private-media-storage": "tsx scripts/verify-private-media-storage.mts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1131.0",
