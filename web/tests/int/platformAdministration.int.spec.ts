@@ -1,10 +1,10 @@
 import { getPayload, type Payload } from 'payload'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { DELETE as deleteOrganisationRoute } from '@/app/(frontend)/api/demo/organisations/[organisationID]/route'
 import {
   createOrganisation,
   createPlatformAdministrator,
-  deleteOrganisation,
   PlatformAdministrationError,
 } from '@/organisations/platform-administration'
 import {
@@ -277,10 +277,29 @@ describe('Platform Administration', () => {
     })
     const grant = await createPlaybackGrant(payload, viewer, mediaAssetId, { now })
 
-    await deleteOrganisation(payload, platformAdministrator, {
-      organisationID: organisation.id,
-      now,
-    })
+    const deniedAuth = vi.spyOn(payload, 'auth').mockResolvedValue({ user: publisher } as never)
+    const denied = await deleteOrganisationRoute(
+      new Request(`http://localhost:3000/api/demo/organisations/${organisation.id}`, {
+        headers: { origin: 'http://localhost:3000' },
+        method: 'DELETE',
+      }),
+      { params: Promise.resolve({ organisationID: String(organisation.id) }) },
+    )
+    deniedAuth.mockRestore()
+    expect(denied.status).toBe(403)
+
+    const auth = vi
+      .spyOn(payload, 'auth')
+      .mockResolvedValue({ user: platformAdministrator } as never)
+    const response = await deleteOrganisationRoute(
+      new Request(`http://localhost:3000/api/demo/organisations/${organisation.id}`, {
+        headers: { origin: 'http://localhost:3000' },
+        method: 'DELETE',
+      }),
+      { params: Promise.resolve({ organisationID: String(organisation.id) }) },
+    )
+    auth.mockRestore()
+    expect(response.status).toBe(204)
 
     await expect(
       authorizePlaybackResource(

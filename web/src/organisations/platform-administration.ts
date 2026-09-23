@@ -22,8 +22,8 @@ export class PlatformAdministrationError extends Error {
   }
 }
 
-function validMemberID(memberID: number): boolean {
-  return Number.isSafeInteger(memberID) && memberID > 0
+function validEntityID(entityID: number): boolean {
+  return Number.isSafeInteger(entityID) && entityID > 0
 }
 
 async function requirePlatformAdministrator(payload: Payload, actor: PilotMember): Promise<void> {
@@ -38,7 +38,7 @@ async function requirePlatformAdministrator(payload: Payload, actor: PilotMember
 }
 
 async function requireActiveMember(payload: Payload, memberID: number): Promise<PilotMember> {
-  if (!validMemberID(memberID)) {
+  if (!validEntityID(memberID)) {
     throw new PlatformAdministrationError('A valid Pilot Member is required.', 400)
   }
 
@@ -57,7 +57,7 @@ async function requireActiveMember(payload: Payload, memberID: number): Promise<
 async function beginTransaction(payload: Payload): Promise<number | string> {
   const transactionID = await payload.db.beginTransaction()
   if (!transactionID) {
-    throw new Error('Organisation provisioning requires database transactions.')
+    throw new Error('Organisation administration requires database transactions.')
   }
   return transactionID
 }
@@ -140,7 +140,7 @@ export async function deleteOrganisation(
   input: { now?: Date; organisationID: number },
 ): Promise<Organisation> {
   await requirePlatformAdministrator(payload, actor)
-  if (!validMemberID(input.organisationID)) {
+  if (!validEntityID(input.organisationID)) {
     throw new PlatformAdministrationError('A valid Organisation is required.', 400)
   }
 
