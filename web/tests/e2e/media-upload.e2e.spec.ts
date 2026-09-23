@@ -54,10 +54,15 @@ test.describe('Media Asset tracer bullet', () => {
     await expect(page.getByRole('heading', { name: 'private-lesson.mp4' })).toBeVisible({
       timeout: 45_000,
     })
-    await expect(page.getByText('Media Asset ID')).toBeVisible({ timeout: 45_000 })
-    await expect(page.getByText('Upload Session ID')).toBeVisible()
-    await expect(page.getByText('Processing Job ID')).toBeVisible()
-    await expect(page.getByText('Provider Job ID')).toBeVisible()
+    const details = page.getByRole('region', { name: 'Media Asset details' })
+    await expect(details.getByText('Status', { exact: true })).toBeVisible({ timeout: 45_000 })
+    await expect(details.getByText('Media Asset ID', { exact: true })).toBeVisible()
+    await expect(details.getByText('Uploaded', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Start secure playback' })).toBeVisible()
+    await expect(page.getByText('Upload Session ID', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('Processing Job ID', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('Provider Job ID', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /edit|embed|download original|replace video/i })).toHaveCount(0)
     const assetID = page.url().split('/').at(-1)
     expect(assetID).toMatch(/^asset_/)
 
