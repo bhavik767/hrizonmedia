@@ -464,6 +464,7 @@ describe('reliable Processing Jobs', () => {
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
     const retried = await retryVisibleAssetProcessing(
       payload,
       operator,

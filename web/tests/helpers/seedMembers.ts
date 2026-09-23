@@ -26,14 +26,20 @@ export async function seedOperator(): Promise<void> {
   await cleanMediaRecords(payload)
   await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'platform-administrators', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
-  await payload.create({
+  const platformAdministrator = await payload.create({
     collection: 'members',
     data: {
       ...testOperator,
       status: 'active',
     },
+    overrideAccess: true,
+  })
+  await payload.create({
+    collection: 'platform-administrators',
+    data: { member: platformAdministrator.id, status: 'active' },
     overrideAccess: true,
   })
 }
@@ -43,6 +49,7 @@ export async function seedUploaders(): Promise<void> {
   await cleanMediaRecords(payload)
   await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'platform-administrators', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 
@@ -94,6 +101,7 @@ export async function cleanupMembers(): Promise<void> {
   await cleanMediaRecords(payload)
   await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'platform-administrators', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }

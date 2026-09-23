@@ -39,3 +39,11 @@ export async function createTestPlatformAdministrator(payload: Payload, member: 
     overrideAccess: true,
   })
 }
+
+export async function cleanTestOrganisations(payload: Payload): Promise<void> {
+  await payload.delete({ collection: 'platform-administrators', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisation-invitations', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
+}

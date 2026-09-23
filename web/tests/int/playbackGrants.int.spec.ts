@@ -14,15 +14,23 @@ import config from '@/payload.config'
 import type { MediaAsset, Member } from '@/payload-types'
 import { getOperationalOverview, updateOperationalControls } from '@/organisations/operations'
 import { cleanMediaRecords } from '../helpers/cleanMediaRecords'
+import {
+  cleanTestOrganisations,
+  createTestOrganisation,
+  createTestPlatformAdministrator,
+} from '../helpers/organisations'
 
 let payload: Payload
 let owner: Member
 let otherUploader: Member
+let ownerOrganisationID: number
+let otherOrganisationID: number
 
 const now = new Date('2026-09-14T12:00:00.000Z')
 
 async function cleanPlaybackRecords() {
   await cleanMediaRecords(payload)
+  await cleanTestOrganisations(payload)
   await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }
 
@@ -52,6 +60,7 @@ async function createAsset(
       fileName: 'private-lesson.mp4',
       mediaAssetId: newMediaAssetId(),
       mimeType: 'video/mp4',
+      organisation: member.id === owner.id ? ownerOrganisationID : otherOrganisationID,
       owner: member.id,
       size: 1024,
       status,
@@ -71,6 +80,8 @@ describe('Playback Grant authorization', () => {
     await cleanPlaybackRecords()
     owner = await createUploader('playback-owner@example.test')
     otherUploader = await createUploader('other-playback-owner@example.test')
+    ownerOrganisationID = await createTestOrganisation(payload, owner)
+    otherOrganisationID = await createTestOrganisation(payload, otherUploader)
   })
 
   afterAll(async () => {
@@ -239,6 +250,7 @@ describe('Playback Grant authorization', () => {
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
     await updateOperationalControls(payload, operator, {
       killSwitchEnabled: true,
       providerConcurrency: 2,
@@ -404,6 +416,7 @@ describe('Playback Grant authorization', () => {
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
 
     expect(
       (await getOperationalOverview(payload, operator)).auditEvents.map(({ action }) => action),

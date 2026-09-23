@@ -7,7 +7,7 @@ import { getMember } from '@/members/session'
 
 export const metadata: Metadata = { title: 'Workspace terms | HrizonMedia Demo' }
 
-export default async function PilotTermsPage() {
+export default async function DemoTermsPage() {
   await ensureDemoEnabled()
   const member = await getMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo%2Fterms')

@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Sign in | HrizonMedia Demo',
 }
 
-export default async function PilotSignInPage({
+export default async function DemoSignInPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string; returnTo?: string; setup?: string; signedOut?: string }>

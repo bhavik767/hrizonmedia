@@ -20,16 +20,23 @@ import { runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
 import type { Member } from '@/payload-types'
 import { getOperationalOverview, updateOperationalControls } from '@/organisations/operations'
+import {
+  cleanTestOrganisations,
+  createTestOrganisation,
+  createTestPlatformAdministrator,
+} from '../helpers/organisations'
 import { mkvFixture, mp4Fixture } from '../helpers/mediaFixtures'
 
 let payload: Payload
 let firstUploader: Member
 let secondUploader: Member
+let firstOrganisationID: number
 
 const metadataFor = (bytes: Uint8Array, fileName = 'fixture.mp4') => ({
   fileFingerprint: `${fileName}:${bytes.length}:1234`,
   fileName,
   mimeType: 'video/mp4',
+  organisationID: firstOrganisationID,
   size: bytes.length,
 })
 
@@ -62,6 +69,7 @@ async function cleanMediaLibrary() {
   await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'upload-sessions', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })
+  await cleanTestOrganisations(payload)
   await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }
 
@@ -88,13 +96,15 @@ describe('Media Asset library persistence', () => {
     await cleanMediaLibrary()
     firstUploader = await createUploader('first-library-uploader@example.test')
     secondUploader = await createUploader('second-library-uploader@example.test')
+    firstOrganisationID = await createTestOrganisation(payload, firstUploader)
+    await createTestOrganisation(payload, secondUploader)
   })
 
   afterAll(async () => {
     await cleanMediaLibrary()
   })
 
-  it('persists distinct record IDs and filters list/detail reads by owner', async () => {
+  it('persists distinct record IDs and filters list/detail reads by Organisation membership', async () => {
     const fixture = mp4Fixture()
     const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
     const parts = await uploadAllParts(session, fixture)
@@ -190,6 +200,7 @@ describe('Media Asset library persistence', () => {
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
     await updateOperationalControls(payload, operator, {
       killSwitchEnabled: true,
       providerConcurrency: 2,
@@ -276,6 +287,7 @@ describe('Media Asset library persistence', () => {
         fileFingerprint: 'oversized',
         fileName: 'oversized.mp4',
         mimeType: 'video/mp4',
+        organisationID: firstOrganisationID,
         size: 2 * 1024 * 1024 * 1024 + 1,
       }),
     ).rejects.toMatchObject({ status: 400 })
@@ -345,6 +357,7 @@ describe('Media Asset library persistence', () => {
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
 
     const actions = (await getOperationalOverview(payload, operator)).auditEvents.map(
       ({ action }) => action,
