@@ -13,6 +13,11 @@ export const Organisations: CollectionConfig = {
   fields: [
     { name: 'name', type: 'text', required: true },
     {
+      name: 'initialAdministrator',
+      type: 'relationship',
+      relationTo: 'pilot-members',
+    },
+    {
       name: 'status',
       type: 'select',
       defaultValue: 'active',
