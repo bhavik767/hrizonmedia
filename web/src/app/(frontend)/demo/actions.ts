@@ -18,6 +18,12 @@ import {
   OrganisationMembershipError,
   removeOrganisationMembership,
 } from '@/organisations/memberships'
+import {
+  grantMediaAccess,
+  OrganisationMediaAccessError,
+  revokeMediaAccess,
+} from '@/organisations/media-access'
+import { parseMediaAssetId } from '@/media/identifiers'
 import { safeReturnTo } from '@/pilot/returnTo'
 import { getPilotMember } from '@/pilot/session'
 import { guardDemoActionMutation } from '@/media/requestSecurity'
@@ -25,6 +31,7 @@ import { guardDemoActionMutation } from '@/media/requestSecurity'
 export type InviteMemberState = { error?: string; setupUrl?: string }
 export type OrganisationInvitationState = { error?: string; invitationURL?: string }
 export type OrganisationMembershipState = { error?: string; success?: string }
+export type MediaAccessState = { error?: string; success?: string }
 
 export async function signIn(formData: FormData) {
   const email = String(formData.get('email') || '')
@@ -104,7 +111,9 @@ export async function invitePilotMember(
   }
 }
 
-function organisationRole(value: FormDataEntryValue | null): 'administrator' | 'publisher' | 'viewer' | null {
+function organisationRole(
+  value: FormDataEntryValue | null,
+): 'administrator' | 'publisher' | 'viewer' | null {
   if (value === 'administrator' || value === 'publisher' || value === 'viewer') return value
   return null
 }
@@ -215,4 +224,55 @@ export async function removeOrganisationMember(
   formData: FormData,
 ): Promise<OrganisationMembershipState> {
   return changeOrganisationMembership(formData, removeOrganisationMembership)
+}
+
+async function changeMediaAccess(
+  formData: FormData,
+  mutation: typeof grantMediaAccess | typeof revokeMediaAccess,
+): Promise<MediaAccessState> {
+  const actor = await getPilotMember()
+  if (!actor) return { error: 'Sign in to manage Media Access.' }
+
+  const mediaAssetId = parseMediaAssetId(String(formData.get('mediaAssetId') || ''))
+  const membershipID = positiveInteger(formData.get('membershipID'))
+  if (!mediaAssetId || !membershipID) return { error: 'Media Access target not found.' }
+
+  try {
+    guardDemoActionMutation(await headers(), actor.id)
+    const payload = await getPayload({ config })
+    const assets = await payload.find({
+      collection: 'media-assets',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { mediaAssetId: { equals: mediaAssetId } },
+    })
+    const asset = assets.docs[0]
+    if (!asset) return { error: 'Media Asset not found.' }
+    await mutation({ actor, assetID: asset.id, membershipID, payload })
+    revalidatePath(`/demo/assets/${mediaAssetId}`)
+    revalidatePath('/demo')
+    return { success: 'Media Access updated.' }
+  } catch (caught) {
+    return {
+      error:
+        caught instanceof OrganisationMediaAccessError
+          ? caught.message
+          : 'Unable to update Media Access.',
+    }
+  }
+}
+
+export async function grantViewerMediaAccess(
+  _state: MediaAccessState,
+  formData: FormData,
+): Promise<MediaAccessState> {
+  return changeMediaAccess(formData, grantMediaAccess)
+}
+
+export async function revokeViewerMediaAccess(
+  _state: MediaAccessState,
+  formData: FormData,
+): Promise<MediaAccessState> {
+  return changeMediaAccess(formData, revokeMediaAccess)
 }

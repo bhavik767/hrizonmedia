@@ -26,10 +26,14 @@ export interface MediaAssetSummary {
 }
 
 export interface MediaAssetDetail extends MediaAssetSummary {
+  assetID: number
   canRetry: boolean
+  canManage: boolean
+  canShare: boolean
   dispatchedAt: string | null
   failureMessage: string | null
   mimeType: string
+  organisationID: number | null
   processingJobId: ProcessingJobId | null
   providerJobId: ProviderJobId | null
   readyAt: string | null

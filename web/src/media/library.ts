@@ -681,8 +681,15 @@ export async function getVisibleAsset(
   })
   const asset = result.docs[0]
   if (!asset) throw new MediaLibraryError('Media Asset not found.', 404)
+  let canManage = member.role === 'operator' || relationID(asset.owner) === member.id
+  let canShare = false
   if (asset.organisation) {
-    await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'read' })
+    const authorization = await authorizeOrganisationMedia(payload, member, {
+      assetID: asset.id,
+      operation: 'read',
+    })
+    canManage = authorization.role !== 'viewer'
+    canShare = authorization.role === 'administrator' || authorization.role === 'publisher'
   } else if (member.role !== 'operator' && relationID(asset.owner) !== member.id) {
     throw new MediaLibraryError('Media Asset not found.', 404)
   }
@@ -706,10 +713,14 @@ export async function getVisibleAsset(
   if (!session) throw new MediaLibraryError('Upload Session not found.', 500)
   return {
     ...summary(asset),
+    assetID: asset.id,
     canRetry: asset.status === 'failed' && Boolean(session.objectKey),
+    canManage,
+    canShare,
     dispatchedAt: jobs.docs[0]?.dispatchedAt ?? null,
     failureMessage: jobs.docs[0]?.failureMessage ?? null,
     mimeType: asset.mimeType,
+    organisationID: optionalRelationID(asset.organisation),
     processingJobId: (jobs.docs[0]?.processingJobId as MediaAssetDetail['processingJobId']) ?? null,
     providerJobId: (jobs.docs[0]?.providerJobId as MediaAssetDetail['providerJobId']) ?? null,
     readyAt: jobs.docs[0]?.readyAt ?? null,
