@@ -5,9 +5,8 @@ const demoDisabled = process.env.HRIZONMEDIA_DEMO_ENABLED === 'false'
 function luminance(rgb: string) {
   const channels = rgb.match(/\d+/g)?.slice(0, 3).map(Number) ?? []
   return channels.reduce((sum, channel, index) => {
-    const linear = channel / 255 <= 0.04045
-      ? channel / 255 / 12.92
-      : ((channel / 255 + 0.055) / 1.055) ** 2.4
+    const linear =
+      channel / 255 <= 0.04045 ? channel / 255 / 12.92 : ((channel / 255 + 0.055) / 1.055) ** 2.4
     return sum + linear * [0.2126, 0.7152, 0.0722][index]
   }, 0)
 }
@@ -59,7 +58,10 @@ test.describe('WeCloud landing page', () => {
     expect(contrastRatio(colors.actionText, colors.actionBackground)).toBeGreaterThanOrEqual(4.5)
   })
 
-  test('publishes WeCloud metadata, structured data, and public brand assets', async ({ page, request }) => {
+  test('publishes WeCloud metadata, structured data, and public brand assets', async ({
+    page,
+    request,
+  }) => {
     await page.goto('/')
 
     await expect(page.locator('meta[name="description"]')).toHaveAttribute(
@@ -67,12 +69,18 @@ test.describe('WeCloud landing page', () => {
       /WeCloud.*secure video platform/i,
     )
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /WeCloud/)
-    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /opengraph-image/)
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+      'content',
+      /opengraph-image/,
+    )
     await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute(
       'content',
       /twitter-image/,
     )
-    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://wecloud.biz')
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      'href',
+      'https://wecloud.biz',
+    )
     await expect(page.locator('link[rel="icon"]')).toHaveCount(2)
     await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveCount(1)
     await expect(page.locator('img[src="/brand-lockup.svg"]')).toHaveCount(1)
@@ -108,12 +116,16 @@ test.describe('WeCloud landing page', () => {
     await page.keyboard.press('Tab')
     const home = page.getByRole('banner').getByRole('link', { name: 'WeCloud home' })
     await expect(home).toBeFocused()
-    expect(Number.parseFloat(await home.evaluate((element) => getComputedStyle(element).outlineWidth))).toBeGreaterThan(0)
+    expect(
+      Number.parseFloat(await home.evaluate((element) => getComputedStyle(element).outlineWidth)),
+    ).toBeGreaterThan(0)
 
     await page.keyboard.press('Tab')
     const signIn = page.getByRole('link', { name: 'Sign in to WeCloud Dashboard' })
     await expect(signIn).toBeFocused()
-    expect(Number.parseFloat(await signIn.evaluate((element) => getComputedStyle(element).outlineWidth))).toBeGreaterThan(0)
+    expect(
+      Number.parseFloat(await signIn.evaluate((element) => getComputedStyle(element).outlineWidth)),
+    ).toBeGreaterThan(0)
   })
 
   test('opens the existing Dashboard sign-in destination', async ({ page }) => {
@@ -122,7 +134,7 @@ test.describe('WeCloud landing page', () => {
 
     await page.getByRole('link', { name: 'Open WeCloud Dashboard' }).click()
     await expect(page).toHaveURL('/demo/sign-in?returnTo=%2Fdemo', { timeout: 60_000 })
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign in to the Demo')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign in to the Dashboard')
   })
 
   test('keeps Dashboard navigation and access disabled when the production flag is off', async ({

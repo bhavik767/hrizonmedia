@@ -4,7 +4,7 @@ import { ensureDemoEnabled } from '@/members/demoAvailability'
 
 import { acceptOrganisationInvitationAction } from '../../actions'
 
-export const metadata: Metadata = { title: 'Accept Organisation Invitation | HrizonMedia Demo' }
+export const metadata: Metadata = { title: 'Accept Organisation Invitation | WeCloud Dashboard' }
 
 export default async function AcceptOrganisationInvitationPage({
   searchParams,
