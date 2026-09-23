@@ -1255,6 +1255,7 @@ export interface MediaAsset {
   id: number;
   mediaAssetId: string;
   organisation?: (number | null) | Organisation;
+  mediaProtectionPolicy?: ('protected' | 'standard') | null;
   owner: number | PilotMember;
   fileName: string;
   mimeType: string;
@@ -1307,6 +1308,8 @@ export interface UploadSession {
   id: number;
   uploadSessionId: string;
   organisation?: (number | null) | Organisation;
+  mediaProtectionPolicy?: ('protected' | 'standard') | null;
+  retentionDays?: number | null;
   asset: number | MediaAsset;
   owner: number | PilotMember;
   fileName: string;
@@ -2301,6 +2304,7 @@ export interface PlatformAdministratorsSelect<T extends boolean = true> {
 export interface MediaAssetsSelect<T extends boolean = true> {
   mediaAssetId?: T;
   organisation?: T;
+  mediaProtectionPolicy?: T;
   owner?: T;
   fileName?: T;
   mimeType?: T;
@@ -2350,6 +2354,8 @@ export interface MediaOperationsSelect<T extends boolean = true> {
 export interface UploadSessionsSelect<T extends boolean = true> {
   uploadSessionId?: T;
   organisation?: T;
+  mediaProtectionPolicy?: T;
+  retentionDays?: T;
   asset?: T;
   owner?: T;
   fileName?: T;

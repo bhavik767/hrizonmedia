@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import { describe, expect, it } from 'vitest'
 
 import { newMediaAssetId, newProcessingJobId, newUploadSessionId } from '@/media/identifiers'
@@ -7,7 +9,7 @@ import {
   getFakeProviders,
   resetFakeMediaStorage,
 } from '@/media/providers/fake'
-import { InvalidMediaError } from '@/media/providers/errors'
+import { InvalidMediaError, MultipartUploadError } from '@/media/providers/errors'
 import { mkvFixture, mp4Fixture } from '../helpers/mediaFixtures'
 
 describe('deterministic media providers', () => {
@@ -46,6 +48,71 @@ describe('deterministic media providers', () => {
       size: bytes.length,
       width: 1920,
     })
+  })
+
+  it('accepts completion receipts in transfer-completion order after verifying every part', async () => {
+    resetFakeMediaStorage()
+    const bytes = mp4Fixture(90, 5 * 1024 * 1024 + 1)
+    const uploadSessionId = newUploadSessionId()
+    const initiated = await fakeStorageProvider.initiateMultipart({
+      metadata: {
+        fileFingerprint: `lesson.mp4:${bytes.length}:1234`,
+        fileName: 'lesson.mp4',
+        mimeType: 'video/mp4',
+        size: bytes.length,
+      },
+      uploadSessionId,
+    })
+    const [first, second] = await Promise.all([
+      fakeStorageProvider.receivePart({
+        bytes: bytes.subarray(0, initiated.partSize),
+        partNumber: 1,
+        providerUploadId: initiated.providerUploadId,
+      }),
+      fakeStorageProvider.receivePart({
+        bytes: bytes.subarray(initiated.partSize),
+        partNumber: 2,
+        providerUploadId: initiated.providerUploadId,
+      }),
+    ])
+
+    await expect(
+      fakeStorageProvider.completeMultipart({
+        parts: [second, first],
+        providerUploadId: initiated.providerUploadId,
+      }),
+    ).resolves.toMatchObject({ objectKey: expect.any(String) })
+  })
+
+  it('binds fake direct-upload targets to the requested checksum and exact part size', async () => {
+    resetFakeMediaStorage()
+    const bytes = mp4Fixture()
+    const uploadSessionId = newUploadSessionId()
+    const initiated = await fakeStorageProvider.initiateMultipart({
+      metadata: {
+        fileFingerprint: `lesson.mp4:${bytes.length}:1234`,
+        fileName: 'lesson.mp4',
+        mimeType: 'video/mp4',
+        size: bytes.length,
+      },
+      uploadSessionId,
+    })
+    const checksumSHA256 = createHash('sha256').update(bytes).digest('hex')
+    await fakeStorageProvider.createPartUploadTarget({
+      checksumSHA256,
+      partNumber: 1,
+      providerUploadId: initiated.providerUploadId,
+      size: bytes.length,
+      uploadSessionId,
+    })
+    await expect(
+      fakeStorageProvider.receivePart({
+        bytes,
+        checksumSHA256: '0'.repeat(64),
+        partNumber: 1,
+        providerUploadId: initiated.providerUploadId,
+      }),
+    ).rejects.toBeInstanceOf(MultipartUploadError)
   })
 
   it('probes MKV duration independently of client metadata', async () => {

@@ -3,6 +3,7 @@ import 'server-only'
 import type { Payload } from 'payload'
 
 import type { MediaAsset, PilotMember } from '@/payload-types'
+import { authorizeOrganisationMedia } from '@/organisations/authorization'
 
 import {
   processingOutputPrefix,
@@ -131,7 +132,12 @@ async function manageableAsset(
     where: { mediaAssetId: { equals: mediaAssetId } },
   })
   const asset = result.docs[0]
-  if (!asset || !canManageAsset(member, asset)) {
+  if (!asset) {
+    throw new MediaLibraryError('Media Asset not found.', 404)
+  }
+  if (asset.organisation) {
+    await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
+  } else if (!canManageAsset(member, asset)) {
     throw new MediaLibraryError('Media Asset not found.', 404)
   }
   return asset

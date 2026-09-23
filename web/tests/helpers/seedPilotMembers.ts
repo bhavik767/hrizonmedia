@@ -24,6 +24,9 @@ export const testSecondUploader = {
 export async function seedPilotOperator(): Promise<void> {
   const payload = await getPayload({ config })
   await cleanMediaRecords(payload)
+  await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
   await payload.create({
     collection: 'pilot-members',
@@ -40,10 +43,13 @@ export async function seedPilotOperator(): Promise<void> {
 export async function seedPilotUploaders(): Promise<void> {
   const payload = await getPayload({ config })
   await cleanMediaRecords(payload)
+  await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
 
   for (const member of [testInvitee, testSecondUploader]) {
-    await payload.create({
+    const publisher = await payload.create({
       collection: 'pilot-members',
       data: {
         ...member,
@@ -53,11 +59,45 @@ export async function seedPilotUploaders(): Promise<void> {
       },
       overrideAccess: true,
     })
+    const organisation = await payload.create({
+      collection: 'organisations',
+      data: {
+        initialAdministrator: publisher.id,
+        name: `${member.name} Organisation`,
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    await payload.create({
+      collection: 'organisation-memberships',
+      data: {
+        member: publisher.id,
+        organisation: organisation.id,
+        role: 'publisher',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+    await payload.create({
+      collection: 'organisation-settings',
+      data: {
+        defaultRetentionDays: 30,
+        drmDefault: 'protected',
+        drmRequired: false,
+        maximumUploadSizeBytes: 2 * 1024 * 1024 * 1024,
+        organisation: organisation.id,
+        setupCompletedAt: new Date().toISOString(),
+      },
+      overrideAccess: true,
+    })
   }
 }
 
 export async function cleanupPilotMembers(): Promise<void> {
   const payload = await getPayload({ config })
   await cleanMediaRecords(payload)
+  await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
 }

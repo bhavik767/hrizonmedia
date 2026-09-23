@@ -92,6 +92,10 @@ export function newProcessingJobData(input: {
     dispatchBy: new Date(input.queuedAt.getTime() + DISPATCH_DEADLINE_MS).toISOString(),
     nextAttemptAt: input.queuedAt.toISOString(),
     objectKey: input.objectKey,
+    organisation:
+      typeof input.asset.organisation === 'number'
+        ? input.asset.organisation
+        : input.asset.organisation?.id,
     owner: input.ownerID,
     processingJobId: input.processingJobId,
     queuedAt: input.queuedAt.toISOString(),
@@ -111,11 +115,18 @@ export async function setProcessingAssetStatus(
   req?: PayloadRequest,
   playReadyPackaged = false,
 ) {
+  const asset = await payload.findByID({
+    collection: 'media-assets',
+    depth: 0,
+    id: relationID(job.asset),
+    overrideAccess: true,
+  })
   const playbackData =
     status === 'ready'
       ? {
           drmContentId: `drm_${job.processingJobId}`,
-          expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          expiresAt:
+            asset.expiresAt ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           playReadyPackaged,
         }
       : {}

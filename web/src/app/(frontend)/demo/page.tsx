@@ -21,7 +21,8 @@ export default async function DemoPage() {
 
   const member = await getPilotMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
-  const organisationMemberships = await (await getPayload({ config })).find({
+  const payload = await getPayload({ config })
+  const organisationMemberships = await payload.find({
     collection: 'organisation-memberships',
     depth: 0,
     limit: 100,
@@ -41,8 +42,58 @@ export default async function DemoPage() {
         : organisationMemberships.docs[0]!.organisation.id
       : null
   const organisationSettings = organisationID
-    ? await getOrganisationSettingsState(await getPayload({ config }), member, organisationID)
+    ? await getOrganisationSettingsState(payload, member, organisationID)
     : null
+  const uploadMemberships = await payload.find({
+    collection: 'organisation-memberships',
+    depth: 0,
+    limit: 100,
+    overrideAccess: true,
+    where: {
+      and: [
+        { member: { equals: member.id } },
+        { role: { in: ['administrator', 'publisher'] } },
+        { status: { equals: 'active' } },
+      ],
+    },
+  })
+  const uploadOrganisations = (
+    await Promise.all(
+      uploadMemberships.docs.map(async (membership) => {
+        const uploadOrganisationID =
+          typeof membership.organisation === 'number'
+            ? membership.organisation
+            : membership.organisation.id
+        const [organisation, settings] = await Promise.all([
+          payload.findByID({
+            collection: 'organisations',
+            depth: 0,
+            id: uploadOrganisationID,
+            overrideAccess: true,
+          }),
+          payload.find({
+            collection: 'organisation-settings',
+            depth: 0,
+            limit: 1,
+            overrideAccess: true,
+            where: { organisation: { equals: uploadOrganisationID } },
+          }),
+        ])
+        const policy = settings.docs[0]
+        if (!policy || organisation.status !== 'active') return null
+        return {
+          defaultRetentionDays: policy.defaultRetentionDays,
+          drmDefault: policy.drmDefault,
+          drmRequired: policy.drmRequired ?? false,
+          id: organisation.id,
+          maximumUploadSizeBytes: policy.maximumUploadSizeBytes,
+          name: organisation.name,
+        }
+      }),
+    )
+  ).filter(
+    (organisation): organisation is NonNullable<typeof organisation> => organisation !== null,
+  )
 
   return (
     <main className="demo-page shell" id="main-content">
@@ -54,7 +105,11 @@ export default async function DemoPage() {
         Signed in as {member.name} ({member.email}). The secure-video workspace is ready.
       </p>
       {organisationSettings?.settings?.logoDataURL && (
-        <img alt="Organisation Logo" className="organisation-logo" src={organisationSettings.settings.logoDataURL} />
+        <img
+          alt="Organisation Logo"
+          className="organisation-logo"
+          src={organisationSettings.settings.logoDataURL}
+        />
       )}
       <div className="demo-actions">
         {member.role === 'operator' && (
@@ -72,7 +127,9 @@ export default async function DemoPage() {
             className="text-link"
             href={`/demo/organisations/${organisationID}/${organisationSettings.settings ? 'settings' : 'setup'}`}
           >
-            {organisationSettings.settings ? 'Organisation settings' : 'Complete Organisation setup'}
+            {organisationSettings.settings
+              ? 'Organisation settings'
+              : 'Complete Organisation setup'}
           </Link>
         )}
         {organisationMemberships.docs.map((membership) => (
@@ -90,7 +147,7 @@ export default async function DemoPage() {
           </button>
         </form>
       </div>
-      <MediaLibrary canUpload={member.role === 'uploader'} />
+      <MediaLibrary uploadOrganisations={uploadOrganisations} />
     </main>
   )
 }

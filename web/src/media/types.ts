@@ -13,6 +13,10 @@ export const mediaAssetStatuses = [
 
 export type MediaAssetStatus = (typeof mediaAssetStatuses)[number]
 
+export const mediaProtectionPolicies = ['protected', 'standard'] as const
+
+export type MediaProtectionPolicy = (typeof mediaProtectionPolicies)[number]
+
 export interface MediaAssetSummary {
   createdAt: string
   fileName: string
@@ -36,6 +40,9 @@ export interface MediaAssetDetail extends MediaAssetSummary {
 export interface UploadMetadata {
   fileFingerprint: string
   fileName: string
+  mediaProtectionPolicy?: MediaProtectionPolicy
   mimeType: string
+  organisationID?: number
+  retentionDays?: number
   size: number
 }

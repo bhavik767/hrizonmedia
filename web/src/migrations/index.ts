@@ -16,6 +16,7 @@ import * as migration_20260922_020000_issue74_leak_audit_action from './20260922
 import * as migration_20260923_000000_issue84_organisation_foundation from './20260923_000000_issue84_organisation_foundation';
 import * as migration_20260923_010000_issue88_organisation_settings from './20260923_010000_issue88_organisation_settings';
 import * as migration_20260923_010000_issue89_organisation_invitations from './20260923_010000_issue89_organisation_invitations';
+import * as migration_20260923_020000_issue90_organisation_uploads from './20260923_020000_issue90_organisation_uploads';
 
 export const migrations = [
   {
@@ -107,5 +108,10 @@ export const migrations = [
     up: migration_20260923_010000_issue89_organisation_invitations.up,
     down: migration_20260923_010000_issue89_organisation_invitations.down,
     name: '20260923_010000_issue89_organisation_invitations',
+  },
+  {
+    up: migration_20260923_020000_issue90_organisation_uploads.up,
+    down: migration_20260923_020000_issue90_organisation_uploads.down,
+    name: '20260923_020000_issue90_organisation_uploads',
   },
 ];

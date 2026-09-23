@@ -280,6 +280,31 @@ test.describe('Media Asset tracer bullet', () => {
     expect(partRequests.get('2')).toBe(2)
   })
 
+  test('limits direct multipart transfers to three concurrent parts', async ({ page }) => {
+    let activeTransfers = 0
+    let maximumConcurrentTransfers = 0
+    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/\d+\/content$/, async (route) => {
+      activeTransfers += 1
+      maximumConcurrentTransfers = Math.max(maximumConcurrentTransfers, activeTransfers)
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      await route.continue()
+      activeTransfers -= 1
+    })
+
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles({
+      buffer: mp4Fixture(60, 15 * 1024 * 1024 + 1),
+      mimeType: 'video/mp4',
+      name: 'parallel-lesson.mp4',
+    })
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+
+    await expect(
+      page.getByRole('article', { name: 'parallel-lesson.mp4' }).getByText('ready'),
+    ).toBeVisible({ timeout: 45_000 })
+    expect(maximumConcurrentTransfers).toBe(3)
+  })
+
   test('resumes completed parts after reload when the same file is reselected', async ({
     page,
   }) => {
