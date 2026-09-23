@@ -83,7 +83,7 @@ export async function createOrganisation(
   try {
     const organisation = await payload.create({
       collection: 'organisations',
-      data: { name, status: 'active' },
+      data: { initialAdministrator: initialAdministrator.id, name, status: 'active' },
       overrideAccess: true,
       req,
     })

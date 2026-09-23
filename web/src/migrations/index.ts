@@ -14,6 +14,7 @@ import * as migration_20260922_000000_issue74_leak_ids from './20260922_000000_i
 import * as migration_20260922_010000_issue76_playready_packaged from './20260922_010000_issue76_playready_packaged';
 import * as migration_20260922_020000_issue74_leak_audit_action from './20260922_020000_issue74_leak_audit_action';
 import * as migration_20260923_000000_issue84_organisation_foundation from './20260923_000000_issue84_organisation_foundation';
+import * as migration_20260923_010000_issue88_organisation_settings from './20260923_010000_issue88_organisation_settings';
 
 export const migrations = [
   {
@@ -95,5 +96,10 @@ export const migrations = [
     up: migration_20260923_000000_issue84_organisation_foundation.up,
     down: migration_20260923_000000_issue84_organisation_foundation.down,
     name: '20260923_000000_issue84_organisation_foundation',
+  },
+  {
+    up: migration_20260923_010000_issue88_organisation_settings.up,
+    down: migration_20260923_010000_issue88_organisation_settings.down,
+    name: '20260923_010000_issue88_organisation_settings',
   },
 ];

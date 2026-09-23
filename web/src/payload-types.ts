@@ -1185,6 +1185,7 @@ export interface PilotMember {
 export interface Organisation {
   id: number;
   name: string;
+  initialAdministrator?: (number | null) | PilotMember;
   status: 'active' | 'deleted';
   updatedAt: string;
   createdAt: string;
@@ -1213,6 +1214,8 @@ export interface OrganisationSetting {
   drmRequired?: boolean | null;
   defaultRetentionDays: number;
   maximumUploadSizeBytes: number;
+  setupCompletedAt: string;
+  logoDataURL?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2214,6 +2217,7 @@ export interface PilotMembersSelect<T extends boolean = true> {
  */
 export interface OrganisationsSelect<T extends boolean = true> {
   name?: T;
+  initialAdministrator?: T;
   status?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -2240,6 +2244,8 @@ export interface OrganisationSettingsSelect<T extends boolean = true> {
   drmRequired?: T;
   defaultRetentionDays?: T;
   maximumUploadSizeBytes?: T;
+  setupCompletedAt?: T;
+  logoDataURL?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -1,9 +1,12 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { getPayload } from 'payload'
 
 import { ensureDemoEnabled } from '@/pilot/demoAvailability'
 import { getPilotMember } from '@/pilot/session'
+import { getOrganisationSettingsState } from '@/organisations/settings'
+import config from '@/payload.config'
 
 import { signOut } from './actions'
 import { MediaLibrary } from './MediaLibrary'
@@ -18,6 +21,28 @@ export default async function DemoPage() {
 
   const member = await getPilotMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
+  const memberships = await (await getPayload({ config })).find({
+    collection: 'organisation-memberships',
+    depth: 0,
+    limit: 2,
+    overrideAccess: true,
+    where: {
+      and: [
+        { member: { equals: member.id } },
+        { role: { equals: 'administrator' } },
+        { status: { equals: 'active' } },
+      ],
+    },
+  })
+  const organisationID =
+    memberships.docs.length === 1
+      ? typeof memberships.docs[0]!.organisation === 'number'
+        ? memberships.docs[0]!.organisation
+        : memberships.docs[0]!.organisation.id
+      : null
+  const organisationSettings = organisationID
+    ? await getOrganisationSettingsState(await getPayload({ config }), member, organisationID)
+    : null
 
   return (
     <main className="demo-page shell" id="main-content">
@@ -38,6 +63,14 @@ export default async function DemoPage() {
               Invite Pilot Members
             </Link>
           </>
+        )}
+        {organisationSettings && (
+          <Link
+            className="text-link"
+            href={`/demo/organisations/${organisationID}/${organisationSettings.settings ? 'settings' : 'setup'}`}
+          >
+            {organisationSettings.settings ? 'Organisation settings' : 'Complete Organisation setup'}
+          </Link>
         )}
         <form action={signOut}>
           <button className="text-button" type="submit">
