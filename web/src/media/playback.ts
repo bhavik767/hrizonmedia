@@ -6,6 +6,7 @@ import type { Payload } from 'payload'
 
 import type { MediaAsset, PilotMember, PlaybackGrant } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
+import { authorizeOrganisationMedia } from '@/organisations/authorization'
 import { assertMediaActivityAllowed } from '@/pilot/operations'
 import {
   isProtectedPlaybackBrowser,
@@ -75,6 +76,10 @@ function relationID(value: number | { id: number }): number {
   return typeof value === 'number' ? value : value.id
 }
 
+function optionalRelationID(value: number | { id: number } | null | undefined): number | undefined {
+  return value === null || value === undefined ? undefined : relationID(value)
+}
+
 function signingSecret(): string {
   const secret = process.env.PAYLOAD_SECRET
   if (secret) return secret
@@ -130,21 +135,21 @@ function decodeClaims(
   return claims
 }
 
-async function activeUploader(payload: Payload, member: PilotMember): Promise<PilotMember> {
+async function activePlaybackMember(payload: Payload, member: PilotMember): Promise<PilotMember> {
   const current = await payload.findByID({
     collection: 'pilot-members',
     id: member.id,
     overrideAccess: true,
   })
-  if (current.status !== 'active' || current.role !== 'uploader') {
-    throw new PlaybackAuthorizationError('Uploader authentication required.', 401)
+  if (current.status !== 'active') {
+    throw new PlaybackAuthorizationError('Active authentication required.', 401)
   }
   return current
 }
 
-async function ownedAsset(
+async function accessiblePlaybackAsset(
   payload: Payload,
-  owner: PilotMember,
+  member: PilotMember,
   mediaAssetId: MediaAssetId,
 ): Promise<MediaAsset> {
   const result = await payload.find({
@@ -152,12 +157,17 @@ async function ownedAsset(
     depth: 0,
     limit: 1,
     overrideAccess: true,
-    where: {
-      and: [{ mediaAssetId: { equals: mediaAssetId } }, { owner: { equals: owner.id } }],
-    },
+    where: { mediaAssetId: { equals: mediaAssetId } },
   })
   const asset = result.docs[0]
   if (!asset || asset.status === 'deleted') {
+    throw new PlaybackAuthorizationError('Media Asset not found.', 404)
+  }
+  if (asset.organisation) {
+    await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'play' })
+  } else if (member.role !== 'uploader') {
+    throw new PlaybackAuthorizationError('Uploader authentication required.', 401)
+  } else if (relationID(asset.owner) !== member.id) {
     throw new PlaybackAuthorizationError('Media Asset not found.', 404)
   }
   return asset
@@ -248,8 +258,8 @@ export async function createPlaybackGrant(
   const now = options.now ?? new Date()
   const providers = options.providers ?? getMediaProviders()
   const browser = options.browser ?? widevinePlaybackBrowser
-  const owner = await activeUploader(payload, member)
-  const asset = await ownedAsset(payload, owner, mediaAssetId)
+  const owner = await activePlaybackMember(payload, member)
+  const asset = await accessiblePlaybackAsset(payload, owner, mediaAssetId)
   assertPlayable(asset, now, browser)
 
   const playbackGrantId = newPlaybackGrantId()
@@ -264,6 +274,7 @@ export async function createPlaybackGrant(
       expiresAt: expiresAt.toISOString(),
       leakId: watermark.leakId,
       leakIdIssuedAt: watermark.issuedAt,
+      organisation: optionalRelationID(asset.organisation),
       owner: owner.id,
       playbackGrantId,
     },
@@ -301,6 +312,7 @@ export async function createPlaybackGrant(
     action: 'playback_granted',
     actorID: owner.id,
     assetID: asset.id,
+    organisationID: optionalRelationID(asset.organisation),
     eventKey: `playback-grant:${playbackGrantId}:granted`,
     occurredAt: now,
   })
@@ -331,7 +343,7 @@ export async function refreshPlaybackWatermark(
 ): Promise<PlaybackWatermark> {
   await assertMediaActivityAllowed(payload)
   const now = options.now ?? new Date()
-  const owner = await activeUploader(payload, member)
+  const owner = await activePlaybackMember(payload, member)
   const claims = decodeClaims(token, 'grant', now)
   if (options.requestedPlaybackGrantId && claims.grant !== options.requestedPlaybackGrantId) {
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
@@ -340,7 +352,7 @@ export async function refreshPlaybackWatermark(
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
   }
   const grant = await storedGrant(payload, claims)
-  const asset = await ownedAsset(payload, owner, claims.asset)
+  const asset = await accessiblePlaybackAsset(payload, owner, claims.asset)
   assertPlayable(asset, now, claims.browser)
   const current = storedPlaybackWatermark(grant)
   if (now.getTime() - new Date(current.issuedAt).getTime() < WATERMARK_ROTATION_INTERVAL_MS) {
@@ -377,7 +389,7 @@ export async function acquirePlaybackLicence(
   await assertMediaActivityAllowed(payload)
   const now = options.now ?? new Date()
   const providers = options.providers ?? getMediaProviders()
-  const owner = await activeUploader(payload, member)
+  const owner = await activePlaybackMember(payload, member)
   const claims = decodeClaims(token, 'grant', now)
   if (options.requestedPlaybackGrantId && claims.grant !== options.requestedPlaybackGrantId) {
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
@@ -386,7 +398,7 @@ export async function acquirePlaybackLicence(
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
   }
   await storedGrant(payload, claims)
-  const asset = await ownedAsset(payload, owner, claims.asset)
+  const asset = await accessiblePlaybackAsset(payload, owner, claims.asset)
   assertPlayable(asset, now)
   const contract = providers.drm.createPlaybackContract({
     browser: claims.browser,
@@ -402,6 +414,7 @@ export async function acquirePlaybackLicence(
     action: 'playback_licence_acquired',
     actorID: owner.id,
     assetID: asset.id,
+    organisationID: optionalRelationID(asset.organisation),
     eventKey: `playback-grant:${claims.grant}:licence:${now.toISOString()}:${randomUUID()}`,
     occurredAt: now,
   })
@@ -417,7 +430,7 @@ export async function authorizePlaybackResource(
 ) {
   await assertMediaActivityAllowed(payload)
   const now = options.now ?? new Date()
-  const owner = await activeUploader(payload, member)
+  const owner = await activePlaybackMember(payload, member)
   const claims = decodeClaims(token, 'delivery', now)
   if (claims.owner !== owner.id) {
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
@@ -426,12 +439,8 @@ export async function authorizePlaybackResource(
     throw new PlaybackAuthorizationError('Playback authorization is scoped to another asset.', 403)
   }
   const grant = await storedGrant(payload, claims)
-  const asset = await payload.findByID({
-    collection: 'media-assets',
-    id: relationID(grant.asset),
-    overrideAccess: true,
-  })
-  if (asset.mediaAssetId !== claims.asset) {
+  const asset = await accessiblePlaybackAsset(payload, owner, claims.asset)
+  if (asset.id !== relationID(grant.asset)) {
     throw new PlaybackAuthorizationError('Playback authorization is invalid.', 403)
   }
   assertPlayable(asset, now)

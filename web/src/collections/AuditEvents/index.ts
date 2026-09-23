@@ -13,6 +13,7 @@ export const AuditEvents: CollectionConfig = {
   admin: { hidden: true, useAsTitle: 'action' },
   fields: [
     { name: 'eventKey', type: 'text', required: true, unique: true, index: true },
+    { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
     {
       name: 'action',
       type: 'select',

@@ -13,6 +13,7 @@ import * as migration_20260916_184500_issue43_provider_upload_data from './20260
 import * as migration_20260922_000000_issue74_leak_ids from './20260922_000000_issue74_leak_ids';
 import * as migration_20260922_010000_issue76_playready_packaged from './20260922_010000_issue76_playready_packaged';
 import * as migration_20260922_020000_issue74_leak_audit_action from './20260922_020000_issue74_leak_audit_action';
+import * as migration_20260923_000000_issue84_organisation_foundation from './20260923_000000_issue84_organisation_foundation';
 
 export const migrations = [
   {
@@ -89,5 +90,10 @@ export const migrations = [
     up: migration_20260922_020000_issue74_leak_audit_action.up,
     down: migration_20260922_020000_issue74_leak_audit_action.down,
     name: '20260922_020000_issue74_leak_audit_action',
+  },
+  {
+    up: migration_20260923_000000_issue84_organisation_foundation.up,
+    down: migration_20260923_000000_issue84_organisation_foundation.down,
+    name: '20260923_000000_issue84_organisation_foundation',
   },
 ];

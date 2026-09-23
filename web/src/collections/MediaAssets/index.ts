@@ -12,6 +12,7 @@ export const MediaAssets: CollectionConfig = {
   admin: { hidden: true, useAsTitle: 'fileName' },
   fields: [
     { name: 'mediaAssetId', type: 'text', required: true, unique: true, index: true },
+    { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
     {
       name: 'owner',
       type: 'relationship',
