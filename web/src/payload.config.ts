@@ -13,6 +13,7 @@ import { MediaAccess } from './collections/MediaAccess'
 import { MediaAssets } from './collections/MediaAssets'
 import { MediaOperations } from './collections/MediaOperations'
 import { OrganisationMemberships } from './collections/OrganisationMemberships'
+import { OrganisationInvitations } from './collections/OrganisationInvitations'
 import { OrganisationSettings } from './collections/OrganisationSettings'
 import { Organisations } from './collections/Organisations'
 import { Pages } from './collections/Pages'
@@ -124,6 +125,7 @@ export default buildConfig({
     PilotMembers,
     Organisations,
     OrganisationMemberships,
+    OrganisationInvitations,
     OrganisationSettings,
     PlatformAdministrators,
     MediaAssets,

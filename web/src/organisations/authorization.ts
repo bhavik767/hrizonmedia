@@ -61,6 +61,21 @@ export async function requirePlatformAdministrator(
   }
 }
 
+export async function requireOrganisationAdministrator(
+  payload: Payload,
+  member: PilotMember,
+  organisationID: number,
+): Promise<OrganisationMediaAuthorization> {
+  const authorization = await authorizeOrganisationMedia(payload, member, {
+    operation: 'manage',
+    organisationID,
+  })
+  if (authorization.role !== 'administrator' || authorization.membershipID === null) {
+    throw new OrganisationAuthorizationError('Active Organisation Administrator access required.', 403)
+  }
+  return authorization
+}
+
 async function findActiveMembership(payload: Payload, memberID: number, organisationID: number) {
   const result = await payload.find({
     collection: 'organisation-memberships',
