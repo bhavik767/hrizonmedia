@@ -394,6 +394,7 @@ export async function receiveUploadPart(
   partNumber: number,
   bytes: Uint8Array,
   providers: MediaProviders = getMediaProviders(),
+  part: { checksumSHA256?: string } = {},
 ): Promise<CompletedPart> {
   await assertMediaActivityAllowed(payload)
   const session = await requirePendingSession(payload, owner, uploadSessionId, providers)
@@ -404,6 +405,7 @@ export async function receiveUploadPart(
   const receiver = providers.storage as StorageProvider & {
     receivePart?: (input: {
       bytes: Uint8Array
+      checksumSHA256?: string
       partNumber: number
       providerUploadId: ProviderUploadId
     }) => Promise<CompletedPart>
@@ -414,6 +416,7 @@ export async function receiveUploadPart(
   try {
     return await receiver.receivePart({
       bytes,
+      checksumSHA256: part.checksumSHA256,
       partNumber,
       providerUploadId: providerUploadID(session),
     })
@@ -444,10 +447,11 @@ export async function completeUpload(
 ): Promise<MediaAssetSummary> {
   await assertMediaActivityAllowed(payload)
   const session = await requirePendingSession(payload, owner, uploadSessionId, providers)
+  const normalizedParts = [...parts].sort((left, right) => left.partNumber - right.partNumber)
   let stored
   try {
     stored = await providers.storage.completeMultipart({
-      parts,
+      parts: normalizedParts,
       providerUploadData: providerUploadData(session),
       providerUploadId: providerUploadID(session),
     })

@@ -17,10 +17,11 @@ export async function POST(
       body.parts.length === 0 ||
       body.parts.length > 410 ||
       body.parts.some(
-        (part, index) =>
+        (part) =>
           typeof part !== 'object' ||
           part === null ||
-          part.partNumber !== index + 1 ||
+          !Number.isSafeInteger(part.partNumber) ||
+          part.partNumber < 1 ||
           !Number.isSafeInteger(part.size) ||
           part.size <= 0 ||
           part.size > 5 * 1024 * 1024 ||
@@ -28,7 +29,8 @@ export async function POST(
           part.etag.length > 128 ||
           typeof part.checksumSHA256 !== 'string' ||
           !/^[0-9a-f]{64}$/.test(part.checksumSHA256),
-      )
+      ) ||
+      new Set(body.parts.map((part) => part.partNumber)).size !== body.parts.length
     ) {
       return Response.json({ error: 'Uploaded parts are required.' }, { status: 400 })
     }

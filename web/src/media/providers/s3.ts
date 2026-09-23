@@ -326,6 +326,7 @@ export function createS3StorageProvider(
 
     async completeMultipart({ parts, providerUploadData, providerUploadId }) {
       const descriptor = readS3UploadState(providerUploadId, providerUploadData)
+      const orderedParts = [...parts].sort((left, right) => left.partNumber - right.partNumber)
       let stored: CompletedPart[]
       try {
         stored = await listedParts(descriptor)
@@ -345,15 +346,15 @@ export function createS3StorageProvider(
       }
       if (
         stored.length === 0 ||
-        stored.length !== parts.length ||
+        stored.length !== orderedParts.length ||
         stored.reduce((total, part) => total + part.size, 0) !== descriptor.size ||
         stored.some(
           (part, index) =>
             part.partNumber !== index + 1 ||
-            part.partNumber !== parts[index]?.partNumber ||
-            part.size !== parts[index]?.size ||
-            part.etag !== normalizeETag(parts[index]?.etag) ||
-            part.checksumSHA256 !== parts[index]?.checksumSHA256,
+            part.partNumber !== orderedParts[index]?.partNumber ||
+            part.size !== orderedParts[index]?.size ||
+            part.etag !== normalizeETag(orderedParts[index]?.etag) ||
+            part.checksumSHA256 !== orderedParts[index]?.checksumSHA256,
         )
       ) {
         throw new MultipartUploadError('Uploaded parts do not match private storage.')
