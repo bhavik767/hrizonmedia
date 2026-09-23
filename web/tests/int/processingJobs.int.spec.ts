@@ -111,9 +111,7 @@ describe('reliable Processing Jobs', () => {
   it('dispatches a completed upload immediately with idempotency and adaptive outputs', async () => {
     const provider = { ...fakeTranscodeProvider, queue: vi.fn(fakeTranscodeProvider.queue) }
     const session = await upload(fixture('1280x720:2'), provider)
-    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
-      now: start,
-    })
+    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId)
 
     expect(provider.queue).toHaveBeenCalledOnce()
     expect(provider.queue).toHaveBeenCalledWith(
@@ -280,7 +278,7 @@ describe('reliable Processing Jobs', () => {
 
     expect(queue).toHaveBeenCalledOnce()
     await expect(
-      getVisibleAsset(payload, uploader, session.asset.mediaAssetId, { now: start }),
+      getVisibleAsset(payload, uploader, session.asset.mediaAssetId),
     ).resolves.toMatchObject({
       status: 'processing',
     })
@@ -443,10 +441,7 @@ describe('reliable Processing Jobs', () => {
       provider: transientProvider,
     })
 
-    const failed = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
-      now: at('2026-09-14T12:00:06.000Z'),
-      provider: transientProvider,
-    })
+    const failed = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId)
     expect(failed).toMatchObject({
       canRetry: true,
       failureMessage:
@@ -504,7 +499,7 @@ describe('reliable Processing Jobs', () => {
     expect(after.processingJobId).toBe(jobs.docs[0]!.processingJobId)
     expect(after.status).toBe('processing')
     await expect(
-      getVisibleAsset(payload, uploader, session.asset.mediaAssetId, { now: start }),
+      getVisibleAsset(payload, uploader, session.asset.mediaAssetId),
     ).resolves.toBeTruthy()
   })
 
@@ -512,9 +507,7 @@ describe('reliable Processing Jobs', () => {
     const session = await upload(fixture('1920x1080:600'))
 
     await runProcessingCycle(payload, { now: at('2026-09-14T12:14:00.000Z') })
-    const ready = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
-      now: at('2026-09-14T12:14:00.000Z'),
-    })
+    const ready = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId)
 
     expect(ready.status).toBe('ready')
     expect(at(ready.readyAt!).getTime() - start.getTime()).toBeLessThanOrEqual(15 * 60 * 1000)
@@ -540,10 +533,7 @@ describe('reliable Processing Jobs', () => {
       overrideAccess: true,
     })
 
-    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
-      now: start,
-      provider,
-    })
+    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId)
     expect(detail.canRetry).toBe(false)
     await expect(
       retryVisibleAssetProcessing(payload, uploader, session.asset.mediaAssetId, { now: start }),

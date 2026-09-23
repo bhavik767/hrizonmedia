@@ -541,10 +541,7 @@ export async function cleanupAbandonedUploads(
 export async function listVisibleAssets(
   payload: Payload,
   member: PilotMember,
-  processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary[]> {
-  await cleanupAbandonedUploads(payload)
-  await runProcessingCycle(payload, processingOptions)
   const result = await payload.find({
     collection: 'media-assets',
     depth: 0,
@@ -565,9 +562,7 @@ export async function getVisibleAsset(
   payload: Payload,
   member: PilotMember,
   mediaAssetId: MediaAssetId,
-  processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetDetail> {
-  await runProcessingCycle(payload, processingOptions)
   const result = await payload.find({
     collection: 'media-assets',
     depth: 0,

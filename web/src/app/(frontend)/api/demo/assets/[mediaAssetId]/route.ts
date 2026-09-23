@@ -1,5 +1,5 @@
 import { parseMediaAssetId } from '@/media/identifiers'
-import { deleteMediaAsset, runMediaLifecycle } from '@/media/lifecycle'
+import { deleteMediaAsset } from '@/media/lifecycle'
 import { getVisibleAsset } from '@/media/library'
 import { withAuthenticatedPilotMember } from '@/media/request'
 
@@ -11,7 +11,6 @@ export async function GET(
     const { mediaAssetId } = await context.params
     const parsedID = parseMediaAssetId(mediaAssetId)
     if (!parsedID) return Response.json({ error: 'Media Asset not found.' }, { status: 404 })
-    await runMediaLifecycle(payload)
     return Response.json({ asset: await getVisibleAsset(payload, member, parsedID) })
   })
 }

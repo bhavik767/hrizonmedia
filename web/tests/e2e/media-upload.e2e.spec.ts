@@ -116,6 +116,70 @@ test.describe('Media Asset tracer bullet', () => {
     await expect(page.getByText('Your library is empty.')).toBeVisible()
   })
 
+  test('issue 86: opens the Media Library without processing queued Media Assets', async ({
+    page,
+  }) => {
+    await signIn(page, testInvitee)
+    await page.getByLabel('Video file').setInputFiles({
+      buffer: mp4Fixture(),
+      mimeType: 'video/mp4',
+      name: 'expired-lesson.mp4',
+    })
+    await page.getByRole('button', { name: 'Upload asset' }).click()
+    const asset = page.getByRole('article', { name: 'expired-lesson.mp4' })
+    await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
+    const detailURL = await asset.getByRole('link', { name: 'Inspect asset' }).getAttribute('href')
+    const mediaAssetId = detailURL!.split('/').at(-1)!
+    const payload = await getPayload({ config })
+    const assets = await payload.find({
+      collection: 'media-assets',
+      limit: 1,
+      overrideAccess: true,
+      where: { mediaAssetId: { equals: mediaAssetId } },
+    })
+    await payload.update({
+      collection: 'processing-jobs',
+      data: {
+        attempts: 0,
+        dispatchedAt: null,
+        nextAttemptAt: new Date(Date.now() - 1).toISOString(),
+        providerJobId: null,
+        status: 'queued',
+      },
+      overrideAccess: true,
+      where: { asset: { equals: assets.docs[0]!.id } },
+    })
+    await payload.update({
+      collection: 'media-assets',
+      data: {
+        expiresAt: new Date(Date.now() - 1).toISOString(),
+        status: 'ready',
+        statusChangedAt: new Date().toISOString(),
+      },
+      overrideAccess: true,
+      where: { mediaAssetId: { equals: mediaAssetId } },
+    })
+
+    await page.reload()
+    await expect(asset.getByText('ready', { exact: true })).toBeVisible()
+    await expect(
+      payload.find({
+        collection: 'media-assets',
+        limit: 1,
+        overrideAccess: true,
+        where: { mediaAssetId: { equals: mediaAssetId } },
+      }),
+    ).resolves.toMatchObject({ docs: [{ status: 'ready' }] })
+    await expect(
+      payload.find({
+        collection: 'processing-jobs',
+        limit: 1,
+        overrideAccess: true,
+        where: { asset: { equals: assets.docs[0]!.id } },
+      }),
+    ).resolves.toMatchObject({ docs: [{ status: 'queued' }] })
+  })
+
   test('issue 38: keeps an expired Media Asset visible while blocking new playback', async ({
     page,
   }) => {
@@ -138,6 +202,8 @@ test.describe('Media Asset tracer bullet', () => {
       where: { mediaAssetId: { equals: mediaAssetId } },
     })
 
+    await payload.jobs.queue({ input: {}, queue: 'media-processing', task: 'process-media-jobs' })
+    await payload.jobs.run({ limit: 1, queue: 'media-processing' })
     await page.reload()
     await expect(asset.getByText('expired', { exact: true })).toBeVisible({ timeout: 45_000 })
     await asset.getByRole('link', { name: 'Inspect asset' }).click()
