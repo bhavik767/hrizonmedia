@@ -12,12 +12,13 @@ import { ensureDemoEnabled } from '@/members/demoAvailability'
 import { getMember } from '@/members/session'
 
 import { signOut } from '../../actions'
+import { DashboardShell } from '../../DashboardShell'
 import { DeleteAssetButton } from './DeleteAssetButton'
 import { RetryProcessingButton } from './RetryProcessingButton'
 import { PlaybackPlayer } from './PlaybackPlayer'
 import { MediaAccessControls } from './MediaAccessControls'
 
-export const metadata: Metadata = { title: 'Media Asset | HrizonMedia Demo' }
+export const metadata: Metadata = { title: 'Media Asset | WeCloud Dashboard' }
 
 export default async function AssetPage({ params }: { params: Promise<{ mediaAssetId: string }> }) {
   await ensureDemoEnabled()
@@ -41,66 +42,68 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
   }
 
   return (
-    <main className="demo-page shell" id="main-content">
-      <p className="eyebrow">
-        <span aria-hidden="true" />
-        Private Media Asset
-      </p>
-      <h1>{asset.fileName}</h1>
-      <dl className="asset-detail">
-        <div>
-          <dt>Status</dt>
-          <dd>{asset.status}</dd>
-        </div>
-        <div>
-          <dt>Media Asset ID</dt>
-          <dd>{asset.mediaAssetId}</dd>
-        </div>
-        <div>
-          <dt>Upload Session ID</dt>
-          <dd>{asset.uploadSessionId}</dd>
-        </div>
-        <div>
-          <dt>Processing Job ID</dt>
-          <dd>{asset.processingJobId}</dd>
-        </div>
-        <div>
-          <dt>Provider Job ID</dt>
-          <dd>{asset.providerJobId}</dd>
-        </div>
-        {asset.renditions && (
+    <DashboardShell currentPath="/demo">
+      <main className="dashboard-content demo-page" id="main-content">
+        <p className="eyebrow">
+          <span aria-hidden="true" />
+          Private Media Asset
+        </p>
+        <h1>{asset.fileName}</h1>
+        <dl className="asset-detail">
           <div>
-            <dt>Adaptive outputs</dt>
-            <dd>{asset.renditions.map(({ height }) => `${height}p H.264/AAC`).join(', ')}</dd>
+            <dt>Status</dt>
+            <dd>{asset.status}</dd>
           </div>
-        )}
-      </dl>
-      {asset.status === 'ready' && <PlaybackPlayer mediaAssetId={asset.mediaAssetId} />}
-      {asset.canShare && (
-        <MediaAccessControls mediaAssetId={asset.mediaAssetId} viewers={accessViewers} />
-      )}
-      {asset.status === 'failed' && asset.failureMessage && (
-        <section aria-labelledby="processing-failure-title" className="processing-failure">
-          <h2 id="processing-failure-title">Processing failed</h2>
-          <p>{asset.failureMessage}</p>
-          {asset.canManage && asset.canRetry ? (
-            <RetryProcessingButton mediaAssetId={asset.mediaAssetId} />
-          ) : (
-            <p>The source is no longer available. Upload the video again to continue.</p>
+          <div>
+            <dt>Media Asset ID</dt>
+            <dd>{asset.mediaAssetId}</dd>
+          </div>
+          <div>
+            <dt>Upload Session ID</dt>
+            <dd>{asset.uploadSessionId}</dd>
+          </div>
+          <div>
+            <dt>Processing Job ID</dt>
+            <dd>{asset.processingJobId}</dd>
+          </div>
+          <div>
+            <dt>Provider Job ID</dt>
+            <dd>{asset.providerJobId}</dd>
+          </div>
+          {asset.renditions && (
+            <div>
+              <dt>Adaptive outputs</dt>
+              <dd>{asset.renditions.map(({ height }) => `${height}p H.264/AAC`).join(', ')}</dd>
+            </div>
           )}
-        </section>
-      )}
-      <div className="demo-actions">
-        {asset.canManage && <DeleteAssetButton mediaAssetId={asset.mediaAssetId} />}
-        <Link className="text-link" href="/demo">
-          Back to library
-        </Link>
-        <form action={signOut}>
-          <button className="text-button" type="submit">
-            Sign out
-          </button>
-        </form>
-      </div>
-    </main>
+        </dl>
+        {asset.status === 'ready' && <PlaybackPlayer mediaAssetId={asset.mediaAssetId} />}
+        {asset.canShare && (
+          <MediaAccessControls mediaAssetId={asset.mediaAssetId} viewers={accessViewers} />
+        )}
+        {asset.status === 'failed' && asset.failureMessage && (
+          <section aria-labelledby="processing-failure-title" className="processing-failure">
+            <h2 id="processing-failure-title">Processing failed</h2>
+            <p>{asset.failureMessage}</p>
+            {asset.canManage && asset.canRetry ? (
+              <RetryProcessingButton mediaAssetId={asset.mediaAssetId} />
+            ) : (
+              <p>The source is no longer available. Upload the video again to continue.</p>
+            )}
+          </section>
+        )}
+        <div className="demo-actions">
+          {asset.canManage && <DeleteAssetButton mediaAssetId={asset.mediaAssetId} />}
+          <Link className="text-link" href="/demo">
+            Back to library
+          </Link>
+          <form action={signOut}>
+            <button className="text-button" type="submit">
+              Sign out
+            </button>
+          </form>
+        </div>
+      </main>
+    </DashboardShell>
   )
 }

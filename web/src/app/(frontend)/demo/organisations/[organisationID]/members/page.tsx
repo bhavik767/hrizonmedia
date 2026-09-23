@@ -9,8 +9,9 @@ import { getMember } from '@/members/session'
 
 import { MembershipControls } from './MembershipControls'
 import { OrganisationInvitationForm } from './OrganisationInvitationForm'
+import { DashboardShell } from '../../../DashboardShell'
 
-export const metadata: Metadata = { title: 'Organisation Memberships | HrizonMedia Demo' }
+export const metadata: Metadata = { title: 'Organisation Memberships | WeCloud Dashboard' }
 
 export default async function OrganisationMembersPage({
   params,
@@ -22,7 +23,8 @@ export default async function OrganisationMembersPage({
   if (!Number.isSafeInteger(organisationID) || organisationID <= 0) notFound()
 
   const actor = await getMember()
-  if (!actor) redirect(`/demo/sign-in?returnTo=%2Fdemo%2Forganisations%2F${organisationID}%2Fmembers`)
+  if (!actor)
+    redirect(`/demo/sign-in?returnTo=%2Fdemo%2Forganisations%2F${organisationID}%2Fmembers`)
   const payload = await getPayload({ config })
   try {
     await requireOrganisationAdministrator(payload, actor, organisationID)
@@ -39,21 +41,23 @@ export default async function OrganisationMembersPage({
   })
 
   return (
-    <main className="demo-page shell" id="main-content">
-      <p className="eyebrow">
-        <span aria-hidden="true" /> Organisation Administrator access
-      </p>
-      <h1>Organisation Memberships</h1>
-      <OrganisationInvitationForm organisationID={organisationID} />
-      <h2>Current Memberships</h2>
-      <ul>
-        {memberships.docs.map((membership) => (
-          <li key={membership.id}>
-            Membership #{membership.id}: {membership.role} ({membership.status})
-            <MembershipControls membershipID={membership.id} organisationID={organisationID} />
-          </li>
-        ))}
-      </ul>
-    </main>
+    <DashboardShell currentPath="/demo">
+      <main className="dashboard-content demo-page" id="main-content">
+        <p className="eyebrow">
+          <span aria-hidden="true" /> Organisation Administrator access
+        </p>
+        <h1>Organisation Memberships</h1>
+        <OrganisationInvitationForm organisationID={organisationID} />
+        <h2>Current Memberships</h2>
+        <ul>
+          {memberships.docs.map((membership) => (
+            <li key={membership.id}>
+              Membership #{membership.id}: {membership.role} ({membership.status})
+              <MembershipControls membershipID={membership.id} organisationID={organisationID} />
+            </li>
+          ))}
+        </ul>
+      </main>
+    </DashboardShell>
   )
 }

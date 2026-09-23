@@ -18,7 +18,7 @@ test.describe('Member access', () => {
     await page.goto('/demo')
 
     await expect(page).toHaveURL('/demo/sign-in?returnTo=%2Fdemo')
-    await expect(page.getByRole('heading', { name: 'Sign in to the Demo' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Sign in to the Dashboard' })).toBeVisible()
   })
 
   test('an authenticated Member can enter the protected workspace but cannot administer the CMS', async ({
@@ -44,9 +44,7 @@ test.describe('Member access', () => {
     await expect(page).toHaveURL('/admin/unauthorized')
   })
 
-  test('a Member can sign out and is denied the protected Demo afterward', async ({
-    page,
-  }) => {
+  test('a Member can sign out and is denied the protected Demo afterward', async ({ page }) => {
     await page.goto('/demo/sign-in')
     await page.getByLabel('Email').fill(testOperator.email)
     await page.getByLabel('Password').fill(testOperator.password)

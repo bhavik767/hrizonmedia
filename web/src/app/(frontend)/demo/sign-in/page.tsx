@@ -5,7 +5,7 @@ import { ensureDemoEnabled } from '@/members/demoAvailability'
 import { signIn } from '../actions'
 
 export const metadata: Metadata = {
-  title: 'Sign in | HrizonMedia Demo',
+  title: 'Sign in | WeCloud Dashboard',
 }
 
 export default async function DemoSignInPage({
@@ -21,7 +21,7 @@ export default async function DemoSignInPage({
       <p className="eyebrow">
         <span aria-hidden="true" /> Private workspace
       </p>
-      <h1>Sign in to the Demo</h1>
+      <h1>Sign in to the Dashboard</h1>
       {params.setup === 'complete' && (
         <p className="form-message form-message--success">Password set. You can sign in now.</p>
       )}
