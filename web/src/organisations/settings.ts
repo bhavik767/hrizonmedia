@@ -2,6 +2,7 @@ import 'server-only'
 
 import { Buffer } from 'node:buffer'
 import type { Payload } from 'payload'
+import sharp from 'sharp'
 
 import { authorizeOrganisationMedia, OrganisationAuthorizationError } from './authorization'
 import type { OrganisationSetting, PilotMember } from '@/payload-types'
@@ -119,12 +120,18 @@ function logoMatchesMimeType(logo: OrganisationLogoInput): boolean {
   return false
 }
 
-function logoDataURL(logo: OrganisationLogoInput): string {
+async function logoDataURL(logo: OrganisationLogoInput): Promise<string> {
   if (logo.bytes.byteLength === 0 || logo.bytes.byteLength > MAXIMUM_LOGO_SIZE_BYTES) {
     throw new OrganisationSettingsError('Organisation Logos must be no larger than 3 MB.', 400)
   }
   if (!logoMatchesMimeType(logo)) {
     throw new OrganisationSettingsError('Organisation Logos must be PNG, JPEG, or WebP images.', 400)
+  }
+  try {
+    const metadata = await sharp(logo.bytes).metadata()
+    if (metadata.format !== logo.mimeType.replace('image/', '')) throw new Error('Mismatched format')
+  } catch {
+    throw new OrganisationSettingsError('Organisation Logos must be valid PNG, JPEG, or WebP images.', 400)
   }
   return `data:${logo.mimeType};base64,${Buffer.from(logo.bytes).toString('base64')}`
 }
@@ -167,7 +174,7 @@ export async function completeInitialOrganisationSetup(
     collection: 'organisation-settings',
     data: {
       ...settings,
-      logoDataURL: input.logo ? logoDataURL(input.logo) : undefined,
+      logoDataURL: input.logo ? await logoDataURL(input.logo) : undefined,
       organisation: organisationID,
       setupCompletedAt: new Date().toISOString(),
     },
@@ -227,7 +234,7 @@ export async function updateOrganisationLogo(
   const settings = await findOrganisationSettings(payload, organisationID)
   return payload.update({
     collection: 'organisation-settings',
-    data: { logoDataURL: logoDataURL(logo) },
+    data: { logoDataURL: await logoDataURL(logo) },
     id: settings.id,
     overrideAccess: true,
   })

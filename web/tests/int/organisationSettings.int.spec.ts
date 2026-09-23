@@ -150,7 +150,7 @@ describe('Organisation Settings', () => {
     })
 
     const logo = await updateOrganisationLogo(payload, initialAdministrator, organisation.id, {
-      bytes: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+      bytes: new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9aAAAAABJRU5ErkJggg==', 'base64')),
       mimeType: 'image/png',
     })
 

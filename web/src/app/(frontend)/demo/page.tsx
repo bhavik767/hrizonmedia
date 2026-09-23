@@ -53,6 +53,9 @@ export default async function DemoPage() {
       <p>
         Signed in as {member.name} ({member.email}). The secure-video workspace is ready.
       </p>
+      {organisationSettings?.settings?.logoDataURL && (
+        <img alt="Organisation Logo" className="organisation-logo" src={organisationSettings.settings.logoDataURL} />
+      )}
       <div className="demo-actions">
         {member.role === 'operator' && (
           <>
