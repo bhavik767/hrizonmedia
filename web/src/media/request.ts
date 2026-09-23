@@ -3,6 +3,8 @@ import { getPayload } from 'payload'
 import config from '@/payload.config'
 import type { PilotMember } from '@/payload-types'
 import { OperatorAuthorizationError } from '@/pilot/operations'
+import { OrganisationAuthorizationError } from '@/organisations/authorization'
+import { OrganisationSettingsError } from '@/organisations/settings'
 
 import { parseMediaAssetId, parsePlaybackGrantId, type DeliveryToken } from './identifiers'
 import { authorizePlaybackResource, PlaybackAuthorizationError } from './playback'
@@ -52,7 +54,9 @@ export function mediaErrorResponse(error: unknown): Response {
     error instanceof MediaLibraryError ||
     error instanceof PlaybackCompatibilityError ||
     error instanceof PlaybackAuthorizationError ||
-    error instanceof OperatorAuthorizationError
+    error instanceof OperatorAuthorizationError ||
+    error instanceof OrganisationAuthorizationError ||
+    error instanceof OrganisationSettingsError
   ) {
     return Response.json({ error: error.message }, { status: error.status })
   }

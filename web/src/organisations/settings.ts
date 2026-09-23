@@ -31,6 +31,13 @@ export type OrganisationLogoInput = {
   mimeType: string
 }
 
+export type OrganisationUploadPolicy = {
+  defaultRetentionDays: number
+  drmDefault: 'protected' | 'standard'
+  drmRequired: boolean
+  maximumUploadSizeBytes: number
+}
+
 export type OrganisationSetupInput = OrganisationSettingsInput & { logo?: OrganisationLogoInput }
 
 function validPositiveInteger(value: number): boolean {
@@ -89,6 +96,24 @@ async function findOrganisationSettings(payload: Payload, organisationID: number
   return settings
 }
 
+/**
+ * Reads the policy that is snapshotted when an Organisation Upload Session is
+ * created. Authorization belongs to the Organisation media boundary; callers
+ * must authorize before asking for this policy.
+ */
+export async function getOrganisationUploadPolicy(
+  payload: Payload,
+  organisationID: number,
+): Promise<OrganisationUploadPolicy> {
+  const settings = await findOrganisationSettings(payload, organisationID)
+  return {
+    defaultRetentionDays: settings.defaultRetentionDays,
+    drmDefault: settings.drmDefault,
+    drmRequired: settings.drmRequired ?? false,
+    maximumUploadSizeBytes: settings.maximumUploadSizeBytes,
+  }
+}
+
 function logoMatchesMimeType(logo: OrganisationLogoInput): boolean {
   if (logo.mimeType === 'image/png') {
     return (
@@ -125,13 +150,20 @@ async function logoDataURL(logo: OrganisationLogoInput): Promise<string> {
     throw new OrganisationSettingsError('Organisation Logos must be no larger than 3 MB.', 400)
   }
   if (!logoMatchesMimeType(logo)) {
-    throw new OrganisationSettingsError('Organisation Logos must be PNG, JPEG, or WebP images.', 400)
+    throw new OrganisationSettingsError(
+      'Organisation Logos must be PNG, JPEG, or WebP images.',
+      400,
+    )
   }
   try {
     const metadata = await sharp(logo.bytes).metadata()
-    if (metadata.format !== logo.mimeType.replace('image/', '')) throw new Error('Mismatched format')
+    if (metadata.format !== logo.mimeType.replace('image/', ''))
+      throw new Error('Mismatched format')
   } catch {
-    throw new OrganisationSettingsError('Organisation Logos must be valid PNG, JPEG, or WebP images.', 400)
+    throw new OrganisationSettingsError(
+      'Organisation Logos must be valid PNG, JPEG, or WebP images.',
+      400,
+    )
   }
   return `data:${logo.mimeType};base64,${Buffer.from(logo.bytes).toString('base64')}`
 }
@@ -205,7 +237,10 @@ export async function getOrganisationSettingsState(
     overrideAccess: true,
     where: { organisation: { equals: organisationID } },
   })
-  return { initialAdministrator: initialAdministratorID === actor.id, settings: result.docs[0] ?? null }
+  return {
+    initialAdministrator: initialAdministratorID === actor.id,
+    settings: result.docs[0] ?? null,
+  }
 }
 
 export async function updateOrganisationSettings(

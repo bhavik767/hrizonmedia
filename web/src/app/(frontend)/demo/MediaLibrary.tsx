@@ -19,8 +19,18 @@ interface UploadSessionResponse {
   uploadSessionId: string
 }
 
+interface UploadOrganisation {
+  defaultRetentionDays: number
+  drmDefault: 'protected' | 'standard'
+  drmRequired: boolean
+  id: number
+  maximumUploadSizeBytes: number
+  name: string
+}
+
 const PENDING_UPLOAD_PREFIX = 'hrizonmedia.pending-upload.v1:'
 const MAX_PART_ATTEMPTS = 3
+const UPLOAD_CONCURRENCY = 3
 const MIN_VISIBLE_STATUS_MS = 2_000
 
 class MediaRequestError extends Error {
@@ -133,13 +143,23 @@ async function uploadPartWithRetry(targetURL: string, bytes: Blob): Promise<Comp
   throw new Error(`${lastError?.message || 'A storage part failed.'} Reselect this file to resume.`)
 }
 
-export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
+export function MediaLibrary({
+  uploadOrganisations,
+}: {
+  uploadOrganisations: UploadOrganisation[]
+}) {
   const [assets, setAssets] = useState<DisplayedAsset[]>([])
   const [error, setError] = useState('')
   const [hydrated, setHydrated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [progress, setProgress] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [selectedOrganisationID, setSelectedOrganisationID] = useState(
+    () => uploadOrganisations[0]?.id ?? 0,
+  )
+
+  const selectedOrganisation =
+    uploadOrganisations.find(({ id }) => id === selectedOrganisationID) ?? uploadOrganisations[0]
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/demo/assets', { cache: 'no-store' })
@@ -157,7 +177,9 @@ export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
     })
   }, [refresh])
 
-  const hasActiveProcessing = assets.some(({ status }) => status === 'queued' || status === 'processing')
+  const hasActiveProcessing = assets.some(
+    ({ status }) => status === 'queued' || status === 'processing',
+  )
 
   useEffect(() => {
     if (uploading || !hasActiveProcessing) return
@@ -188,6 +210,18 @@ export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
     setProgress(0)
     setUploading(true)
     const fingerprint = await fileFingerprint(file)
+    if (!selectedOrganisation) {
+      setError('Complete Organisation setup before uploading Media Assets.')
+      setProgress(null)
+      setUploading(false)
+      return
+    }
+    if (file.size > selectedOrganisation.maximumUploadSizeBytes) {
+      setError("The video exceeds this Organisation's upload limit.")
+      setProgress(null)
+      setUploading(false)
+      return
+    }
     const temporaryID = `local_${Date.now()}`
     let session: UploadSessionResponse | null = null
 
@@ -221,7 +255,10 @@ export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
           body: JSON.stringify({
             fileFingerprint: fingerprint,
             fileName: file.name,
+            mediaProtectionPolicy: formData.get('mediaProtectionPolicy'),
             mimeType: file.type,
+            organisationID: selectedOrganisation.id,
+            retentionDays: Number(formData.get('retentionDays')),
             size: file.size,
           }),
           headers: { 'content-type': 'application/json' },
@@ -243,6 +280,7 @@ export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
       const completed = new Map(session.completedParts.map((part) => [part.partNumber, part]))
       const totalParts = Math.ceil(file.size / session.partSize)
       setProgress(Math.round((completed.size / totalParts) * 100))
+      const missingPartNumbers: number[] = []
       for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
         const start = (partNumber - 1) * session.partSize
         const bytes = file.slice(start, start + session.partSize)
@@ -253,15 +291,31 @@ export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
           }
           continue
         }
-        const targetURL = session.partTargetURL.replace('{partNumber}', String(partNumber))
-        const part = await uploadPartWithRetry(targetURL, bytes)
-        completed.set(partNumber, part)
-        session.completedParts = [...completed.values()].sort(
-          (left, right) => left.partNumber - right.partNumber,
-        )
-        persistPendingUpload(session, fingerprint)
-        setProgress(Math.round((completed.size / totalParts) * 100))
+        missingPartNumbers.push(partNumber)
       }
+      let nextPartIndex = 0
+      const uploadNextPart = async () => {
+        while (nextPartIndex < missingPartNumbers.length) {
+          const partNumber = missingPartNumbers[nextPartIndex++]!
+          const start = (partNumber - 1) * session!.partSize
+          const targetURL = session!.partTargetURL.replace('{partNumber}', String(partNumber))
+          const part = await uploadPartWithRetry(
+            targetURL,
+            file.slice(start, start + session!.partSize),
+          )
+          completed.set(partNumber, part)
+          session!.completedParts = [...completed.values()].sort(
+            (left, right) => left.partNumber - right.partNumber,
+          )
+          persistPendingUpload(session!, fingerprint)
+          setProgress(Math.round((completed.size / totalParts) * 100))
+        }
+      }
+      await Promise.all(
+        Array.from({ length: Math.min(UPLOAD_CONCURRENCY, missingPartNumbers.length) }, () =>
+          uploadNextPart(),
+        ),
+      )
 
       const completeResponse = await fetch(session.completeURL, {
         body: JSON.stringify({ parts: session.completedParts }),
@@ -293,11 +347,11 @@ export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
         <div>
           <p className="eyebrow">
             <span aria-hidden="true" />
-            Uploader-private
+            Organisation-scoped
           </p>
           <h2 id="media-library-title">Media Assets</h2>
         </div>
-        {canUpload && (
+        {uploadOrganisations.length > 0 && (
           <form
             className="upload-form"
             onSubmit={(event) => {
@@ -312,6 +366,47 @@ export function MediaLibrary({ canUpload }: { canUpload: boolean }) {
               name="file"
               required
               type="file"
+            />
+            {uploadOrganisations.length > 1 && (
+              <>
+                <label htmlFor="upload-organisation">Organisation</label>
+                <select
+                  id="upload-organisation"
+                  onChange={(event) => setSelectedOrganisationID(Number(event.target.value))}
+                  value={selectedOrganisation?.id ?? ''}
+                >
+                  {uploadOrganisations.map((organisation) => (
+                    <option key={organisation.id} value={organisation.id}>
+                      {organisation.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            <label htmlFor="media-protection-policy">Media Protection Policy</label>
+            <select
+              defaultValue={selectedOrganisation?.drmDefault ?? 'protected'}
+              disabled={selectedOrganisation?.drmRequired ?? false}
+              id="media-protection-policy"
+              key={selectedOrganisation?.id}
+              name="mediaProtectionPolicy"
+            >
+              <option value="protected">DRM-protected playback</option>
+              <option value="standard">Standard playback</option>
+            </select>
+            {selectedOrganisation?.drmRequired && (
+              <input name="mediaProtectionPolicy" type="hidden" value="protected" />
+            )}
+            <label htmlFor="retention-days">Retention period (days)</label>
+            <input
+              defaultValue={selectedOrganisation?.defaultRetentionDays ?? 1}
+              id="retention-days"
+              key={`retention-${selectedOrganisation?.id}`}
+              max={selectedOrganisation?.defaultRetentionDays ?? 1}
+              min="1"
+              name="retentionDays"
+              required
+              type="number"
             />
             <button className="primary-action" disabled={!hydrated || uploading} type="submit">
               {uploading ? `Uploading${progress === null ? '…' : ` ${progress}%`}` : 'Upload asset'}

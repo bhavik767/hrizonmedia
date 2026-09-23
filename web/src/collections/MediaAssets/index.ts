@@ -14,6 +14,12 @@ export const MediaAssets: CollectionConfig = {
     { name: 'mediaAssetId', type: 'text', required: true, unique: true, index: true },
     { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
     {
+      name: 'mediaProtectionPolicy',
+      type: 'select',
+      options: ['protected', 'standard'],
+      defaultValue: 'protected',
+    },
+    {
       name: 'owner',
       type: 'relationship',
       relationTo: 'pilot-members',
