@@ -12,6 +12,7 @@ export interface DashboardData {
   member: { email: string; name: string }
   organisationLogoDataURL: string | null
   organisationSettingsLinks: { href: string; label: string }[]
+  platformAdministration: boolean
   uploadOrganisations: {
     defaultRetentionDays: number
     drmDefault: 'protected' | 'standard'
@@ -35,41 +36,51 @@ export async function getDashboardData(): Promise<DashboardData> {
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
 
   const payload = await getPayload({ config })
-  const [administratorMemberships, uploadMemberships, libraryMemberships] = await Promise.all([
-    payload.find({
-      collection: 'organisation-memberships',
-      depth: 0,
-      limit: 100,
-      overrideAccess: true,
-      where: {
-        and: [
-          { member: { equals: member.id } },
-          { role: { equals: 'administrator' } },
-          { status: { equals: 'active' } },
-        ],
-      },
-    }),
-    payload.find({
-      collection: 'organisation-memberships',
-      depth: 0,
-      limit: 100,
-      overrideAccess: true,
-      where: {
-        and: [
-          { member: { equals: member.id } },
-          { role: { in: ['administrator', 'publisher'] } },
-          { status: { equals: 'active' } },
-        ],
-      },
-    }),
-    payload.find({
-      collection: 'organisation-memberships',
-      depth: 0,
-      limit: 100,
-      overrideAccess: true,
-      where: { and: [{ member: { equals: member.id } }, { status: { equals: 'active' } }] },
-    }),
-  ])
+  const [administratorMemberships, uploadMemberships, libraryMemberships, platformAdministrators] =
+    await Promise.all([
+      payload.find({
+        collection: 'organisation-memberships',
+        depth: 0,
+        limit: 100,
+        overrideAccess: true,
+        where: {
+          and: [
+            { member: { equals: member.id } },
+            { role: { equals: 'administrator' } },
+            { status: { equals: 'active' } },
+          ],
+        },
+      }),
+      payload.find({
+        collection: 'organisation-memberships',
+        depth: 0,
+        limit: 100,
+        overrideAccess: true,
+        where: {
+          and: [
+            { member: { equals: member.id } },
+            { role: { in: ['administrator', 'publisher'] } },
+            { status: { equals: 'active' } },
+          ],
+        },
+      }),
+      payload.find({
+        collection: 'organisation-memberships',
+        depth: 0,
+        limit: 100,
+        overrideAccess: true,
+        where: { and: [{ member: { equals: member.id } }, { status: { equals: 'active' } }] },
+      }),
+      payload.find({
+        collection: 'platform-administrators',
+        depth: 0,
+        limit: 1,
+        overrideAccess: true,
+        where: {
+          and: [{ member: { equals: member.id } }, { status: { equals: 'active' } }],
+        },
+      }),
+    ])
   const administratorOrganisationID = administratorMemberships.docs[0]
     ? organisationID(administratorMemberships.docs[0])
     : null
@@ -128,6 +139,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     libraryOrganisations,
     member: { email: member.email, name: member.name },
     organisationLogoDataURL: organisationSettings?.settings?.logoDataUrl ?? null,
+    platformAdministration: Boolean(platformAdministrators.docs[0]),
     organisationSettingsLinks: administratorMemberships.docs.map((membership) => {
       const id = organisationID(membership)
       return {

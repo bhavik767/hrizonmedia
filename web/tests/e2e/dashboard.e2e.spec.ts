@@ -2,12 +2,21 @@ import { expect, test } from '@playwright/test'
 import { getPayload } from 'payload'
 
 import config from '../../src/payload.config.js'
-import { cleanupMembers, seedUploaders, testInvitee } from '../helpers/seedMembers'
+import {
+  cleanupMembers,
+  seedOperator,
+  seedUploaders,
+  testInvitee,
+  testOperator,
+} from '../helpers/seedMembers'
 
-async function signIn(page: import('@playwright/test').Page) {
+async function signIn(
+  page: import('@playwright/test').Page,
+  member: { email: string; password: string } = testInvitee,
+) {
   await page.goto('/demo/sign-in')
-  await page.getByLabel('Email').fill(testInvitee.email)
-  await page.getByLabel('Password').fill(testInvitee.password)
+  await page.getByLabel('Email').fill(member.email)
+  await page.getByLabel('Password').fill(member.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL('/demo', { timeout: 60_000 })
 }
@@ -56,9 +65,16 @@ test.describe('Dashboard shell', () => {
       ).toBeVisible()
     }
 
-    await page.getByRole('link', { name: 'Upload Video' }).click()
-    await expect(page).toHaveURL('/demo/videos#video-file')
-    await expect(page.getByLabel('Video file')).toBeVisible()
+    const fileChooser = page.waitForEvent('filechooser')
+    await page.getByRole('button', { name: 'Upload Video' }).click({ timeout: 1_000 })
+    await (
+      await fileChooser
+    ).setFiles({
+      buffer: Buffer.from('video'),
+      mimeType: 'video/mp4',
+      name: 'selected-from-dashboard.mp4',
+    })
+    await expect(page.getByLabel('Video file')).toHaveValue(/selected-from-dashboard\.mp4/)
 
     for (const { label, title } of [
       { label: 'Live', title: 'Live video is coming soon' },
@@ -92,6 +108,15 @@ test.describe('Dashboard shell', () => {
     await expect(navigation).toBeHidden()
   })
 
+  test('removes the entire desktop navigation rail when it is closed', async ({ page }) => {
+    await signIn(page)
+    const navigation = page.getByRole('navigation', { name: 'Dashboard navigation' })
+    await expect(navigation).toBeVisible()
+    await page.getByRole('button', { name: 'Close navigation' }).click()
+    await expect(navigation).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible()
+  })
+
   test('shows Invite User only to an Organisation Administrator', async ({ page }) => {
     const payload = await getPayload({ config })
     const memberships = await payload.find({
@@ -113,5 +138,34 @@ test.describe('Dashboard shell', () => {
     await expect(page).toHaveURL(/\/demo\/organisations\/\d+\/members/)
     await expect(page.getByRole('heading', { name: 'Organisation Memberships' })).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'Dashboard navigation' })).toBeVisible()
+  })
+})
+
+test.describe('Platform organisation administration', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.clearCookies()
+    await seedOperator()
+  })
+  test.afterEach(async () => {
+    await cleanupMembers()
+  })
+  test('lets a Platform Administrator create an Organisation through the Dashboard', async ({
+    page,
+  }) => {
+    await signIn(page, testOperator)
+    await page.getByRole('link', { name: 'Manage Organisations' }).click()
+    await expect(page.getByRole('heading', { name: 'Organisation administration' })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Grant Platform Administrator access' }),
+    ).toBeVisible()
+    await page.getByLabel('Organisation name').fill('Academy Library')
+    await page.getByLabel('Initial Organisation Administrator').selectOption({
+      label: testOperator.name,
+    })
+    await page.getByRole('button', { name: 'Create Organisation' }).click()
+    await expect(page.getByText('Academy Library was created.')).toBeVisible()
+    await expect(
+      page.getByRole('list', { name: 'Active Organisations' }).getByText('Academy Library'),
+    ).toBeVisible()
   })
 })

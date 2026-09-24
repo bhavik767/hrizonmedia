@@ -1,5 +1,7 @@
 import Link from 'next/link'
 
+import { DashboardUploadButton } from './DashboardUploadButton'
+
 const metrics = [
   { detail: '12.4 GB of 100 GB', label: 'Storage Usage', value: '12%' },
   { detail: 'This billing period', label: 'Bandwidth Consumption', value: '284 GB' },
@@ -11,10 +13,12 @@ export function DashboardOverview({
   administratorOrganisationID,
   memberEmail,
   memberName,
+  platformAdministration,
 }: {
   administratorOrganisationID: number | null
   memberEmail: string
   memberName: string
+  platformAdministration: boolean
 }) {
   return (
     <>
@@ -30,9 +34,12 @@ export function DashboardOverview({
           </p>
         </div>
         <div className="dashboard-actions" aria-label="Dashboard actions">
-          <Link className="primary-action" href="/demo/videos#video-file">
-            Upload Video
-          </Link>
+          <DashboardUploadButton />
+          {platformAdministration && (
+            <Link className="dashboard-secondary-action" href="/demo/organisations">
+              Manage Organisations
+            </Link>
+          )}
           {administratorOrganisationID && (
             <Link
               className="dashboard-secondary-action"

@@ -35,41 +35,40 @@ const publicSiteSchema = {
 }
 
 export default async function HomePage() {
-  const demoEnabled = process.env.HRIZONMEDIA_DEMO_ENABLED === 'true'
-
   return (
     <main id="main-content">
       <StructuredData schema={publicSiteSchema} />
       <section className="hero shell" aria-labelledby="hero-title">
         <div className="hero__glow" aria-hidden="true" />
         <div className="hero__copy">
-          <p className="eyebrow"><span aria-hidden="true" /> Secure video platform</p>
+          <p className="eyebrow">
+            <span aria-hidden="true" /> Secure video platform
+          </p>
           <h1 id="hero-title">
             <span>Secure video,</span>
             <span className="signal-text">under your control.</span>
           </h1>
           <p className="hero__lede">
-            WeCloud gives your organisation a secure path from upload to protected playback,
-            with access you can control at every step.
+            WeCloud gives your organisation a secure path from upload to protected playback, with
+            access you can control at every step.
           </p>
-          {demoEnabled && (
-            <Link
-              aria-label="Open WeCloud Dashboard"
-              className="primary-action hero__action"
-              href="/demo"
-            >
-              Dashboard
-              <svg aria-hidden="true" className="action-arrow" viewBox="0 0 16 16">
-                <path d="M3 13 13 3M6 3h7v7" />
-              </svg>
-            </Link>
-          )}
-          {!demoEnabled && <p className="demo-note">Private workspace opening soon.</p>}
+          <Link
+            aria-label="Open WeCloud Dashboard"
+            className="primary-action hero__action"
+            href="/demo"
+          >
+            Dashboard
+            <svg aria-hidden="true" className="action-arrow" viewBox="0 0 16 16">
+              <path d="M3 13 13 3M6 3h7v7" />
+            </svg>
+          </Link>
         </div>
         <div className="control-plate" aria-label="Secure delivery flow">
           <div className="control-plate__topline">
             <span>Asset 0042</span>
-            <span className="status"><i aria-hidden="true" /> Protected</span>
+            <span className="status">
+              <i aria-hidden="true" /> Protected
+            </span>
           </div>
           <div className="playback-frame">
             <svg aria-hidden="true" viewBox="0 0 80 80">
@@ -77,7 +76,9 @@ export default async function HomePage() {
               <path d="m33 25 22 15-22 15V25Z" />
             </svg>
           </div>
-          <div className="control-plate__meter"><span /></div>
+          <div className="control-plate__meter">
+            <span />
+          </div>
           <div className="control-plate__footer">
             <span>Encrypted delivery</span>
             <span>00:42 / 12:18</span>

@@ -1192,7 +1192,11 @@ body:has(.dashboard-shell) .site-header {
 }
 
 .dashboard-shell:not(.dashboard-shell--navigation-open) {
-  grid-template-columns: 74px minmax(0, 1fr);
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.dashboard-shell:not(.dashboard-shell--navigation-open) .dashboard-sidebar {
+  display: none;
 }
 
 .dashboard-sidebar {

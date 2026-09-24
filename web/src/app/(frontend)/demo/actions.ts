@@ -8,6 +8,11 @@ import { getPayload } from 'payload'
 
 import config from '@/payload.config'
 import {
+  createOrganisation,
+  createPlatformAdministrator,
+  PlatformAdministrationError,
+} from '@/organisations/platform-administration'
+import {
   acceptOrganisationInvitation,
   createOrganisationInvitation,
   OrganisationInvitationError,
@@ -30,6 +35,8 @@ import { guardDemoActionMutation } from '@/media/requestSecurity'
 export type OrganisationInvitationState = { error?: string; invitationURL?: string }
 export type OrganisationMembershipState = { error?: string; success?: string }
 export type MediaAccessState = { error?: string; success?: string }
+export type OrganisationProvisioningState = { error?: string; success?: string }
+export type PlatformAdministratorState = { error?: string; success?: string }
 
 export async function signIn(formData: FormData) {
   const email = String(formData.get('email') || '')
@@ -71,6 +78,60 @@ function organisationRole(
 function positiveInteger(value: FormDataEntryValue | null): number | null {
   const parsed = Number(value)
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+export async function provisionOrganisation(
+  _state: OrganisationProvisioningState,
+  formData: FormData,
+): Promise<OrganisationProvisioningState> {
+  const actor = await getMember()
+  if (!actor) return { error: 'Sign in to create an Organisation.' }
+  const name = String(formData.get('name') || '').trim()
+  const initialAdministratorID = positiveInteger(formData.get('initialAdministratorID'))
+  if (!name || !initialAdministratorID) {
+    return { error: 'Enter an Organisation name and choose an initial Organisation Administrator.' }
+  }
+  try {
+    guardDemoActionMutation(await headers(), actor.id)
+    const { organisation } = await createOrganisation(await getPayload({ config }), actor, {
+      initialAdministratorID,
+      name,
+    })
+    revalidatePath('/demo')
+    revalidatePath('/demo/organisations')
+    return { success: `${organisation.name} was created.` }
+  } catch (caught) {
+    return {
+      error:
+        caught instanceof PlatformAdministrationError
+          ? caught.message
+          : 'Unable to create the Organisation.',
+    }
+  }
+}
+
+export async function appointPlatformAdministrator(
+  _state: PlatformAdministratorState,
+  formData: FormData,
+): Promise<PlatformAdministratorState> {
+  const actor = await getMember()
+  if (!actor) return { error: 'Sign in to appoint a Platform Administrator.' }
+  const memberID = positiveInteger(formData.get('memberID'))
+  if (!memberID) return { error: 'Choose an active Member.' }
+  try {
+    guardDemoActionMutation(await headers(), actor.id)
+    await createPlatformAdministrator(await getPayload({ config }), actor, { memberID })
+    revalidatePath('/demo')
+    revalidatePath('/demo/organisations')
+    return { success: 'Platform Administrator access was granted.' }
+  } catch (caught) {
+    return {
+      error:
+        caught instanceof PlatformAdministrationError
+          ? caught.message
+          : 'Unable to grant Platform Administrator access.',
+    }
+  }
 }
 
 export async function inviteOrganisationMember(
