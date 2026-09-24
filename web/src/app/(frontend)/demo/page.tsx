@@ -20,6 +20,7 @@ export default async function DemoPage() {
       <main className="dashboard-content" id="main-content">
         <DashboardOverview
           administratorOrganisationID={dashboard.administratorOrganisationID}
+          canUpload={dashboard.uploadOrganisations.length > 0}
           memberEmail={dashboard.member.email}
           memberName={dashboard.member.name}
           platformAdministration={dashboard.platformAdministration}

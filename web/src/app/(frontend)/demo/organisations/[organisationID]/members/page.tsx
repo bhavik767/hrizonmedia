@@ -33,7 +33,7 @@ export default async function OrganisationMembersPage({
   }
   const memberships = await payload.find({
     collection: 'organisation-memberships',
-    depth: 0,
+    depth: 1,
     limit: 100,
     overrideAccess: true,
     sort: 'createdAt',
@@ -47,12 +47,19 @@ export default async function OrganisationMembersPage({
           <span aria-hidden="true" /> Organisation Administrator access
         </p>
         <h1>Organisation Memberships</h1>
+        <h2>Invite a member</h2>
+        <p>
+          Create a one-time invitation for a new Organisation Administrator, Publisher, or Viewer.
+        </p>
         <OrganisationInvitationForm organisationID={organisationID} />
         <h2>Current Memberships</h2>
         <ul>
           {memberships.docs.map((membership) => (
             <li key={membership.id}>
-              Membership #{membership.id}: {membership.role} ({membership.status})
+              {typeof membership.member === 'number'
+                ? `Member #${membership.member}`
+                : `${membership.member.name} (${membership.member.email})`}{' '}
+              — {membership.role} ({membership.status})
               <MembershipControls membershipID={membership.id} organisationID={organisationID} />
             </li>
           ))}

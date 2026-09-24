@@ -50,10 +50,17 @@ export default async function OrganisationAdministrationPage() {
           <span aria-hidden="true" /> Platform Administrator access
         </p>
         <h1>Organisation administration</h1>
-        <p>Create an isolated Organisation and appoint its first Organisation Administrator.</p>
+        <p>
+          Create an isolated Organisation and appoint its first Organisation Administrator.
+          Organisation Administrators can then invite additional Administrators, Publishers, and
+          Viewers for that Organisation.
+        </p>
         <OrganisationProvisioningForm members={memberOptions} />
         <h2>Platform access</h2>
-        <p>Platform Administrators can provision Organisations and recover access across them.</p>
+        <p>
+          Platform Administrators can provision Organisations and appoint other Platform
+          Administrators.
+        </p>
         <PlatformAdministratorForm members={memberOptions} />
         <h2>Active Organisations</h2>
         <ul aria-label="Active Organisations">

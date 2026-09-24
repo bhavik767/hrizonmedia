@@ -36,7 +36,7 @@ test.describe('Dashboard shell', () => {
 
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
     await expect(page.getByText('Welcome back, Organisation Publisher')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Invite User' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Manage Members' })).toHaveCount(0)
     await expect(page.getByText('API key', { exact: false })).toHaveCount(0)
     await expect(page.getByRole('img', { name: 'Static usage overview chart' })).toBeVisible()
     for (const metric of [
@@ -108,16 +108,21 @@ test.describe('Dashboard shell', () => {
     await expect(navigation).toBeHidden()
   })
 
-  test('removes the entire desktop navigation rail when it is closed', async ({ page }) => {
+  test('keeps the desktop menu control inside a compact navigation rail when it is closed', async ({
+    page,
+  }) => {
     await signIn(page)
     const navigation = page.getByRole('navigation', { name: 'Dashboard navigation' })
     await expect(navigation).toBeVisible()
     await page.getByRole('button', { name: 'Close navigation' }).click()
     await expect(navigation).toBeHidden()
-    await expect(page.getByRole('button', { name: 'Open navigation' })).toBeVisible()
+    await expect(page.locator('.dashboard-sidebar')).toBeVisible()
+    await expect(
+      page.locator('.dashboard-sidebar').getByRole('button', { name: 'Open navigation' }),
+    ).toBeVisible()
   })
 
-  test('shows Invite User only to an Organisation Administrator', async ({ page }) => {
+  test('shows member management only to an Organisation Administrator', async ({ page }) => {
     const payload = await getPayload({ config })
     const memberships = await payload.find({
       collection: 'organisation-memberships',
@@ -134,7 +139,7 @@ test.describe('Dashboard shell', () => {
     })
 
     await signIn(page)
-    await page.getByRole('link', { name: 'Invite User' }).click()
+    await page.getByRole('link', { name: 'Manage Members' }).click()
     await expect(page).toHaveURL(/\/demo\/organisations\/\d+\/members/)
     await expect(page.getByRole('heading', { name: 'Organisation Memberships' })).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'Dashboard navigation' })).toBeVisible()
@@ -153,6 +158,7 @@ test.describe('Platform organisation administration', () => {
     page,
   }) => {
     await signIn(page, testOperator)
+    await expect(page.getByRole('button', { name: 'Upload Video' })).toHaveCount(0)
     await page.getByRole('link', { name: 'Manage Organisations' }).click()
     await expect(page.getByRole('heading', { name: 'Organisation administration' })).toBeVisible()
     await expect(

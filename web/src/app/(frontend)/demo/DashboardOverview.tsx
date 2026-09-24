@@ -11,11 +11,13 @@ const metrics = [
 
 export function DashboardOverview({
   administratorOrganisationID,
+  canUpload,
   memberEmail,
   memberName,
   platformAdministration,
 }: {
   administratorOrganisationID: number | null
+  canUpload: boolean
   memberEmail: string
   memberName: string
   platformAdministration: boolean
@@ -34,9 +36,12 @@ export function DashboardOverview({
           </p>
         </div>
         <div className="dashboard-actions" aria-label="Dashboard actions">
-          <DashboardUploadButton />
+          {canUpload && <DashboardUploadButton />}
           {platformAdministration && (
-            <Link className="dashboard-secondary-action" href="/demo/organisations">
+            <Link
+              className={canUpload ? 'dashboard-secondary-action' : 'primary-action'}
+              href="/demo/organisations"
+            >
               Manage Organisations
             </Link>
           )}
@@ -45,7 +50,7 @@ export function DashboardOverview({
               className="dashboard-secondary-action"
               href={`/demo/organisations/${administratorOrganisationID}/members`}
             >
-              Invite User
+              Manage Members
             </Link>
           )}
           <button disabled type="button">

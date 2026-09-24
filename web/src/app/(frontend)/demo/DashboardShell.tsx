@@ -23,6 +23,8 @@ export function DashboardShell({
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false)
 
+  const toggleNavigation = () => setNavigationOpen((open) => !open)
+
   useEffect(() => {
     setNavigationOpen(window.matchMedia('(min-width: 801px)').matches)
   }, [])
@@ -30,12 +32,24 @@ export function DashboardShell({
   return (
     <div className={`dashboard-shell${navigationOpen ? ' dashboard-shell--navigation-open' : ''}`}>
       <aside className="dashboard-sidebar">
-        <Link className="dashboard-sidebar__brand" href="/demo">
-          <span aria-hidden="true" className="dashboard-sidebar__mark">
-            W
-          </span>
-          <span>WeCloud</span>
-        </Link>
+        <div className="dashboard-sidebar__header">
+          <button
+            aria-controls="dashboard-navigation"
+            aria-expanded={navigationOpen}
+            aria-label={navigationOpen ? 'Close navigation' : 'Open navigation'}
+            className="dashboard-menu-button"
+            onClick={toggleNavigation}
+            type="button"
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+          <Link className="dashboard-sidebar__brand" href="/demo">
+            <span aria-hidden="true" className="dashboard-sidebar__mark">
+              W
+            </span>
+            <span className="dashboard-sidebar__brand-name">WeCloud</span>
+          </Link>
+        </div>
         <nav aria-label="Dashboard navigation" id="dashboard-navigation">
           <ul>
             {navigation.map(({ href, label }) => (
@@ -54,8 +68,8 @@ export function DashboardShell({
             aria-controls="dashboard-navigation"
             aria-expanded={navigationOpen}
             aria-label={navigationOpen ? 'Close navigation' : 'Open navigation'}
-            className="dashboard-menu-button"
-            onClick={() => setNavigationOpen((open) => !open)}
+            className="dashboard-mobile-menu-button"
+            onClick={toggleNavigation}
             type="button"
           >
             <span aria-hidden="true">☰</span>
