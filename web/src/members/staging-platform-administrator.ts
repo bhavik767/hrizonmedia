@@ -5,6 +5,7 @@ import { getPayload, type Payload } from 'payload'
 import config from '@/payload.config'
 
 type BootstrapEnvironment = {
+  [name: string]: string | undefined
   RAILWAY_ENVIRONMENT_NAME?: string
   STAGING_PLATFORM_ADMIN_EMAIL?: string
   STAGING_PLATFORM_ADMIN_NAME?: string
