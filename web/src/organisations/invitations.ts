@@ -33,6 +33,15 @@ function validRole(role: string): role is OrganisationRole {
   return invitationRoles.includes(role as OrganisationRole)
 }
 
+function invitationRecipient(input: { email: string; name: string }): { email: string; name: string } {
+  const email = input.email.trim().toLowerCase()
+  const name = input.name.trim()
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new OrganisationInvitationError('Name, email, and a valid Organisation role are required.', 400)
+  }
+  return { email, name }
+}
+
 async function requireOrganisationAdministrator(
   payload: Payload,
   actor: Member,
@@ -63,12 +72,16 @@ async function requireActiveAuthenticatedMember(payload: Payload, actor: Member)
 
 export async function createOrganisationInvitation({
   actor,
+  email,
+  name,
   now = new Date(),
   organisationID,
   payload,
   role,
 }: {
   actor: Member
+  email: string
+  name: string
   now?: Date
   organisationID: number
   payload: Payload
@@ -77,13 +90,20 @@ export async function createOrganisationInvitation({
   if (!Number.isSafeInteger(organisationID) || organisationID <= 0 || !validRole(role)) {
     throw new OrganisationInvitationError('An Organisation and valid role are required.', 400)
   }
+  const recipient = invitationRecipient({ email, name })
   await requireOrganisationAdministrator(payload, actor, organisationID)
 
   const token = randomBytes(32).toString('base64url')
   const expiresAt = new Date(now.getTime() + INVITATION_LIFETIME_MS).toISOString()
   const invitation = await payload.create({
     collection: 'organisation-invitations',
-    data: { organisation: organisationID, role, tokenHash: hashInvitationToken(token), expiresAt },
+    data: {
+      ...recipient,
+      organisation: organisationID,
+      role,
+      tokenHash: hashInvitationToken(token),
+      expiresAt,
+    },
     overrideAccess: true,
   })
   await recordAuditEvent(payload, {
@@ -97,18 +117,23 @@ export async function createOrganisationInvitation({
   return { expiresAt, token }
 }
 
-export async function acceptOrganisationInvitation({
+async function acceptInvitation({
   actor,
   now = new Date(),
+  password,
   payload,
   token,
 }: {
-  actor: Member
+  actor?: Member
   now?: Date
+  password?: string
   payload: Payload
   token: string
 }): Promise<OrganisationMembership> {
-  await requireActiveAuthenticatedMember(payload, actor)
+  if (actor) await requireActiveAuthenticatedMember(payload, actor)
+  if (!actor && (!password || password.length < 8)) {
+    throw new OrganisationInvitationError('Choose a password with at least 8 characters.', 400)
+  }
 
   const transactionID = await payload.db.beginTransaction()
   if (!transactionID) throw new Error('Organisation invitation acceptance requires database transactions.')
@@ -120,15 +145,17 @@ export async function acceptOrganisationInvitation({
     if (!transaction) throw new Error('Unable to start the invitation transaction.')
 
     const result = (await transaction.execute(sql`
-      SELECT id, organisation_id, role, expires_at, accepted_at
+      SELECT id, email, name, organisation_id, role, expires_at, accepted_at
       FROM organisation_invitations
       WHERE token_hash = ${hashInvitationToken(token)}
       FOR UPDATE
     `)) as unknown as {
       rows: Array<{
         accepted_at: Date | null
+        email: string | null
         expires_at: Date | null
         id: number
+        name: string | null
         organisation_id: number
         role: OrganisationRole
       }>
@@ -140,6 +167,45 @@ export async function acceptOrganisationInvitation({
     if (new Date(invitation.expires_at) <= now) {
       throw new OrganisationInvitationError('This Organisation Invitation has expired.', 410)
     }
+    if (!invitation.email || !invitation.name) {
+      throw new OrganisationInvitationError('This Organisation Invitation is invalid or has already been used.', 404)
+    }
+
+    let recipient = actor
+    if (recipient) {
+      if (recipient.email.trim().toLowerCase() !== invitation.email) {
+        throw new OrganisationInvitationError(
+          'Sign in with the email address this Organisation Invitation was sent to.',
+          403,
+        )
+      }
+    } else {
+      const existing = await payload.find({
+        collection: 'members',
+        depth: 0,
+        limit: 1,
+        overrideAccess: true,
+        req: { payload, transactionID },
+        where: { email: { equals: invitation.email } },
+      })
+      if (existing.docs[0]) {
+        throw new OrganisationInvitationError(
+          'This email already has a Member account. Sign in to accept the invitation.',
+          409,
+        )
+      }
+      recipient = await payload.create({
+        collection: 'members',
+        data: {
+          email: invitation.email,
+          name: invitation.name,
+          password: password!,
+          status: 'active',
+        },
+        overrideAccess: true,
+        req: { payload, transactionID },
+      })
+    }
 
     const existingMembership = await payload.find({
       collection: 'organisation-memberships',
@@ -149,7 +215,7 @@ export async function acceptOrganisationInvitation({
       req: { payload, transactionID },
       where: {
         and: [
-          { member: { equals: actor.id } },
+          { member: { equals: recipient.id } },
           { organisation: { equals: invitation.organisation_id } },
         ],
       },
@@ -168,7 +234,7 @@ export async function acceptOrganisationInvitation({
       : await payload.create({
           collection: 'organisation-memberships',
           data: {
-            member: actor.id,
+            member: recipient.id,
             organisation: invitation.organisation_id,
             role: invitation.role,
             status: 'active',
@@ -178,17 +244,17 @@ export async function acceptOrganisationInvitation({
         })
     await payload.update({
       collection: 'organisation-invitations',
-      data: { acceptedAt, acceptedBy: actor.id },
+      data: { acceptedAt, acceptedBy: recipient.id },
       id: invitation.id,
       overrideAccess: true,
       req,
     })
     await recordAuditEvent(payload, {
       action: 'invitation_accepted',
-      actorID: actor.id,
+      actorID: recipient.id,
       details: { invitationID: invitation.id, role: invitation.role },
       eventKey: `organisation-invitation:${invitation.id}:accepted`,
-      memberID: actor.id,
+      memberID: recipient.id,
       organisationID: invitation.organisation_id,
       occurredAt: now,
       req,
@@ -199,4 +265,32 @@ export async function acceptOrganisationInvitation({
     await payload.db.rollbackTransaction(transactionID)
     throw error
   }
+}
+
+export async function acceptOrganisationInvitation({
+  actor,
+  now,
+  payload,
+  token,
+}: {
+  actor: Member
+  now?: Date
+  payload: Payload
+  token: string
+}): Promise<OrganisationMembership> {
+  return acceptInvitation({ actor, now, payload, token })
+}
+
+export async function acceptOrganisationInvitationWithPassword({
+  now,
+  password,
+  payload,
+  token,
+}: {
+  now?: Date
+  password: string
+  payload: Payload
+  token: string
+}): Promise<OrganisationMembership> {
+  return acceptInvitation({ now, password, payload, token })
 }

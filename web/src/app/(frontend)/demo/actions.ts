@@ -9,6 +9,7 @@ import { getPayload } from 'payload'
 import config from '@/payload.config'
 import {
   acceptOrganisationInvitation,
+  acceptOrganisationInvitationWithPassword,
   createOrganisationInvitation,
   OrganisationInvitationError,
 } from '@/organisations/invitations'
@@ -89,6 +90,8 @@ export async function inviteOrganisationMember(
     const payload = await getPayload({ config })
     const invitation = await createOrganisationInvitation({
       actor,
+      email: String(formData.get('email') || ''),
+      name: String(formData.get('name') || ''),
       organisationID,
       payload,
       role,
@@ -105,6 +108,28 @@ export async function inviteOrganisationMember(
           : 'Unable to create the Organisation Invitation.',
     }
   }
+}
+
+export async function setOrganisationInvitationPassword(formData: FormData): Promise<void> {
+  const token = String(formData.get('token') || '')
+  const returnTo = `/demo/invitations/accept?token=${encodeURIComponent(token)}`
+
+  try {
+    guardDemoActionMutation(await headers())
+    await acceptOrganisationInvitationWithPassword({
+      password: String(formData.get('password') || ''),
+      payload: await getPayload({ config }),
+      token,
+    })
+  } catch (caught) {
+    const message =
+      caught instanceof OrganisationInvitationError
+        ? caught.message
+        : 'Unable to use this Organisation Invitation.'
+    redirect(`${returnTo}&error=${encodeURIComponent(message)}`)
+  }
+
+  redirect('/demo/sign-in?setup=complete')
 }
 
 export async function acceptOrganisationInvitationAction(formData: FormData): Promise<void> {

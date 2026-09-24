@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import config from '@/payload.config'
 import {
   acceptOrganisationInvitation,
+  acceptOrganisationInvitationWithPassword,
   createOrganisationInvitation,
 } from '@/organisations/invitations'
 import type { Member } from '@/payload-types'
@@ -69,6 +70,8 @@ describe('Organisation Invitations', () => {
 
     const invitation = await createOrganisationInvitation({
       actor: administrator,
+      email: recipient.email,
+      name: recipient.name,
       now,
       organisationID: organisation.id,
       payload,
@@ -118,6 +121,8 @@ describe('Organisation Invitations', () => {
     })
     const invitation = await createOrganisationInvitation({
       actor: administrator,
+      email: recipient.email,
+      name: recipient.name,
       now: new Date('2026-09-23T06:00:00.000Z'),
       organisationID: organisation.id,
       payload,
@@ -164,6 +169,8 @@ describe('Organisation Invitations', () => {
     })
     const invitation = await createOrganisationInvitation({
       actor: administrator,
+      email: recipient.email,
+      name: recipient.name,
       organisationID: organisation.id,
       payload,
       role: 'publisher',
@@ -174,6 +181,56 @@ describe('Organisation Invitations', () => {
     ).resolves.toMatchObject({ role: 'publisher', status: 'active' })
     await expect(
       acceptOrganisationInvitation({ actor: administrator, payload, token: invitation.token }),
+    ).rejects.toThrow('invalid or has already been used')
+  })
+
+  it('creates the invited Member when they choose a password from their one-time link', async () => {
+    const administrator = await createMember('new-member-admin@organisation-invitation.test')
+    const organisation = await payload.create({
+      collection: 'organisations',
+      data: { name: 'New Member Organisation', status: 'active' },
+      overrideAccess: true,
+    })
+    await payload.create({
+      collection: 'organisation-memberships',
+      data: {
+        member: administrator.id,
+        organisation: organisation.id,
+        role: 'administrator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+
+    const invitation = await createOrganisationInvitation({
+      actor: administrator,
+      email: 'new-member@organisation-invitation.test',
+      name: 'New Member',
+      organisationID: organisation.id,
+      payload,
+      role: 'publisher',
+    })
+
+    await expect(
+      acceptOrganisationInvitationWithPassword({
+        password: 'new-member-password',
+        payload,
+        token: invitation.token,
+      }),
+    ).resolves.toMatchObject({
+      role: 'publisher',
+      status: 'active',
+      member: expect.objectContaining({
+        email: 'new-member@organisation-invitation.test',
+        name: 'New Member',
+      }),
+    })
+    await expect(
+      acceptOrganisationInvitationWithPassword({
+        password: 'another-password',
+        payload,
+        token: invitation.token,
+      }),
     ).rejects.toThrow('invalid or has already been used')
   })
 })

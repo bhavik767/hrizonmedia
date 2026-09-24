@@ -1209,6 +1209,8 @@ export interface OrganisationMembership {
  */
 export interface OrganisationInvitation {
   id: number;
+  name: string;
+  email: string;
   organisation: number | Organisation;
   role: 'administrator' | 'publisher' | 'viewer';
   tokenHash: string;
@@ -2277,6 +2279,8 @@ export interface OrganisationMembershipsSelect<T extends boolean = true> {
  * via the `definition` "organisation-invitations_select".
  */
 export interface OrganisationInvitationsSelect<T extends boolean = true> {
+  name?: T;
+  email?: T;
   organisation?: T;
   role?: T;
   tokenHash?: T;

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 
 import { ensureDemoEnabled } from '@/members/demoAvailability'
+import { getMember } from '@/members/session'
 
-import { acceptOrganisationInvitationAction } from '../../actions'
+import { acceptOrganisationInvitationAction, setOrganisationInvitationPassword } from '../../actions'
 
 export const metadata: Metadata = { title: 'Accept Organisation Invitation | WeCloud Dashboard' }
 
@@ -13,6 +14,7 @@ export default async function AcceptOrganisationInvitationPage({
 }) {
   await ensureDemoEnabled()
   const { error, token } = await searchParams
+  const member = await getMember()
 
   return (
     <main className="demo-page shell" id="main-content">
@@ -21,18 +23,48 @@ export default async function AcceptOrganisationInvitationPage({
       </p>
       <h1>Accept Organisation Invitation</h1>
       {token ? (
-        <form action={acceptOrganisationInvitationAction} className="member-form">
-          <input name="token" type="hidden" value={token} />
-          <p>Sign in to accept the role assigned by this one-time invitation.</p>
-          <button className="primary-action" type="submit">
-            Accept invitation
-          </button>
-          {error && (
-            <p className="form-message form-message--error" role="alert">
-              {error}
+        member ? (
+          <form action={acceptOrganisationInvitationAction} className="member-form">
+            <input name="token" type="hidden" value={token} />
+            <p>Accept the role assigned by this one-time invitation.</p>
+            <button className="primary-action" type="submit">
+              Accept invitation
+            </button>
+            {error && (
+              <p className="form-message form-message--error" role="alert">
+                {error}
+              </p>
+            )}
+          </form>
+        ) : (
+          <form action={setOrganisationInvitationPassword} className="member-form">
+            <input name="token" type="hidden" value={token} />
+            <p>Choose a password to create your Member account and join this Organisation.</p>
+            <label htmlFor="new-password">Password</label>
+            <input
+              autoComplete="new-password"
+              id="new-password"
+              minLength={8}
+              name="password"
+              required
+              type="password"
+            />
+            <button className="primary-action" type="submit">
+              Create account and join
+            </button>
+            <p>
+              Already have an account?{' '}
+              <a href={`/demo/sign-in?returnTo=${encodeURIComponent(`/demo/invitations/accept?token=${token}`)}`}>
+                Sign in to accept the invitation
+              </a>
             </p>
-          )}
-        </form>
+            {error && (
+              <p className="form-message form-message--error" role="alert">
+                {error}
+              </p>
+            )}
+          </form>
+        )
       ) : (
         <p className="form-message form-message--error" role="alert">
           This Organisation Invitation is invalid.

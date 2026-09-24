@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 
 import type { CompletedPart, PartUploadTarget } from '@/media/multipart'
@@ -208,6 +208,7 @@ export function MediaLibrary({
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [view, setView] = useState<'grid' | 'list'>('list')
+  const videoFileInput = useRef<HTMLInputElement>(null)
 
   const selectedOrganisation =
     libraryOrganisations.find(({ id }) => id === selectedOrganisationID) ?? libraryOrganisations[0]
@@ -412,6 +413,10 @@ export function MediaLibrary({
     }
   }
 
+  function chooseVideo(): void {
+    videoFileInput.current?.click()
+  }
+
   async function createFolder(formData: FormData) {
     if (!selectedOrganisation) return
     try {
@@ -526,8 +531,8 @@ export function MediaLibrary({
             <button
               className="primary-action"
               disabled={!hydrated || uploading}
-              form="media-upload-form"
-              type="submit"
+              onClick={chooseVideo}
+              type="button"
             >
               {uploading ? `Uploading${progress === null ? '…' : ` ${progress}%`}` : 'Upload Video'}
             </button>
@@ -549,6 +554,11 @@ export function MediaLibrary({
             accept="video/mp4,.mp4,video/x-matroska,.mkv"
             id="video-file"
             name="file"
+            onChange={(event) => {
+              if (!event.currentTarget.files?.length) return
+              void upload(new FormData(event.currentTarget.form!))
+            }}
+            ref={videoFileInput}
             required
             type="file"
           />

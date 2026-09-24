@@ -112,6 +112,50 @@ test.describe('Dashboard shell', () => {
     await page.getByRole('link', { name: 'Invite User' }).click()
     await expect(page).toHaveURL(/\/demo\/organisations\/\d+\/members/)
     await expect(page.getByRole('heading', { name: 'Organisation Memberships' })).toBeVisible()
+    await expect(page.getByLabel('Name')).toBeVisible()
+    await expect(page.getByLabel('Email')).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'Dashboard navigation' })).toBeVisible()
+  })
+
+  test('lets an Organisation Administrator invite a new Member to create their account', async ({
+    page,
+  }) => {
+    const payload = await getPayload({ config })
+    const memberships = await payload.find({
+      collection: 'organisation-memberships',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { role: { equals: 'publisher' } },
+    })
+    await payload.update({
+      collection: 'organisation-memberships',
+      data: { role: 'administrator' },
+      id: memberships.docs[0]!.id,
+      overrideAccess: true,
+    })
+
+    await signIn(page)
+    await page.getByRole('link', { name: 'Invite User' }).click()
+    await page.getByLabel('Name').fill('New Dashboard Member')
+    await page.getByLabel('Email').fill('new-dashboard-member@members.test')
+    await page.getByRole('button', { name: 'Invite user' }).click()
+    const invitationURL = await page
+      .getByTestId('organisation-invitation-link')
+      .getAttribute('href')
+    expect(invitationURL).toBeTruthy()
+    const invitationPath = new URL(invitationURL!).pathname + new URL(invitationURL!).search
+
+    await page.goto('/demo')
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await page.goto(invitationPath)
+    await page.getByLabel('Password').fill('new-dashboard-member-password')
+    await page.getByRole('button', { name: 'Create account and join' }).click()
+    await expect(page.getByText('Password set. You can sign in now.')).toBeVisible()
+    await page.getByLabel('Email').fill('new-dashboard-member@members.test')
+    await page.getByLabel('Password').fill('new-dashboard-member-password')
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await expect(page).toHaveURL('/demo', { timeout: 60_000 })
+    await expect(page.getByText('Signed in as New Dashboard Member')).toBeVisible()
   })
 })

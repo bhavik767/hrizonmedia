@@ -30,6 +30,14 @@ test.describe('Media Asset tracer bullet', () => {
     await cleanupMembers()
   })
 
+  test('opens the file picker from Upload Video before beginning an upload', async ({ page }) => {
+    await signIn(page, testInvitee)
+
+    const picker = page.waitForEvent('filechooser')
+    await page.getByRole('button', { name: 'Upload Video' }).click()
+    await picker
+  })
+
   test('uploads a valid fixture to ready while keeping it private to its uploader', async ({
     page,
   }) => {

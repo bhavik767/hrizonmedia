@@ -11,6 +11,8 @@ export const OrganisationInvitations: CollectionConfig = {
   },
   admin: { hidden: true, useAsTitle: 'id' },
   fields: [
+    { name: 'name', type: 'text', required: true },
+    { name: 'email', type: 'email', required: true, index: true },
     {
       name: 'organisation',
       type: 'relationship',

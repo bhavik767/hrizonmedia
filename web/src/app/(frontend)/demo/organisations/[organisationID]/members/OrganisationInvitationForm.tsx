@@ -12,6 +12,10 @@ export function OrganisationInvitationForm({ organisationID }: { organisationID:
   return (
     <form action={action} className="member-form">
       <input name="organisationID" type="hidden" value={organisationID} />
+      <label htmlFor="member-name">Name</label>
+      <input autoComplete="name" id="member-name" name="name" required type="text" />
+      <label htmlFor="member-email">Email</label>
+      <input autoComplete="email" id="member-email" name="email" required type="email" />
       <label htmlFor="organisation-role">Organisation role</label>
       <select defaultValue="viewer" id="organisation-role" name="role">
         <option value="administrator">Organisation Administrator</option>
@@ -19,7 +23,7 @@ export function OrganisationInvitationForm({ organisationID }: { organisationID:
         <option value="viewer">Organisation Viewer</option>
       </select>
       <button className="primary-action" disabled={pending} type="submit">
-        {pending ? 'Creatingâ€¦' : 'Create invitation link'}
+        {pending ? 'Creatingâ€¦' : 'Invite user'}
       </button>
       {state.error && (
         <p className="form-message form-message--error" role="alert">
@@ -28,7 +32,7 @@ export function OrganisationInvitationForm({ organisationID }: { organisationID:
       )}
       {state.invitationURL && (
         <p className="form-message form-message--success">
-          Copy this one-time link (expires in seven days):{' '}
+          Share this one-time setup link (expires in seven days):{' '}
           <a data-testid="organisation-invitation-link" href={state.invitationURL}>
             {state.invitationURL}
           </a>
