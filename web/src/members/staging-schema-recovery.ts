@@ -59,3 +59,23 @@ export async function recoverStagingMediaFolderSchema(): Promise<void> {
   })()
   return recovering
 }
+
+export async function purgeStagingNonPlatformMembers(email: string | undefined): Promise<void> {
+  if (process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging') return
+  if (process.env.STAGING_PURGE_NON_PLATFORM_MEMBERS !== 'true') return
+  const preservedEmail = email?.trim()
+  if (!preservedEmail) throw new Error('Staging member purge requires the preserved admin email.')
+  if (!process.env.DATABASE_URL) throw new Error('Staging member purge requires DATABASE_URL.')
+
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+  try {
+    const result = await pool.query('DELETE FROM "members" WHERE lower("email") <> lower($1)', [
+      preservedEmail,
+    ])
+    console.info(
+      `Staging member purge removed ${result.rowCount ?? 0} non-Platform-Administrator Member(s).`,
+    )
+  } finally {
+    await pool.end()
+  }
+}

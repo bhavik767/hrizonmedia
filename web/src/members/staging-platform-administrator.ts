@@ -10,7 +10,6 @@ type BootstrapEnvironment = {
   STAGING_PLATFORM_ADMIN_EMAIL?: string
   STAGING_PLATFORM_ADMIN_NAME?: string
   STAGING_PLATFORM_ADMIN_PASSWORD?: string
-  STAGING_PURGE_NON_PLATFORM_MEMBERS?: string
 }
 
 function readBootstrapConfiguration(environment: BootstrapEnvironment) {
@@ -32,7 +31,6 @@ function readBootstrapConfiguration(environment: BootstrapEnvironment) {
     email,
     name: environment.STAGING_PLATFORM_ADMIN_NAME?.trim() || 'Staging Platform Administrator',
     password,
-    purgeNonPlatformMembers: environment.STAGING_PURGE_NON_PLATFORM_MEMBERS === 'true',
   }
 }
 
@@ -90,24 +88,6 @@ async function upsertPlatformAdministrator(
       collection: 'platform-administrators',
       data: { member: member.id, status: 'active' },
       overrideAccess: true,
-    })
-  }
-
-  if (configuration.purgeNonPlatformMembers) {
-    const otherMembers = await payload.find({
-      collection: 'members',
-      depth: 0,
-      limit: 0,
-      overrideAccess: true,
-      where: { email: { not_equals: configuration.email } },
-    })
-    await payload.delete({
-      collection: 'members',
-      overrideAccess: true,
-      where: { email: { not_equals: configuration.email } },
-    })
-    payload.logger.info({
-      message: `Staging member purge removed ${otherMembers.totalDocs} non-Platform-Administrator Member(s).`,
     })
   }
 
