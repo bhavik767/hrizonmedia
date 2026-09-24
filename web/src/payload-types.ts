@@ -1282,7 +1282,7 @@ export interface MediaFolder {
   id: number;
   organisation: number | Organisation;
   name: string;
-  owner: number | PilotMember;
+  owner: number | Member;
   updatedAt: string;
   createdAt: string;
 }
@@ -2327,6 +2327,7 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   durationSeconds?: T;
   verifiedAt?: T;
   drmContentId?: T;
+  playReadyPackaged?: T;
   expiresAt?: T;
   deletedAt?: T;
   deletedBy?: T;

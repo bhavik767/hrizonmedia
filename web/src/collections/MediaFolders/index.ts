@@ -7,7 +7,7 @@ export const MediaFolders: CollectionConfig = {
   fields: [
     { name: 'organisation', type: 'relationship', relationTo: 'organisations', required: true, index: true },
     { name: 'name', type: 'text', required: true },
-    { name: 'owner', type: 'relationship', relationTo: 'pilot-members', required: true, index: true },
+    { name: 'owner', type: 'relationship', relationTo: 'members', required: true, index: true },
   ],
   timestamps: true,
 }
