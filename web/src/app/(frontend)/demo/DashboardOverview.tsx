@@ -30,7 +30,7 @@ export function DashboardOverview({
           </p>
         </div>
         <div className="dashboard-actions" aria-label="Dashboard actions">
-          <Link className="primary-action" href="/demo/videos#video-file">
+          <Link className="primary-action" href="/demo/videos#upload">
             Upload Video
           </Link>
           {administratorOrganisationID && (

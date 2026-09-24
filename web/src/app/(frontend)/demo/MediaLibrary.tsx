@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 
 import type { CompletedPart, PartUploadTarget } from '@/media/multipart'
@@ -58,6 +58,17 @@ class MediaRequestError extends Error {
 function readableBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function readableUploadLimit(bytes: number): string {
+  const gigabyte = 1024 * 1024 * 1024
+  return bytes >= gigabyte
+    ? `${(bytes / gigabyte).toFixed(1)} GB`
+    : `${(bytes / 1024 / 1024).toFixed(0)} MB`
+}
+
+function isSupportedVideo(file: File): boolean {
+  return /\.(mp4|mkv)$/i.test(file.name)
 }
 
 function readableDate(value: string): string {
@@ -201,14 +212,16 @@ export function MediaLibrary({
   const [hydrated, setHydrated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [progress, setProgress] = useState<number | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadDialogError, setUploadDialogError] = useState('')
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [selectedOrganisationID, setSelectedOrganisationID] = useState(
     () => uploadOrganisations[0]?.id ?? libraryOrganisations[0]?.id ?? 0,
   )
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StatusFilter>('all')
   const [view, setView] = useState<'grid' | 'list'>('list')
-  const videoFileInput = useRef<HTMLInputElement>(null)
 
   const selectedOrganisation =
     libraryOrganisations.find(({ id }) => id === selectedOrganisationID) ?? libraryOrganisations[0]
@@ -234,6 +247,21 @@ export function MediaLibrary({
   }, [])
 
   useEffect(() => setHydrated(true), [])
+
+  useEffect(() => {
+    if (window.location.hash === '#upload' && selectedUploadOrganisation) {
+      setUploadDialogOpen(true)
+    }
+  }, [selectedUploadOrganisation])
+
+  useEffect(() => {
+    if (!uploadDialogOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setUploadDialogOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [uploadDialogOpen])
 
   useEffect(() => {
     if (!selectedOrganisation) return
@@ -329,7 +357,7 @@ export function MediaLibrary({
             mediaProtectionPolicy: formData.get('mediaProtectionPolicy'),
             mimeType: file.type,
             organisationID: selectedUploadOrganisation.id,
-            folderID: activeFolderID ?? undefined,
+            folderID: formData.get('folderID') ? Number(formData.get('folderID')) : undefined,
             retentionDays: Number(formData.get('retentionDays')),
             size: file.size,
           }),
@@ -413,8 +441,37 @@ export function MediaLibrary({
     }
   }
 
-  function chooseVideo(): void {
-    videoFileInput.current?.click()
+  function chooseVideo(file: File | undefined): void {
+    setUploadDialogError('')
+    if (!file) {
+      setSelectedFile(null)
+      return
+    }
+    if (!isSupportedVideo(file)) {
+      setSelectedFile(null)
+      setUploadDialogError('Choose an MP4 or MKV video.')
+      return
+    }
+    if (
+      selectedUploadOrganisation &&
+      file.size > selectedUploadOrganisation.maximumUploadSizeBytes
+    ) {
+      setSelectedFile(null)
+      setUploadDialogError(
+        `Choose a video no larger than ${readableUploadLimit(selectedUploadOrganisation.maximumUploadSizeBytes)}.`,
+      )
+      return
+    }
+    setSelectedFile(file)
+  }
+
+  function closeUploadDialog(): void {
+    setUploadDialogOpen(false)
+    setSelectedFile(null)
+    setUploadDialogError('')
+    if (window.location.hash === '#upload') {
+      window.history.replaceState({}, '', `${window.location.pathname}${window.location.search}`)
+    }
   }
 
   async function createFolder(formData: FormData) {
@@ -531,7 +588,7 @@ export function MediaLibrary({
             <button
               className="primary-action"
               disabled={!hydrated || uploading}
-              onClick={chooseVideo}
+              onClick={() => setUploadDialogOpen(true)}
               type="button"
             >
               {uploading ? `Uploading${progress === null ? '…' : ` ${progress}%`}` : 'Upload Video'}
@@ -540,70 +597,142 @@ export function MediaLibrary({
         )}
       </div>
 
-      {selectedUploadOrganisation && (
-        <form
-          id="media-upload-form"
-          className="upload-form"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void upload(new FormData(event.currentTarget))
-          }}
-        >
-          <label htmlFor="video-file">Video file</label>
-          <input
-            accept="video/mp4,.mp4,video/x-matroska,.mkv"
-            id="video-file"
-            name="file"
-            onChange={(event) => {
-              if (!event.currentTarget.files?.length) return
-              void upload(new FormData(event.currentTarget.form!))
-            }}
-            ref={videoFileInput}
-            required
-            type="file"
-          />
-          {libraryOrganisations.length > 1 && (
-            <>
-              <label htmlFor="upload-organisation">Organisation</label>
-              <select
-                id="upload-organisation"
-                onChange={(event) => setSelectedOrganisationID(Number(event.target.value))}
-                value={selectedOrganisation?.id ?? ''}
-              >
-                {libraryOrganisations.map((organisation) => (
-                  <option key={organisation.id} value={organisation.id}>
-                    {organisation.name}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-          <label htmlFor="media-protection-policy">Media Protection Policy</label>
-          <select
-            defaultValue={selectedUploadOrganisation.drmDefault}
-            disabled={selectedUploadOrganisation.drmRequired}
-            id="media-protection-policy"
-            key={selectedUploadOrganisation.id}
-            name="mediaProtectionPolicy"
+      {selectedUploadOrganisation && uploadDialogOpen && (
+        <div className="upload-dialog-backdrop" onMouseDown={closeUploadDialog}>
+          <div
+            aria-labelledby="upload-dialog-title"
+            aria-modal="true"
+            className="upload-dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+            role="dialog"
           >
-            <option value="protected">DRM-protected playback</option>
-            <option value="standard">Standard playback</option>
-          </select>
-          {selectedUploadOrganisation.drmRequired && (
-            <input name="mediaProtectionPolicy" type="hidden" value="protected" />
-          )}
-          <label htmlFor="retention-days">Retention period (days)</label>
-          <input
-            defaultValue={selectedUploadOrganisation.defaultRetentionDays}
-            id="retention-days"
-            key={`retention-${selectedUploadOrganisation.id}`}
-            max={selectedUploadOrganisation.defaultRetentionDays}
-            min="1"
-            name="retentionDays"
-            required
-            type="number"
-          />
-        </form>
+            <div className="upload-dialog__heading">
+              <div>
+                <p className="eyebrow">
+                  <span aria-hidden="true" /> Secure ingestion
+                </p>
+                <h2 id="upload-dialog-title">Upload Video</h2>
+                <p>to {selectedUploadOrganisation.name}</p>
+              </div>
+              <button aria-label="Close upload dialog" onClick={closeUploadDialog} type="button">
+                ×
+              </button>
+            </div>
+
+            <form
+              className="upload-dialog__form"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (!selectedFile) return
+                const formData = new FormData(event.currentTarget)
+                formData.set('file', selectedFile)
+                closeUploadDialog()
+                void upload(formData)
+              }}
+            >
+              <label
+                className="upload-dropzone"
+                htmlFor="video-file"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  chooseVideo(event.dataTransfer.files[0])
+                }}
+              >
+                <input
+                  accept="video/mp4,.mp4,video/x-matroska,.mkv"
+                  aria-label="Video file"
+                  id="video-file"
+                  onChange={(event) => chooseVideo(event.currentTarget.files?.[0])}
+                  type="file"
+                />
+                <span aria-hidden="true" className="upload-dropzone__icon">
+                  ↑
+                </span>
+                <strong>{selectedFile ? selectedFile.name : 'Drop MP4 or MKV video here'}</strong>
+                <span>
+                  {selectedFile
+                    ? `${readableBytes(selectedFile.size)} selected`
+                    : `or click to browse · ${readableUploadLimit(selectedUploadOrganisation.maximumUploadSizeBytes)} maximum`}
+                </span>
+              </label>
+
+              {uploadDialogError && (
+                <p className="form-message form-message--error" role="alert">
+                  {uploadDialogError}
+                </p>
+              )}
+
+              <div className="upload-dialog__fields">
+                {uploadOrganisations.length > 1 && (
+                  <label>
+                    <span>Organisation</span>
+                    <select
+                      onChange={(event) => setSelectedOrganisationID(Number(event.target.value))}
+                      value={selectedOrganisation?.id ?? ''}
+                    >
+                      {uploadOrganisations.map((organisation) => (
+                        <option key={organisation.id} value={organisation.id}>
+                          {organisation.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <label>
+                  <span>Destination folder</span>
+                  <select defaultValue={activeFolderID ?? ''} name="folderID">
+                    <option value="">All Videos</option>
+                    {folders.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Media Protection Policy</span>
+                  <select
+                    defaultValue={selectedUploadOrganisation.drmDefault}
+                    disabled={selectedUploadOrganisation.drmRequired}
+                    key={selectedUploadOrganisation.id}
+                    name="mediaProtectionPolicy"
+                  >
+                    <option value="protected">DRM-protected playback</option>
+                    <option value="standard">Standard playback</option>
+                  </select>
+                </label>
+                {selectedUploadOrganisation.drmRequired && (
+                  <input name="mediaProtectionPolicy" type="hidden" value="protected" />
+                )}
+                <label>
+                  <span>Retention period (days)</span>
+                  <input
+                    defaultValue={selectedUploadOrganisation.defaultRetentionDays}
+                    key={`retention-${selectedUploadOrganisation.id}`}
+                    max={selectedUploadOrganisation.defaultRetentionDays}
+                    min="1"
+                    name="retentionDays"
+                    required
+                    type="number"
+                  />
+                </label>
+              </div>
+
+              <p className="upload-dialog__processing-note">
+                Adaptive playback renditions are prepared automatically after upload.
+              </p>
+              <div className="upload-dialog__actions">
+                <button className="secondary-action" onClick={closeUploadDialog} type="button">
+                  Cancel
+                </button>
+                <button className="primary-action" disabled={!selectedFile} type="submit">
+                  Start Upload
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {selectedOrganisation && (

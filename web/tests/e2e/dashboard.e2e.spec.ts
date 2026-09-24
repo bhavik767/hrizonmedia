@@ -57,8 +57,9 @@ test.describe('Dashboard shell', () => {
     }
 
     await page.getByRole('link', { name: 'Upload Video' }).click()
-    await expect(page).toHaveURL('/demo/videos#video-file')
-    await expect(page.getByLabel('Video file')).toBeVisible()
+    await expect(page).toHaveURL('/demo/videos#upload')
+    await expect(page.getByRole('dialog', { name: 'Upload Video' })).toBeVisible()
+    await expect(page.getByLabel('Video file')).toBeAttached()
 
     for (const { label, title } of [
       { label: 'Live', title: 'Live video is coming soon' },

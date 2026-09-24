@@ -13,6 +13,7 @@ async function signIn(page: Page) {
 
 async function openReadyAsset(page: Page, fileName: string) {
   await signIn(page)
+  await page.getByRole('button', { name: 'Upload Video' }).click()
   await page.getByLabel('Video file').setInputFiles({
     buffer: mp4Fixture(),
     mimeType: 'video/mp4',
@@ -59,9 +60,7 @@ async function openReadyAsset(page: Page, fileName: string) {
       masterPlaylist.match(/\/api\/demo\/playback\/[^\n]+fairplay\.m3u8\?[^\n]+/)![0],
     )
     expect(mediaPlaylist.status()).toBe(200)
-    expect(await mediaPlaylist.text()).toContain(
-      'KEYFORMAT="com.apple.streamingkeydelivery"',
-    )
+    expect(await mediaPlaylist.text()).toContain('KEYFORMAT="com.apple.streamingkeydelivery"')
     const certificate = await page.request.get(grant.fairPlayCertificateURL)
     expect(certificate.status()).toBe(200)
     expect(certificate.headers()['content-type']).toBe('application/octet-stream')
@@ -73,7 +72,7 @@ async function openReadyAsset(page: Page, fileName: string) {
     })
     expect(licence.status()).toBe(200)
   })
-  await page.getByRole('button', { name: 'Upload Video' }).click()
+  await page.getByRole('button', { name: 'Start Upload' }).click()
   const asset = page.getByRole('article', { name: fileName })
   await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
   await asset.getByRole('link', { name: 'Inspect asset' }).click()

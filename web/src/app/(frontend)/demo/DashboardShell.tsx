@@ -34,9 +34,9 @@ export function DashboardShell({
           <span aria-hidden="true" className="dashboard-sidebar__mark">
             W
           </span>
-          <span>WeCloud</span>
+          <span className="dashboard-sidebar__brand-label">WeCloud</span>
         </Link>
-        <nav aria-label="Dashboard navigation" id="dashboard-navigation">
+        <nav aria-label="Dashboard navigation" hidden={!navigationOpen} id="dashboard-navigation">
           <ul>
             {navigation.map(({ href, label }) => (
               <li key={href}>
@@ -58,7 +58,11 @@ export function DashboardShell({
             onClick={() => setNavigationOpen((open) => !open)}
             type="button"
           >
-            <span aria-hidden="true">☰</span>
+            <span aria-hidden="true" className="dashboard-menu-icon">
+              <span />
+              <span />
+              <span />
+            </span>
           </button>
           <p>Secure video, precisely controlled.</p>
         </header>
