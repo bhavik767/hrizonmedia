@@ -2,12 +2,21 @@ import { expect, test } from '@playwright/test'
 import { getPayload } from 'payload'
 
 import config from '../../src/payload.config.js'
-import { cleanupMembers, seedUploaders, testInvitee } from '../helpers/seedMembers'
+import {
+  cleanupMembers,
+  seedOperator,
+  seedUploaders,
+  testInvitee,
+  testOperator,
+} from '../helpers/seedMembers'
 
-async function signIn(page: import('@playwright/test').Page) {
+async function signIn(
+  page: import('@playwright/test').Page,
+  member: { email: string; password: string } = testInvitee,
+) {
   await page.goto('/demo/sign-in')
-  await page.getByLabel('Email').fill(testInvitee.email)
-  await page.getByLabel('Password').fill(testInvitee.password)
+  await page.getByLabel('Email').fill(member.email)
+  await page.getByLabel('Password').fill(member.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL('/demo', { timeout: 60_000 })
 }
@@ -158,5 +167,37 @@ test.describe('Dashboard shell', () => {
     await page.getByRole('button', { name: 'Sign in' }).click()
     await expect(page).toHaveURL('/demo', { timeout: 60_000 })
     await expect(page.getByText('Signed in as New Dashboard Member')).toBeVisible()
+  })
+})
+
+test.describe('Platform organisation administration', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.clearCookies()
+    await seedOperator()
+  })
+
+  test.afterEach(async () => {
+    await cleanupMembers()
+  })
+
+  test('lets a Platform Administrator create an Organisation through the Dashboard', async ({
+    page,
+  }) => {
+    await signIn(page, testOperator)
+    await page.getByRole('link', { name: 'Manage Organisations' }).click()
+    await expect(page.getByRole('heading', { name: 'Organisation administration' })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: 'Grant Platform Administrator access' }),
+    ).toBeVisible()
+
+    await page.getByLabel('Organisation name').fill('Academy Library')
+    await page.getByLabel('Initial Organisation Administrator').selectOption({
+      label: testOperator.name,
+    })
+    await page.getByRole('button', { name: 'Create Organisation' }).click()
+    await expect(page.getByText('Academy Library was created.')).toBeVisible()
+    await expect(
+      page.getByRole('list', { name: 'Active Organisations' }).getByText('Academy Library'),
+    ).toBeVisible()
   })
 })

@@ -11,10 +11,12 @@ export function DashboardOverview({
   administratorOrganisationID,
   memberEmail,
   memberName,
+  platformAdministration,
 }: {
   administratorOrganisationID: number | null
   memberEmail: string
   memberName: string
+  platformAdministration: boolean
 }) {
   return (
     <>
@@ -33,6 +35,11 @@ export function DashboardOverview({
           <Link className="primary-action" href="/demo/videos#upload">
             Upload Video
           </Link>
+          {platformAdministration && (
+            <Link className="dashboard-secondary-action" href="/demo/organisations">
+              Manage Organisations
+            </Link>
+          )}
           {administratorOrganisationID && (
             <Link
               className="dashboard-secondary-action"
