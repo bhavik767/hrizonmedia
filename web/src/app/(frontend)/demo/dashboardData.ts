@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
-import { ensureDemoEnabled } from '@/members/demoAvailability'
 import { getMember } from '@/members/session'
 import { getOrganisationSettingsState } from '@/organisations/settings'
 import config from '@/payload.config'
@@ -30,8 +29,6 @@ function organisationID(membership: { organisation: number | { id: number } }): 
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
-  await ensureDemoEnabled()
-
   const member = await getMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
 

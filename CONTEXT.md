@@ -22,6 +22,11 @@ the administrator, publisher, or viewer capabilities within that Organisation.
 A separately recorded administrative authority for audited, cross-Organisation recovery and
 operational controls. It is not an Organisation Membership role.
 
+**Dashboard**:
+The authenticated WeCloud workspace through which a Member manages the Organisations and Media
+Assets their Organisation Membership permits.
+_Avoid_: demo, admin panel
+
 **Media Asset**:
 An Organisation-owned video and its lifecycle record, from uploading through processing, readiness, failure, expiry or deletion.
 _Avoid_: file, video upload (when referring to the whole asset)

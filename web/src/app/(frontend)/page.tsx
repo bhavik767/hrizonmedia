@@ -35,8 +35,6 @@ const publicSiteSchema = {
 }
 
 export default async function HomePage() {
-  const demoEnabled = process.env.HRIZONMEDIA_DEMO_ENABLED === 'true'
-
   return (
     <main id="main-content">
       <StructuredData schema={publicSiteSchema} />
@@ -52,19 +50,16 @@ export default async function HomePage() {
             WeCloud gives your organisation a secure path from upload to protected playback,
             with access you can control at every step.
           </p>
-          {demoEnabled && (
-            <Link
-              aria-label="Open WeCloud Dashboard"
-              className="primary-action hero__action"
-              href="/demo"
-            >
-              Dashboard
-              <svg aria-hidden="true" className="action-arrow" viewBox="0 0 16 16">
-                <path d="M3 13 13 3M6 3h7v7" />
-              </svg>
-            </Link>
-          )}
-          {!demoEnabled && <p className="demo-note">Private workspace opening soon.</p>}
+          <Link
+            aria-label="Open WeCloud Dashboard"
+            className="primary-action hero__action"
+            href="/demo"
+          >
+            Dashboard
+            <svg aria-hidden="true" className="action-arrow" viewBox="0 0 16 16">
+              <path d="M3 13 13 3M6 3h7v7" />
+            </svg>
+          </Link>
         </div>
         <div className="control-plate" aria-label="Secure delivery flow">
           <div className="control-plate__topline">

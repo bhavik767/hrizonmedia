@@ -4,7 +4,6 @@ import { getPayload } from 'payload'
 
 import { requireOrganisationAdministrator } from '@/organisations/authorization'
 import config from '@/payload.config'
-import { ensureDemoEnabled } from '@/members/demoAvailability'
 import { getMember } from '@/members/session'
 
 import { MembershipControls } from './MembershipControls'
@@ -18,7 +17,6 @@ export default async function OrganisationMembersPage({
 }: {
   params: Promise<{ organisationID: string }>
 }) {
-  await ensureDemoEnabled()
   const organisationID = Number((await params).organisationID)
   if (!Number.isSafeInteger(organisationID) || organisationID <= 0) notFound()
 

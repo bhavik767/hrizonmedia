@@ -14,8 +14,8 @@ New services cannot select the deprecated `railway.json` format.
 Create/select an environment named exactly `staging`. Use a separate staging
 PostgreSQL service and private CMS bucket, not references to production resources.
 Provide the variables below, `NEXT_PUBLIC_SERVER_URL` as the staging HTTPS origin
-at both build and runtime, `HRIZONMEDIA_DEMO_ENABLED=true`, and independent staging
-secrets. Railway supplies `RAILWAY_ENVIRONMENT_NAME=staging`. Never duplicate
+at both build and runtime, and independent staging secrets. Railway supplies
+`RAILWAY_ENVIRONMENT_NAME=staging`. Never duplicate
 production data or run the old template seed/reset scripts.
 
 Deploy `fix/salad-staging-bootstrap` using the connected GitHub source or authenticated
@@ -23,7 +23,7 @@ Railway CLI from the repository root: `railway up . --path-as-root --project <pr
 --environment staging --service <staging-web-service>`. This preserves `/web` in
 the upload archive, matching the service root and watch patterns.
 Confirm the linked project/service first. Do not change the production source branch,
-domain or variables. Keep `HRIZONMEDIA_DEMO_ENABLED` unset or `false` there.
+domain or variables.
 
 The staging deployment evidence records revision `e30ca97` on 15 September 2026.
 That revision is an ancestor of `fix/salad-staging-bootstrap`. Railway's checked-in
@@ -139,8 +139,7 @@ Keep the tunnel open during testing; its connection details contain credentials
 and must not be copied to logs or source. The database remains private.
 Export `DATABASE_URL` using the staging credentials with host `127.0.0.1` and
 port `5439`, matching `PAYLOAD_SECRET`, staging
-`NEXT_PUBLIC_SERVER_URL`, `RAILWAY_ENVIRONMENT_NAME=staging`,
-`HRIZONMEDIA_DEMO_ENABLED=true`, `NODE_ENV=production` and
+`NEXT_PUBLIC_SERVER_URL`, `RAILWAY_ENVIRONMENT_NAME=staging`, `NODE_ENV=production` and
 `HRIZONMEDIA_STAGING_TESTS=true` into the test runner without committing values.
 Run `npm run test:staging` from `web`; it uses the deployed origin and starts no
 local server. Install Playwright Chromium, Chrome and Edge first. The existing suite
@@ -171,9 +170,9 @@ Production startup requires `DATABASE_URL`, `PAYLOAD_SECRET`, `BUCKET`,
 concurrency defaults to `MEDIA_PROVIDER_CONCURRENCY=2` until an operator changes it in
 the Demo oversight console; the persisted operator setting then takes precedence.
 
-The public Demo navigation and `/demo` route are disabled unless
-`HRIZONMEDIA_DEMO_ENABLED=true`. Keep the variable unset in production until the real
-provider adapters pass their security, performance, and DRM verification.
+The public Dashboard navigation and `/demo` route are always available. Access to
+Organisation data and actions remains protected by Member authentication and
+Organisation Membership authorization.
 
 Payload runs the committed migrations from `src/migrations` in production. CMS media
 uses the private S3-compatible bucket and signed downloads; local development keeps

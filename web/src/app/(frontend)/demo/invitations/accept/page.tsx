@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 
-import { ensureDemoEnabled } from '@/members/demoAvailability'
 import { getMember } from '@/members/session'
 
 import { acceptOrganisationInvitationAction, setOrganisationInvitationPassword } from '../../actions'
@@ -12,7 +11,6 @@ export default async function AcceptOrganisationInvitationPage({
 }: {
   searchParams: Promise<{ error?: string; token?: string }>
 }) {
-  await ensureDemoEnabled()
   const { error, token } = await searchParams
   const member = await getMember()
 

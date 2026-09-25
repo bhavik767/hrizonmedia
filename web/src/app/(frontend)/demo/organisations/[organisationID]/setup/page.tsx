@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
-import { ensureDemoEnabled } from '@/members/demoAvailability'
 import { getMember } from '@/members/session'
 import { getOrganisationSettingsState } from '@/organisations/settings'
 import config from '@/payload.config'
@@ -20,7 +19,6 @@ export default async function OrganisationSetupPage({
   params: Promise<{ organisationID: string }>
   searchParams: Promise<{ error?: string }>
 }) {
-  await ensureDemoEnabled()
   const { organisationID } = await params
   const id = Number(organisationID)
   const actor = await getMember()

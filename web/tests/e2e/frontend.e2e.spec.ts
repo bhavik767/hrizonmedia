@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test'
 
-const demoDisabled = process.env.HRIZONMEDIA_DEMO_ENABLED === 'false'
-
 function luminance(rgb: string) {
   const channels = rgb.match(/\d+/g)?.slice(0, 3).map(Number) ?? []
   return channels.reduce((sum, channel, index) => {
@@ -20,7 +18,6 @@ test.describe('WeCloud landing page', () => {
   test('presents the WeCloud identity, secure-video features, and Dashboard entry points', async ({
     page,
   }) => {
-    test.skip(demoDisabled, 'This case exercises the enabled Dashboard flag')
     await page.goto('/')
 
     await expect(page).toHaveTitle('WeCloud | Secure video. Precisely controlled.')
@@ -40,7 +37,6 @@ test.describe('WeCloud landing page', () => {
   })
 
   test('uses the approved dark palette and accessible Dashboard action', async ({ page }) => {
-    test.skip(demoDisabled, 'This case exercises the enabled Dashboard flag')
     await page.goto('/')
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
@@ -98,7 +94,6 @@ test.describe('WeCloud landing page', () => {
   })
 
   test('remains usable on a narrow screen and exposes keyboard focus', async ({ page }) => {
-    test.skip(demoDisabled, 'This case exercises the enabled Dashboard flag')
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/')
 
@@ -129,7 +124,6 @@ test.describe('WeCloud landing page', () => {
   })
 
   test('opens the existing Dashboard sign-in destination', async ({ page }) => {
-    test.skip(demoDisabled, 'This case exercises the enabled Dashboard flag')
     await page.goto('/')
 
     await page.getByRole('link', { name: 'Open WeCloud Dashboard' }).click()
@@ -137,20 +131,16 @@ test.describe('WeCloud landing page', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign in to the Dashboard')
   })
 
-  test('keeps Dashboard navigation and access disabled when the production flag is off', async ({
-    page,
-  }) => {
-    test.skip(!demoDisabled, 'Run with HRIZONMEDIA_DEMO_ENABLED=false')
+  test('keeps Dashboard navigation and access available without a deployment flag', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByRole('link', { name: 'Sign in to WeCloud Dashboard' })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Open WeCloud Dashboard' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Sign in to WeCloud Dashboard' })).toHaveCount(1)
+    await expect(page.getByRole('link', { name: 'Open WeCloud Dashboard' })).toHaveCount(1)
     const response = await page.goto('/demo')
-    expect(response?.status()).toBe(404)
+    expect(response?.status()).not.toBe(404)
   })
 
   test('matches the approved desktop composition', async ({ page }) => {
-    test.skip(demoDisabled, 'This case exercises the enabled Dashboard flag')
     await page.setViewportSize({ width: 1440, height: 1000 })
     await page.goto('/')
     await page.evaluate(() => document.fonts.ready)
@@ -162,7 +152,6 @@ test.describe('WeCloud landing page', () => {
   })
 
   test('matches the approved mobile composition', async ({ page }) => {
-    test.skip(demoDisabled, 'This case exercises the enabled Dashboard flag')
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/')
     await page.evaluate(() => document.fonts.ready)

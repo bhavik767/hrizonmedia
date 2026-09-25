@@ -1,7 +1,5 @@
 import type { Metadata } from 'next'
 
-import { ensureDemoEnabled } from '@/members/demoAvailability'
-
 import { signIn } from '../actions'
 
 export const metadata: Metadata = {
@@ -13,7 +11,6 @@ export default async function DemoSignInPage({
 }: {
   searchParams: Promise<{ error?: string; returnTo?: string; setup?: string; signedOut?: string }>
 }) {
-  await ensureDemoEnabled()
   const params = await searchParams
 
   return (

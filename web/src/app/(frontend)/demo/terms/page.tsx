@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
-import { ensureDemoEnabled } from '@/members/demoAvailability'
 import { getMember } from '@/members/session'
 
 import { DashboardShell } from '../DashboardShell'
@@ -10,7 +9,6 @@ import { DashboardShell } from '../DashboardShell'
 export const metadata: Metadata = { title: 'Workspace terms | WeCloud Dashboard' }
 
 export default async function DemoTermsPage() {
-  await ensureDemoEnabled()
   const member = await getMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo%2Fterms')
 
