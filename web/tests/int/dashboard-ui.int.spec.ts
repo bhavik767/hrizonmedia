@@ -43,10 +43,11 @@ describe('dashboard interaction regressions', () => {
 
   it('fully hides and restores the dashboard navigation when the menu button is toggled', async () => {
     render(
-      React.createElement(DashboardShell, {
-        children: React.createElement('main', null, 'Dashboard content'),
-        currentPath: '/demo',
-      }),
+      React.createElement(
+        DashboardShell,
+        { currentPath: '/demo' },
+        React.createElement('main', null, 'Dashboard content'),
+      ),
     )
 
     const closeButton = await screen.findByRole('button', { name: 'Close navigation' })
@@ -94,6 +95,7 @@ describe('dashboard interaction regressions', () => {
         administratorOrganisationID: null,
         memberEmail: 'publisher@example.com',
         memberName: 'Publisher',
+        platformAdministration: false,
       }),
     )
     expect(screen.getByRole('link', { name: 'Upload Video' }).getAttribute('href')).toBe(
