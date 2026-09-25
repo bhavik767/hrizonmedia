@@ -22,6 +22,7 @@ export default async function DemoPage() {
           administratorOrganisationID={dashboard.administratorOrganisationID}
           memberEmail={dashboard.member.email}
           memberName={dashboard.member.name}
+          platformAdministration={dashboard.platformAdministration}
         />
         {dashboard.organisationLogoDataURL && (
           <img
