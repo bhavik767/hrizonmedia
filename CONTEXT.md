@@ -5,20 +5,30 @@ and issue DRM licences so it plays on approved devices and nowhere else.
 
 ## Language
 
-### Pilot product
+### Organisation tenancy
 
-**Pilot Workspace**:
-The shared pilot tenancy boundary in which invited members evaluate the secure video platform.
+**Organisation**:
+The tenant boundary for Members, media, settings, invitations, and retention policy.
 
-**Pilot Member**:
-An invited, active or disabled identity within the Pilot Workspace, with uploader or operator privileges.
+**Member**:
+An active or disabled identity that may hold memberships in one or more Organisations.
 _Avoid_: user, CMS administrator
 
-**Operator**:
-A Pilot Member authorized to invite and disable members and manage every Media Asset.
+**Organisation Membership**:
+An active or revoked relationship between a Member and an Organisation. A membership grants
+the administrator, publisher, or viewer capabilities within that Organisation.
+
+**Platform Administrator**:
+A separately recorded administrative authority for audited, cross-Organisation recovery and
+operational controls. It is not an Organisation Membership role.
+
+**Dashboard**:
+The authenticated WeCloud workspace through which a Member manages the Organisations and Media
+Assets their Organisation Membership permits.
+_Avoid_: demo, admin panel
 
 **Media Asset**:
-An uploader-owned video and its lifecycle record, from uploading through processing, readiness, failure, expiry or deletion.
+An Organisation-owned video and its lifecycle record, from uploading through processing, readiness, failure, expiry or deletion.
 _Avoid_: file, video upload (when referring to the whole asset)
 
 **Upload Session**:
@@ -34,10 +44,10 @@ A resolution-specific encoded version of a Media Asset for adaptive playback.
 The identifier binding encrypted media to its playback licences, distinct from the Media Asset identity.
 
 **Playback Grant**:
-An owner-authorized, asset-scoped permission to start playback within five minutes; it does not limit watch time.
+An Organisation-authorized, asset-scoped permission to start playback within five minutes; it does not limit watch time.
 
 **Audit Event**:
-A record of a lifecycle, security or operator action in the Pilot Workspace.
+A record of a lifecycle, security, Organisation, or Platform Administrator action.
 
 ### Registers
 

@@ -13,10 +13,7 @@ import type {
   StorageProvider,
   TranscodeProvider,
 } from './contracts'
-import {
-  InvalidMediaError,
-  MultipartUploadError,
-} from './errors'
+import { InvalidMediaError, MultipartUploadError } from './errors'
 
 const FAKE_PART_SIZE = 5 * 1024 * 1024
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
@@ -27,6 +24,7 @@ interface FakeMultipartUpload {
   metadata: UploadMetadata
   objectKey: string | null
   parts: Map<number, Uint8Array>
+  partTargets: Map<number, { checksumSHA256: string; size: number }>
   uploadSessionId: string
 }
 
@@ -156,6 +154,7 @@ function getUpload(providerUploadId: ProviderUploadId): FakeMultipartUpload {
 export const fakeStorageProvider: StorageProvider & {
   receivePart(input: {
     bytes: Uint8Array
+    checksumSHA256?: string
     partNumber: number
     providerUploadId: ProviderUploadId
   }): Promise<CompletedPart>
@@ -170,9 +169,10 @@ export const fakeStorageProvider: StorageProvider & {
   async completeMultipart({ parts, providerUploadId }) {
     const upload = getUpload(providerUploadId)
     if (upload.objectKey) return { objectKey: upload.objectKey }
-    if (parts.length === 0)
+    const orderedParts = [...parts].sort((left, right) => left.partNumber - right.partNumber)
+    if (orderedParts.length === 0)
       throw new MultipartUploadError('At least one uploaded part is required.')
-    const bytes = parts.map((part, index) => {
+    const bytes = orderedParts.map((part, index) => {
       if (part.partNumber !== index + 1) {
         throw new MultipartUploadError('Uploaded parts must be consecutive.')
       }
@@ -187,7 +187,7 @@ export const fakeStorageProvider: StorageProvider & {
       }
       return stored
     })
-    if (upload.parts.size !== parts.length) {
+    if (upload.parts.size !== orderedParts.length) {
       throw new MultipartUploadError('The completed upload omitted one or more stored parts.')
     }
     const object = concatParts(bytes)
@@ -197,10 +197,39 @@ export const fakeStorageProvider: StorageProvider & {
     return { objectKey }
   },
 
-  async createPartUploadTarget({ partNumber, providerUploadId, uploadSessionId }) {
-    getUpload(providerUploadId)
+  async createPartUploadTarget({
+    checksumSHA256,
+    partNumber,
+    providerUploadId,
+    size,
+    uploadSessionId,
+  }) {
+    const upload = getUpload(providerUploadId)
+    if (upload.uploadSessionId !== uploadSessionId) {
+      throw new MultipartUploadError('Multipart upload does not belong to this session.')
+    }
+    const totalParts = Math.ceil(upload.metadata.size / FAKE_PART_SIZE)
+    const expectedSize =
+      partNumber === totalParts
+        ? upload.metadata.size - FAKE_PART_SIZE * (totalParts - 1)
+        : FAKE_PART_SIZE
+    if (
+      !checksumSHA256 ||
+      !/^[0-9a-f]{64}$/.test(checksumSHA256) ||
+      !Number.isSafeInteger(size) ||
+      size !== expectedSize ||
+      !Number.isSafeInteger(partNumber) ||
+      partNumber < 1 ||
+      partNumber > totalParts
+    ) {
+      throw new MultipartUploadError('Upload part metadata is invalid.')
+    }
+    upload.partTargets.set(partNumber, { checksumSHA256, size })
     return {
-      headers: { 'content-type': 'application/octet-stream' },
+      headers: {
+        'content-type': 'application/octet-stream',
+        'x-amz-checksum-sha256': Buffer.from(checksumSHA256, 'hex').toString('base64'),
+      },
       uploadURL: `/api/demo/uploads/${uploadSessionId}/parts/${partNumber}/content`,
     }
   },
@@ -221,6 +250,7 @@ export const fakeStorageProvider: StorageProvider & {
       metadata,
       objectKey: null,
       parts: new Map(),
+      partTargets: new Map(),
       uploadSessionId,
     })
     return { partSize: FAKE_PART_SIZE, providerUploadId }
@@ -256,7 +286,11 @@ export const fakeStorageProvider: StorageProvider & {
     throw new InvalidMediaError('The completed upload is not a valid MP4 or MKV video.')
   },
 
-  async receivePart({ bytes, partNumber, providerUploadId }) {
+  async readOutputThumbnail() {
+    return null
+  },
+
+  async receivePart({ bytes, checksumSHA256, partNumber, providerUploadId }) {
     if (!Number.isSafeInteger(partNumber) || partNumber < 1) {
       throw new MultipartUploadError('Part number must be a positive integer.')
     }
@@ -265,6 +299,15 @@ export const fakeStorageProvider: StorageProvider & {
     }
     const upload = getUpload(providerUploadId)
     if (upload.objectKey) throw new MultipartUploadError('Multipart upload is already complete.')
+    const target = upload.partTargets.get(partNumber)
+    if (
+      target &&
+      (target.size !== bytes.byteLength ||
+        target.checksumSHA256 !== checksumSHA256 ||
+        target.checksumSHA256 !== etag(bytes))
+    ) {
+      throw new MultipartUploadError('Upload part does not match its signed target.')
+    }
     const copied = Uint8Array.from(bytes)
     upload.parts.set(partNumber, copied)
     return partSummary(partNumber, copied)
@@ -272,6 +315,8 @@ export const fakeStorageProvider: StorageProvider & {
 }
 
 export const fakeTranscodeProvider: TranscodeProvider = {
+  producesPlayReadyPackage: true,
+
   async deleteOutputs() {},
 
   async queue({ idempotencyKey, mediaAssetId, objectKey, renditions }) {
@@ -295,10 +340,10 @@ export const fakeTranscodeProvider: TranscodeProvider = {
 }
 
 export const fakeDeliveryProvider: DeliveryProvider = {
-  async authorize({ expiresAt, mediaAssetId, playbackGrantId, token }) {
+  async authorize({ expiresAt, manifestFormat, mediaAssetId, playbackGrantId, token }) {
     return {
       expiresAt: expiresAt.toISOString(),
-      manifestURL: `/api/demo/playback/${playbackGrantId}/manifest.mpd?asset=${mediaAssetId}&token=${encodeURIComponent(token)}`,
+      manifestURL: `/api/demo/playback/${playbackGrantId}/${manifestFormat === 'hls' ? 'master.m3u8' : 'manifest.mpd'}?asset=${mediaAssetId}&token=${encodeURIComponent(token)}`,
     }
   },
 
@@ -306,21 +351,37 @@ export const fakeDeliveryProvider: DeliveryProvider = {
 }
 
 export const fakeDrmProvider: DrmProvider = {
-  async acquireTemporaryLicence({ challenge, drmContentId, playbackGrantId }) {
+  async acquireTemporaryLicence({ browser, challenge, drmContentId, playbackGrantId }) {
     return createHash('sha256')
       .update(challenge)
       .update('\0')
       .update(drmContentId)
       .update('\0')
       .update(playbackGrantId)
+      .update('\0')
+      .update(browser.keySystem)
       .digest()
   },
 
-  createPlaybackContract({ playbackGrantId }) {
+  createPlaybackContract({ browser, playbackGrantId }) {
+    if (browser.keySystem === 'com.apple.fps') {
+      return {
+        distinctiveIdentifier: 'not-allowed',
+        fairPlayCertificateURL: `/api/demo/playback/${playbackGrantId}/fairplay-certificate`,
+        hdcpRequired: false,
+        keySystem: browser.keySystem,
+        licenceURL: `/api/demo/playback/${playbackGrantId}/licence`,
+        manifestFormat: browser.manifestFormat,
+        persistentState: 'not-allowed',
+        sessionType: 'temporary',
+      }
+    }
     return {
       distinctiveIdentifier: 'not-allowed',
-      keySystem: 'com.widevine.alpha',
+      hdcpRequired: false,
+      keySystem: browser.keySystem,
       licenceURL: `/api/demo/playback/${playbackGrantId}/licence`,
+      manifestFormat: browser.manifestFormat,
       persistentState: 'not-allowed',
       sessionType: 'temporary',
     }

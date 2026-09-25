@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 import config from '@/payload.config'
 
 describe('Demo browser security configuration', () => {
-  it('restricts Payload browser access and hardens Pilot Member cookies', async () => {
+  it('restricts Payload browser access and hardens Member cookies', async () => {
     const resolved = await config
-    const pilotMembers = resolved.collections.find(({ slug }) => slug === 'pilot-members')
+    const pilotMembers = resolved.collections.find(({ slug }) => slug === 'members')
 
     expect(resolved.cors).toEqual([expect.stringMatching(/^https?:\/\//)])
     expect(resolved.csrf).toEqual(resolved.cors)

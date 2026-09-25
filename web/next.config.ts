@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1'],
   devIndicators: false,
   output: 'standalone',
+  experimental: {
+    // Organisation Logos allow up to 3 MB plus multipart form overhead.
+    serverActions: { bodySizeLimit: '4mb' },
+  },
   // Temporarily required on Windows until Next.js fixes Turbopack Sass resolution.
   // See: https://github.com/vercel/next.js/issues/86431
   sassOptions: {

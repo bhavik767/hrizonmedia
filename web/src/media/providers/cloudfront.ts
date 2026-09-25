@@ -21,8 +21,10 @@ export function createCloudFrontDeliveryProvider(
   if (!/^[a-z0-9.-]+$/i.test(domain)) throw new Error('CloudFront domain is invalid.')
 
   return {
-    async authorize({ expiresAt, processingJobId }) {
-      if (!processingJobId) throw new Error('Media Asset delivery is not ready.')
+    async authorize({ expiresAt, manifestFormat, processingJobId }) {
+      if (!processingJobId || !/^processing_[0-9a-f-]{36}$/.test(processingJobId)) {
+        throw new Error('Media Asset delivery is not ready.')
+      }
       const issuedAt = now()
       const authorizationExpiresAt = new Date(
         Math.min(expiresAt.getTime(), issuedAt.getTime() + AUTHORIZATION_LIFETIME_MS),
@@ -31,7 +33,11 @@ export function createCloudFrontDeliveryProvider(
       const policy = JSON.stringify({
         Statement: [
           {
-            Condition: { DateLessThan: { 'AWS:EpochTime': Math.floor(authorizationExpiresAt.getTime() / 1000) } },
+            Condition: {
+              DateLessThan: {
+                'AWS:EpochTime': Math.floor(authorizationExpiresAt.getTime() / 1000),
+              },
+            },
             Resource: `${outputRoot}/*`,
           },
         ],
@@ -40,7 +46,7 @@ export function createCloudFrontDeliveryProvider(
         keyPairId: configuration.keyPairId,
         policy,
         privateKey: configuration.privateKey,
-        url: `${outputRoot}/manifest.mpd`,
+        url: `${outputRoot}/${manifestFormat === 'hls' ? 'master.m3u8' : 'manifest.mpd'}`,
       })
       const signed = new URL(manifestURL)
       return {

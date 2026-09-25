@@ -12,6 +12,7 @@ export const PlaybackGrants: CollectionConfig = {
   admin: { hidden: true, useAsTitle: 'playbackGrantId' },
   fields: [
     { name: 'playbackGrantId', type: 'text', required: true, unique: true, index: true },
+    { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
     {
       name: 'asset',
       type: 'relationship',
@@ -22,12 +23,14 @@ export const PlaybackGrants: CollectionConfig = {
     {
       name: 'owner',
       type: 'relationship',
-      relationTo: 'pilot-members',
+      relationTo: 'members',
       required: true,
       index: true,
     },
     { name: 'expiresAt', type: 'date', required: true, index: true },
     { name: 'deliveryExpiresAt', type: 'date', required: true, index: true },
+    { name: 'leakId', type: 'text', required: true, unique: true, index: true },
+    { name: 'leakIdIssuedAt', type: 'date', required: true, index: true },
   ],
   timestamps: true,
 }

@@ -1,14 +1,22 @@
 import { parseUploadSessionId } from '@/media/identifiers'
 import { receiveUploadPart } from '@/media/library'
-import { readBoundedBody, withAuthenticatedUploader } from '@/media/request'
+import { readBoundedBody, withAuthenticatedMember } from '@/media/request'
 
 const MAX_UPLOAD_PART_BYTES = 5 * 1024 * 1024
+
+function checksumFromHeader(request: Request): string | undefined {
+  const value = request.headers.get('x-amz-checksum-sha256')
+  if (!value) return undefined
+  const bytes = Buffer.from(value, 'base64')
+  if (bytes.byteLength !== 32 || bytes.toString('base64') !== value) return undefined
+  return bytes.toString('hex')
+}
 
 export async function PUT(
   request: Request,
   context: { params: Promise<{ partNumber: string; uploadSessionId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const { partNumber, uploadSessionId } = await context.params
     const parsedID = parseUploadSessionId(uploadSessionId)
     const parsedPartNumber = Number(partNumber)
@@ -22,6 +30,8 @@ export async function PUT(
       parsedID,
       parsedPartNumber,
       await readBoundedBody(request, MAX_UPLOAD_PART_BYTES),
+      undefined,
+      { checksumSHA256: checksumFromHeader(request) },
     )
     return Response.json(part)
   })

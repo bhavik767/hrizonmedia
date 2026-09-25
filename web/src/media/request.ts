@@ -1,11 +1,15 @@
 import { getPayload } from 'payload'
 
 import config from '@/payload.config'
-import type { PilotMember } from '@/payload-types'
-import { OperatorAuthorizationError } from '@/pilot/operations'
+import type { Member } from '@/payload-types'
+import { OperationalControlsError } from '@/organisations/operations'
+import { OrganisationAuthorizationError } from '@/organisations/authorization'
+import { PlatformAdministrationError } from '@/organisations/platform-administration'
+import { OrganisationSettingsError } from '@/organisations/settings'
 
 import { parseMediaAssetId, parsePlaybackGrantId, type DeliveryToken } from './identifiers'
 import { authorizePlaybackResource, PlaybackAuthorizationError } from './playback'
+import { PlaybackCompatibilityError } from './playback-browser'
 import { MediaLibraryError } from './library'
 import {
   assertDemoMutationOrigin,
@@ -14,43 +18,34 @@ import {
 } from './requestSecurity'
 
 type AuthenticatedMember = {
-  member: PilotMember
+  member: Member
   payload: Awaited<ReturnType<typeof getPayload>>
 }
 
 export { parseJSONBody, readBoundedBody } from './body'
 
-async function authenticatedMember(
-  request: Request,
-  requiredRole?: PilotMember['role'],
-): Promise<AuthenticatedMember> {
+export async function authenticatedMember(request: Request): Promise<AuthenticatedMember> {
   const payload = await getPayload({ config })
   const { user: member } = await payload.auth({ headers: request.headers })
   if (
-    member?.collection !== 'pilot-members' ||
-    member.status !== 'active' ||
-    (requiredRole && member.role !== requiredRole)
+    member?.collection !== 'members' ||
+    member.status !== 'active'
   ) {
-    const subject = requiredRole === 'uploader' ? 'Uploader' : 'Pilot Member'
-    throw new Response(`${subject} authentication required.`, { status: 401 })
+    throw new Response('Member authentication required.', { status: 401 })
   }
   return { member, payload }
-}
-
-export function authenticatedUploader(request: Request): Promise<AuthenticatedMember> {
-  return authenticatedMember(request, 'uploader')
-}
-
-export function authenticatedPilotMember(request: Request): Promise<AuthenticatedMember> {
-  return authenticatedMember(request)
 }
 
 export function mediaErrorResponse(error: unknown): Response {
   if (error instanceof Response) return error
   if (
     error instanceof MediaLibraryError ||
+    error instanceof PlaybackCompatibilityError ||
     error instanceof PlaybackAuthorizationError ||
-    error instanceof OperatorAuthorizationError
+    error instanceof OperationalControlsError ||
+    error instanceof OrganisationAuthorizationError ||
+    error instanceof PlatformAdministrationError ||
+    error instanceof OrganisationSettingsError
   ) {
     return Response.json({ error: error.message }, { status: error.status })
   }
@@ -58,7 +53,7 @@ export function mediaErrorResponse(error: unknown): Response {
   return Response.json({ error: 'Unable to complete the media request.' }, { status: 500 })
 }
 
-async function withAuthenticatedMember(
+async function withAuthenticatedRequest(
   request: Request,
   authenticate: (request: Request) => Promise<AuthenticatedMember>,
   handler: (context: AuthenticatedMember) => Promise<Response>,
@@ -73,22 +68,15 @@ async function withAuthenticatedMember(
   }
 }
 
-export function withAuthenticatedUploader(
+export async function withAuthenticatedMember(
   request: Request,
   handler: (context: AuthenticatedMember) => Promise<Response>,
 ): Promise<Response> {
-  return withAuthenticatedMember(request, authenticatedUploader, handler)
-}
-
-export async function withAuthenticatedPilotMember(
-  request: Request,
-  handler: (context: AuthenticatedMember) => Promise<Response>,
-): Promise<Response> {
-  return withAuthenticatedMember(request, authenticatedPilotMember, handler)
+  return withAuthenticatedRequest(request, authenticatedMember, handler)
 }
 
 export async function authorizePlaybackResourceRequest(input: {
-  member: PilotMember
+  member: Member
   payload: Awaited<ReturnType<typeof getPayload>>
   rawPlaybackGrantId: string
   request: Request

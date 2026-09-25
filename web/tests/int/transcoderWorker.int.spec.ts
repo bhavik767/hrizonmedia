@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { ffmpegArguments, validateJob } from '../../transcoder/worker.mjs'
+import {
+  ffmpegArguments,
+  packagerArguments,
+  validateJob,
+  verifyDashProtection,
+} from '../../transcoder/worker.mjs'
 
 const processingJobId = 'processing_00000000-0000-4000-8000-000000000000'
 const job = {
@@ -23,6 +28,40 @@ describe('Salad transcoder worker contract', () => {
     expect(commands).toHaveLength(2)
     expect(commands[0]).toEqual(expect.arrayContaining(['scale=640:360', 'libx264', 'aac']))
     expect(commands[1]).toEqual(expect.arrayContaining(['scale=1280:720', 'libx264', 'aac']))
+  })
+
+  it('requests separately named DASH/CENC and HLS/CBCS delivery packages', () => {
+    expect(
+      packagerArguments(
+        job,
+        [{ absolute: '/work/clear/video-360.mp4' }],
+        '/work/packaged',
+        'enc-token',
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        '--dash',
+        '--hls',
+        '--mpd_filename',
+        'manifest.mpd',
+        '--m3u8_filename',
+        'master.m3u8',
+      ]),
+    )
+  })
+
+  it('rejects a DASH package that is missing PlayReady protection', () => {
+    expect(() =>
+      verifyDashProtection(
+        '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/></MPD>',
+      ),
+    ).toThrow('DoveRunner manifest is not PlayReady encrypted.')
+
+    expect(() =>
+      verifyDashProtection(
+        '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><ContentProtection schemeIdUri="urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95"/></MPD>',
+      ),
+    ).not.toThrow()
   })
 
   it('rejects a worker attempt that escapes paths or upscales', () => {

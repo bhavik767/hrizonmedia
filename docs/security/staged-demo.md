@@ -1,9 +1,9 @@
 # Staged Demo security boundary
 
-The Demo uses deterministic, server-only fake adapters. It is not evidence of real
-DRM or provider security. An optimized Railway staging deployment may use the
-fakes; an enabled production Demo is rejected at startup until verified real
-adapters replace them. Both the Docker entrypoint and `npm run start` run the
+The Dashboard uses deterministic, server-only fake adapters only in staging. They
+are not evidence of real DRM or provider security. A production Dashboard is
+rejected at startup until verified real adapters replace them. Both the Docker
+entrypoint and `npm run start` run the
 environment validator. Production requires an HTTPS `NEXT_PUBLIC_SERVER_URL` and
 the database, private CMS bucket, Payload, and callback configuration listed in
 `web/.env.example`. Never put secret values in `NEXT_PUBLIC_*` variables.
@@ -37,10 +37,10 @@ has verified the canonical S3 completion marker and manifest.
 
 ## Browser mutations
 
-Demo routes and server actions check browser origins and rate-limit mutations.
+Dashboard routes and server actions check browser origins and rate-limit mutations.
 Payload CORS/CSRF origins are restricted to the application origin. Pilot Member
 cookies use HttpOnly (Payload), SameSite=Strict, and Secure in production mode.
-Authenticated Demo responses are non-cacheable and use `nosniff`.
+Authenticated Dashboard responses are non-cacheable and use `nosniff`.
 
 The process-local one-minute limits are 30 general mutations per member, 600
 part-target requests, 600 part-content requests, and 120 licence requests.

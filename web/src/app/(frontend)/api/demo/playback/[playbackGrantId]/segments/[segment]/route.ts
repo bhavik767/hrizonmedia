@@ -2,14 +2,14 @@ import { PlaybackAuthorizationError } from '@/media/playback'
 import {
   authorizePlaybackResourceRequest,
   mediaErrorResponse,
-  withAuthenticatedUploader,
+  withAuthenticatedMember,
 } from '@/media/request'
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ playbackGrantId: string; segment: string }> },
 ): Promise<Response> {
-  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     try {
       const { playbackGrantId: rawGrantId, segment } = await context.params
       if (!/^(audio|video-(360|480|720|1080))-(init\.mp4|[1-9]\d*\.m4s)$/.test(segment)) {

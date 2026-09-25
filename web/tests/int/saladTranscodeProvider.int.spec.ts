@@ -98,6 +98,34 @@ describe('SaladCloud transcode provider', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('accepts valid rendition metadata after JSONB changes object-key order', async () => {
+    const fetch = vi.fn(async () =>
+      Response.json({ id: nativeJobId, status: 'pending' }, { status: 201 }),
+    )
+    const { transcode } = provider(fetch)
+    const processingJobId = newProcessingJobId()
+    const jsonbRenditions = renditions.map(({ audioCodec, height, videoCodec, width }) => ({
+      width,
+      height,
+      audioCodec,
+      videoCodec,
+    }))
+
+    await expect(
+      transcode.queue({
+        attempt: 1,
+        idempotencyKey: processingJobId,
+        mediaAssetId: newMediaAssetId(),
+        objectKey: 'sources/upload_00000000-0000-4000-8000-000000000000/source.mp4',
+        outputPrefix: processingOutputPrefix(processingJobId),
+        renditions: jsonbRenditions,
+        source,
+      }),
+    ).resolves.toBe(`provider_job_${nativeJobId}`)
+
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
   it('reports success only after canonical outputs have been verified', async () => {
     const processingJobId = newProcessingJobId()
     const outputPrefix = processingOutputPrefix(processingJobId)

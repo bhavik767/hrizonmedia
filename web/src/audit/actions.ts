@@ -2,6 +2,8 @@ export const auditActions = [
   'invitation_created',
   'invitation_accepted',
   'member_disabled',
+  'media_access_granted',
+  'media_access_revoked',
   'upload_started',
   'upload_completed',
   'upload_aborted',
@@ -12,6 +14,7 @@ export const auditActions = [
   'processing_failed',
   'processing_retried',
   'playback_granted',
+  'playback_leak_id_issued',
   'playback_licence_acquired',
   'processing_callback_received',
   'processing_callback_rejected',
@@ -21,6 +24,7 @@ export const auditActions = [
   'source_deleted',
   'outputs_deleted',
   'operations_controls_updated',
+  'platform_recovery_accessed',
 ] as const
 
 export type AuditAction = (typeof auditActions)[number]

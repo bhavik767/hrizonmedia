@@ -1,51 +1,53 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
-
-import { ensureDemoEnabled } from '@/pilot/demoAvailability'
-import { getPilotMember } from '@/pilot/session'
 
 import { signOut } from './actions'
+import { DashboardOverview } from './DashboardOverview'
+import { DashboardShell } from './DashboardShell'
+import { getDashboardData } from './dashboardData'
 import { MediaLibrary } from './MediaLibrary'
 
 export const metadata: Metadata = {
-  title: 'Demo | HrizonMedia',
-  description: 'Private HrizonMedia secure-video pilot Demo.',
+  title: 'Dashboard | WeCloud',
+  description: 'Your WeCloud secure-video Dashboard.',
 }
 
 export default async function DemoPage() {
-  await ensureDemoEnabled()
-
-  const member = await getPilotMember()
-  if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
+  const dashboard = await getDashboardData()
 
   return (
-    <main className="demo-page shell" id="main-content">
-      <p className="eyebrow">
-        <span aria-hidden="true" /> Private pilot
-      </p>
-      <h1>HrizonMedia Demo</h1>
-      <p>
-        Signed in as {member.name} ({member.email}). The secure-video workspace is ready.
-      </p>
-      <div className="demo-actions">
-        {member.role === 'operator' && (
-          <>
-            <Link className="text-link" href="/demo/operations">
-              Operator oversight
-            </Link>
-            <Link className="text-link" href="/demo/members">
-              Invite Pilot Members
-            </Link>
-          </>
+    <DashboardShell currentPath="/demo">
+      <main className="dashboard-content" id="main-content">
+        <DashboardOverview
+          administratorOrganisationID={dashboard.administratorOrganisationID}
+          memberEmail={dashboard.member.email}
+          memberName={dashboard.member.name}
+          platformAdministration={dashboard.platformAdministration}
+        />
+        {dashboard.organisationLogoDataURL && (
+          <img
+            alt="Organisation Logo"
+            className="organisation-logo"
+            src={dashboard.organisationLogoDataURL}
+          />
         )}
-        <form action={signOut}>
-          <button className="text-button" type="submit">
-            Sign out
-          </button>
-        </form>
-      </div>
-      <MediaLibrary canUpload={member.role === 'uploader'} />
-    </main>
+        <div className="dashboard-utility-actions">
+          {dashboard.organisationSettingsLinks.map(({ href, label }) => (
+            <Link className="text-link" href={href} key={href}>
+              {label}
+            </Link>
+          ))}
+          <form action={signOut}>
+            <button className="text-button" type="submit">
+              Sign out
+            </button>
+          </form>
+        </div>
+        <MediaLibrary
+          libraryOrganisations={dashboard.libraryOrganisations}
+          uploadOrganisations={dashboard.uploadOrganisations}
+        />
+      </main>
+    </DashboardShell>
   )
 }

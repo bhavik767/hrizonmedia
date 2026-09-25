@@ -1,7 +1,7 @@
 import {
   authorizePlaybackResourceRequest,
   mediaErrorResponse,
-  withAuthenticatedUploader,
+  withAuthenticatedMember,
 } from '@/media/request'
 import { getVisibleAsset } from '@/media/library'
 import type { Rendition } from '@/media/providers/contracts'
@@ -30,14 +30,18 @@ export async function GET(
   request: Request,
   context: { params: Promise<{ playbackGrantId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     try {
-      const { mediaAssetId, playbackGrantId, token } = await authorizePlaybackResourceRequest({
-        member,
-        payload,
-        rawPlaybackGrantId: (await context.params).playbackGrantId,
-        request,
-      })
+      const { manifestFormat, mediaAssetId, playbackGrantId, token } =
+        await authorizePlaybackResourceRequest({
+          member,
+          payload,
+          rawPlaybackGrantId: (await context.params).playbackGrantId,
+          request,
+        })
+      if (manifestFormat !== 'dash') {
+        return Response.json({ error: 'Playback authorization is invalid.' }, { status: 403 })
+      }
       const asset = await getVisibleAsset(payload, member, mediaAssetId)
       if (!asset.renditions?.length) {
         throw new Error('Ready Media Asset has no renditions.')

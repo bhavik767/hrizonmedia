@@ -45,6 +45,7 @@ interface CommandClient {
 interface S3CommandResult {
   Body?: {
     pipe?: (destination: NodeJS.WritableStream) => unknown
+    transformToByteArray?: () => Promise<Uint8Array>
     transformToString?: () => Promise<string>
   }
   ChecksumSHA256?: string
@@ -88,11 +89,13 @@ export function createS3OutputVerifier(
   configuration: S3Configuration,
   dependencies: Pick<S3Dependencies, 'client'> = {},
 ) {
-  const client =
-    dependencies.client ??
-    createS3Client(configuration)
+  const client = dependencies.client ?? createS3Client(configuration)
 
-  return async (input: { attempt: number; outputPrefix: string; renditions: Rendition[] }): Promise<void> => {
+  return async (input: {
+    attempt: number
+    outputPrefix: string
+    renditions: Rendition[]
+  }): Promise<void> => {
     validateOutputPrefix(input.outputPrefix)
     const completion = await client.send(
       new GetObjectCommand({
@@ -143,9 +146,65 @@ export function createS3OutputVerifier(
       !/codecs=["'][^"']*avc1/i.test(manifestText) ||
       !/codecs=["'][^"']*mp4a/i.test(manifestText) ||
       !/edef8ba9-79d6-4ace-a3c8-27dcd51d21ed/i.test(manifestText) ||
-      input.renditions.some(({ height }) => !new RegExp(`height=["']${height}["']`).test(manifestText))
+      !/9a04f079-9840-4286-ab92-e65be0885f95/i.test(manifestText) ||
+      input.renditions.some(
+        ({ height }) => !new RegExp(`height=["']${height}["']`).test(manifestText),
+      )
     ) {
       throw new Error('Transcoder manifest does not contain the approved encrypted ladder.')
+    }
+    const hlsManifest = await client.send(
+      new GetObjectCommand({
+        Bucket: configuration.bucket,
+        Key: `${input.outputPrefix}master.m3u8`,
+      }),
+    )
+    if (
+      hlsManifest.ContentType !== 'application/vnd.apple.mpegurl' ||
+      !hlsManifest.ContentLength ||
+      hlsManifest.ContentLength > 1024 * 1024 ||
+      !hlsManifest.Body?.transformToString
+    ) {
+      throw new Error('Transcoder HLS manifest is missing or invalid.')
+    }
+    const hlsManifestText = await hlsManifest.Body.transformToString()
+    const hlsPlaylistNames = hlsManifestText
+      .split(/\r?\n/)
+      .filter((line) => !line.startsWith('#') && /^[A-Za-z0-9._-]+\.m3u8$/.test(line))
+    if (!/^#EXTM3U/m.test(hlsManifestText) || hlsPlaylistNames.length === 0) {
+      throw new Error('Transcoder HLS manifest does not contain an encrypted playlist.')
+    }
+    const hlsPlaylists = await Promise.all(
+      hlsPlaylistNames.map((name) =>
+        client.send(
+          new GetObjectCommand({
+            Bucket: configuration.bucket,
+            Key: `${input.outputPrefix}${name}`,
+          }),
+        ),
+      ),
+    )
+    const hlsPlaylistTexts = await Promise.all(
+      hlsPlaylists.map(async (playlist) => {
+        if (
+          playlist.ContentType !== 'application/vnd.apple.mpegurl' ||
+          !playlist.ContentLength ||
+          playlist.ContentLength > 1024 * 1024 ||
+          !playlist.Body?.transformToString
+        ) {
+          throw new Error('Transcoder HLS playlist is missing or invalid.')
+        }
+        return playlist.Body.transformToString()
+      }),
+    )
+    if (
+      !hlsPlaylistTexts.some(
+        (playlist) =>
+          /#EXT-X-KEY:METHOD=SAMPLE-AES,/i.test(playlist) &&
+          /KEYFORMAT="com\.apple\.streamingkeydelivery"/i.test(playlist),
+      )
+    ) {
+      throw new Error('Transcoder HLS playlist is not FairPlay encrypted.')
     }
     const listed = await client.send(
       new ListObjectsV2Command({ Bucket: configuration.bucket, Prefix: input.outputPrefix }),
@@ -154,6 +213,7 @@ export function createS3OutputVerifier(
     if (
       !keys.some((key) => key.endsWith('.mp4')) ||
       !keys.some((key) => key.endsWith('.m4s')) ||
+      !keys.some((key) => key.endsWith('.m3u8')) ||
       keys.some((key) => !key.startsWith(input.outputPrefix))
     ) {
       throw new Error('Transcoder segments are missing or outside the canonical output prefix.')
@@ -208,9 +268,7 @@ export function createS3StorageProvider(
   configuration: S3Configuration,
   dependencies: S3Dependencies = {},
 ): StorageProvider {
-  const client =
-    dependencies.client ??
-    createS3Client(configuration)
+  const client = dependencies.client ?? createS3Client(configuration)
   const presign =
     dependencies.presign ??
     ((signingClient: CommandClient, command: UploadPartCommand, options: { expiresIn: number }) =>
@@ -269,6 +327,7 @@ export function createS3StorageProvider(
 
     async completeMultipart({ parts, providerUploadData, providerUploadId }) {
       const descriptor = readS3UploadState(providerUploadId, providerUploadData)
+      const orderedParts = [...parts].sort((left, right) => left.partNumber - right.partNumber)
       let stored: CompletedPart[]
       try {
         stored = await listedParts(descriptor)
@@ -288,15 +347,15 @@ export function createS3StorageProvider(
       }
       if (
         stored.length === 0 ||
-        stored.length !== parts.length ||
+        stored.length !== orderedParts.length ||
         stored.reduce((total, part) => total + part.size, 0) !== descriptor.size ||
         stored.some(
           (part, index) =>
             part.partNumber !== index + 1 ||
-            part.partNumber !== parts[index]?.partNumber ||
-            part.size !== parts[index]?.size ||
-            part.etag !== normalizeETag(parts[index]?.etag) ||
-            part.checksumSHA256 !== parts[index]?.checksumSHA256,
+            part.partNumber !== orderedParts[index]?.partNumber ||
+            part.size !== orderedParts[index]?.size ||
+            part.etag !== normalizeETag(orderedParts[index]?.etag) ||
+            part.checksumSHA256 !== orderedParts[index]?.checksumSHA256,
         )
       ) {
         throw new MultipartUploadError('Uploaded parts do not match private storage.')
@@ -397,7 +456,8 @@ export function createS3StorageProvider(
               Delete: { Objects: objects, Quiet: true },
             }),
           )
-          if (deleted.Errors?.length) throw new Error('One or more provider objects were not deleted.')
+          if (deleted.Errors?.length)
+            throw new Error('One or more provider objects were not deleted.')
         }
         continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined
         if (listed.IsTruncated && !continuationToken) {
@@ -418,6 +478,7 @@ export function createS3StorageProvider(
           ChecksumAlgorithm: 'SHA256',
           ContentType: mimeType,
           Key: key,
+          ServerSideEncryption: 'AES256',
         }),
       )
       if (!result.UploadId) throw new MultipartUploadError('Storage did not create an upload.')
@@ -450,6 +511,23 @@ export function createS3StorageProvider(
         throw new InvalidMediaError('Source object key is invalid.')
       }
       return probe(client, configuration.bucket, objectKey)
+    },
+
+    async readOutputThumbnail(outputPrefix) {
+      validateOutputPrefix(outputPrefix)
+      try {
+        const result = await client.send(
+          new GetObjectCommand({
+            Bucket: configuration.bucket,
+            Key: `${outputPrefix}thumbnail.jpg`,
+          }),
+        )
+        if (result.ContentType !== 'image/jpeg' || !result.Body?.transformToByteArray) return null
+        return result.Body.transformToByteArray()
+      } catch (error) {
+        if (isMissingUpload(error)) return null
+        throw error
+      }
     },
   }
 }

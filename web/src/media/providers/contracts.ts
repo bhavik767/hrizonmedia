@@ -11,6 +11,7 @@ import type {
 } from '../identifiers'
 import type { CompletedPart, PartUploadTarget } from '../multipart'
 import type { UploadMetadata } from '../types'
+import type { ProtectedPlaybackBrowser } from '../playback-browser'
 
 export interface MultipartUpload {
   partSize: number
@@ -64,11 +65,17 @@ export interface StorageProvider {
     metadata: UploadMetadata
     uploadSessionId: UploadSessionId
   }): Promise<MultipartUpload>
-  listParts(providerUploadId: ProviderUploadId, providerUploadData?: string): Promise<CompletedPart[]>
+  listParts(
+    providerUploadId: ProviderUploadId,
+    providerUploadData?: string,
+  ): Promise<CompletedPart[]>
   probe(objectKey: string): Promise<MediaProbe>
+  readOutputThumbnail(outputPrefix: string): Promise<Uint8Array | null>
 }
 
 export interface TranscodeProvider {
+  /** True only when this provider's ready result includes a verified PlayReady package. */
+  producesPlayReadyPackage?: boolean
   deleteOutputs(input: {
     mediaAssetId: MediaAssetId
     processingJobId?: ProcessingJobId
@@ -107,26 +114,43 @@ export interface DeliveryProvider {
     mediaAssetId: MediaAssetId
     playbackGrantId: PlaybackGrantId
     processingJobId?: ProcessingJobId
+    manifestFormat: ProtectedPlaybackBrowser['manifestFormat']
     token: DeliveryToken
   }): Promise<DeliveryAuthorization>
   revokeAsset(mediaAssetId: MediaAssetId): Promise<void>
 }
 
-export interface DrmPlaybackContract {
+interface BaseDrmPlaybackContract {
   distinctiveIdentifier: 'not-allowed'
-  keySystem: 'com.widevine.alpha'
+  hdcpRequired: false
   licenceURL: string
   persistentState: 'not-allowed'
   sessionType: 'temporary'
 }
 
+export type DrmPlaybackContract =
+  | (BaseDrmPlaybackContract & { keySystem: 'com.microsoft.playready'; manifestFormat: 'dash' })
+  | (BaseDrmPlaybackContract & {
+      keySystem: 'com.widevine.alpha'
+      manifestFormat: 'dash'
+    })
+  | (BaseDrmPlaybackContract & {
+      fairPlayCertificateURL: string
+      keySystem: 'com.apple.fps'
+      manifestFormat: 'hls'
+    })
+
 export interface DrmProvider {
   acquireTemporaryLicence(input: {
+    browser: ProtectedPlaybackBrowser
     challenge: Uint8Array
     drmContentId: string
     playbackGrantId: PlaybackGrantId
   }): Promise<Uint8Array>
-  createPlaybackContract(input: { playbackGrantId: PlaybackGrantId }): DrmPlaybackContract
+  createPlaybackContract(input: {
+    browser: ProtectedPlaybackBrowser
+    playbackGrantId: PlaybackGrantId
+  }): DrmPlaybackContract
 }
 
 export interface MediaProviders {

@@ -2,7 +2,8 @@ import 'server-only'
 
 import type { Payload } from 'payload'
 
-import type { MediaAsset, PilotMember } from '@/payload-types'
+import type { MediaAsset, Member } from '@/payload-types'
+import { authorizeOrganisationMedia } from '@/organisations/authorization'
 
 import {
   processingOutputPrefix,
@@ -113,14 +114,9 @@ async function reconcileLifecycleEvents(payload: Payload, assetID?: number): Pro
   }
 }
 
-function canManageAsset(member: PilotMember, asset: MediaAsset): boolean {
-  const ownerID = typeof asset.owner === 'number' ? asset.owner : asset.owner.id
-  return member.status === 'active' && (member.role === 'operator' || ownerID === member.id)
-}
-
 async function manageableAsset(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
 ): Promise<MediaAsset> {
   const result = await payload.find({
@@ -131,15 +127,17 @@ async function manageableAsset(
     where: { mediaAssetId: { equals: mediaAssetId } },
   })
   const asset = result.docs[0]
-  if (!asset || !canManageAsset(member, asset)) {
+  if (!asset) {
     throw new MediaLibraryError('Media Asset not found.', 404)
   }
+  if (!asset.organisation) throw new MediaLibraryError('Media Asset not found.', 404)
+  await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
   return asset
 }
 
 export async function deleteMediaAsset(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
   options: { now?: Date; providers?: MediaProviders } = {},
 ): Promise<void> {
@@ -173,25 +171,21 @@ async function cleanupRevokedAsset(
   now: Date,
   providers: MediaProviders,
 ): Promise<void> {
+  if (!asset.accessRevokedAt) {
+    await providers.delivery.revokeAsset(asset.mediaAssetId as MediaAssetId)
+    await payload.update({
+      collection: 'media-assets',
+      data: { accessRevokedAt: now.toISOString() },
+      id: asset.id,
+      overrideAccess: true,
+    })
+  }
   let firstError: unknown
   if (!asset.sourceDeletedAt) {
     try {
       await deleteRawSource(payload, asset, now, providers)
     } catch (error) {
       firstError = error
-    }
-  }
-  if (!asset.accessRevokedAt) {
-    try {
-      await providers.delivery.revokeAsset(asset.mediaAssetId as MediaAssetId)
-      await payload.update({
-        collection: 'media-assets',
-        data: { accessRevokedAt: now.toISOString() },
-        id: asset.id,
-        overrideAccess: true,
-      })
-    } catch (error) {
-      firstError ??= error
     }
   }
   if (!asset.outputsDeletedAt) {
@@ -273,48 +267,6 @@ export async function runMediaLifecycle(
 ): Promise<void> {
   const now = options.now ?? new Date()
   const providers = options.providers ?? getMediaProviders()
-  const [successfulJobs, failedJobs] = await Promise.all([
-    payload.find({
-      collection: 'processing-jobs',
-      depth: 0,
-      overrideAccess: true,
-      pagination: false,
-      where: {
-        and: [
-          { status: { equals: 'ready' } },
-          { readyAt: { less_than_equal: new Date(now.getTime() - DAY_MS).toISOString() } },
-        ],
-      },
-    }),
-    payload.find({
-      collection: 'processing-jobs',
-      depth: 0,
-      overrideAccess: true,
-      pagination: false,
-      where: {
-        and: [
-          { status: { equals: 'failed' } },
-          { failedAt: { less_than_equal: new Date(now.getTime() - 2 * DAY_MS).toISOString() } },
-        ],
-      },
-    }),
-  ])
-
-  for (const job of [...successfulJobs.docs, ...failedJobs.docs]) {
-    const asset = await payload.findByID({
-      collection: 'media-assets',
-      depth: 0,
-      id: relationID(job.asset),
-      overrideAccess: true,
-    })
-    if (asset.sourceDeletedAt) continue
-    try {
-      await deleteRawSource(payload, asset, now, providers)
-    } catch {
-      logMediaDiagnostic('error', 'source_cleanup_pending', asset.id)
-    }
-  }
-
   const expiring = await payload.find({
     collection: 'media-assets',
     depth: 0,
@@ -356,6 +308,47 @@ export async function runMediaLifecycle(
       await cleanupRevokedAsset(payload, asset, now, providers)
     } catch {
       logMediaDiagnostic('error', 'media_cleanup_pending', asset.id)
+    }
+  }
+
+  const [successfulJobs, failedJobs] = await Promise.all([
+    payload.find({
+      collection: 'processing-jobs',
+      depth: 0,
+      overrideAccess: true,
+      pagination: false,
+      where: {
+        and: [
+          { status: { equals: 'ready' } },
+          { readyAt: { less_than_equal: new Date(now.getTime() - DAY_MS).toISOString() } },
+        ],
+      },
+    }),
+    payload.find({
+      collection: 'processing-jobs',
+      depth: 0,
+      overrideAccess: true,
+      pagination: false,
+      where: {
+        and: [
+          { status: { equals: 'failed' } },
+          { failedAt: { less_than_equal: new Date(now.getTime() - 2 * DAY_MS).toISOString() } },
+        ],
+      },
+    }),
+  ])
+  for (const job of [...successfulJobs.docs, ...failedJobs.docs]) {
+    const asset = await payload.findByID({
+      collection: 'media-assets',
+      depth: 0,
+      id: relationID(job.asset),
+      overrideAccess: true,
+    })
+    if (asset.sourceDeletedAt || asset.status === 'deleted' || asset.status === 'expired') continue
+    try {
+      await deleteRawSource(payload, asset, now, providers)
+    } catch {
+      logMediaDiagnostic('error', 'source_cleanup_pending', asset.id)
     }
   }
   await reconcileLifecycleEvents(payload)

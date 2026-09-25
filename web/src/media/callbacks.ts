@@ -20,6 +20,7 @@ export async function applyProcessingCallback(
   input: {
     callbackId: string
     outputPrefix: string
+    playReadyPackaged?: boolean
     providerJobId: string
     retryFailure?: boolean
     status: 'failed' | 'ready'
@@ -100,7 +101,7 @@ export async function applyProcessingCallback(
         overrideAccess: true,
         req,
       })
-      await setProcessingAssetStatus(payload, job, 'ready', now, req)
+      await setProcessingAssetStatus(payload, job, 'ready', now, req, input.playReadyPackaged === true)
     } else {
       if (input.retryFailure) {
         await retryOrFailProcessingJob(payload, job, now, 'provider_callback_failed', req)

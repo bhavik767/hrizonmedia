@@ -2,14 +2,17 @@ import 'server-only'
 
 import { createLocalReq, type Payload } from 'payload'
 
-import type { MediaAsset, PilotMember, UploadSession } from '@/payload-types'
+import type { MediaAsset, Member, UploadSession } from '@/payload-types'
 import { recordAuditEvent } from '@/audit/events'
-import { assertMediaActivityAllowed } from '@/pilot/operations'
+import { assertMediaActivityAllowed } from '@/organisations/operations'
+import { authorizeOrganisationMedia } from '@/organisations/authorization'
+import { getOrganisationUploadPolicy } from '@/organisations/settings'
 
 import {
   newMediaAssetId,
   newProcessingJobId,
   newUploadSessionId,
+  processingOutputPrefix,
   type MediaAssetId,
   type ProviderUploadId,
   type UploadSessionId,
@@ -19,7 +22,14 @@ import type { MediaProviders, StorageProvider } from './providers/contracts'
 import { InvalidMediaError, MultipartUploadError } from './providers/errors'
 import { getMediaProviders } from './providers'
 import { newProcessingJobData, runProcessingCycle, type ProcessingOptions } from './processing'
-import type { MediaAssetDetail, MediaAssetStatus, MediaAssetSummary, UploadMetadata } from './types'
+import type {
+  MediaAssetDetail,
+  MediaAssetStatus,
+  MediaAssetSummary,
+  MediaFolderSummary,
+  MediaProtectionPolicy,
+  UploadMetadata,
+} from './types'
 
 const MAX_ASSET_BYTES = 2 * 1024 * 1024 * 1024
 const MAX_DURATION_SECONDS = 2 * 60 * 60
@@ -38,9 +48,16 @@ function relationID(value: number | { id: number }): number {
   return typeof value === 'number' ? value : value.id
 }
 
+function optionalRelationID(value: number | { id: number } | null | undefined): number | null {
+  return value === null || value === undefined ? null : relationID(value)
+}
+
 function summary(asset: MediaAsset): MediaAssetSummary {
   return {
     createdAt: asset.createdAt,
+    durationSeconds: asset.durationSeconds,
+    folderID: optionalRelationID(asset.folder),
+    organisationID: optionalRelationID(asset.organisation),
     fileName: asset.fileName,
     mediaAssetId: asset.mediaAssetId as MediaAssetId,
     size: asset.size,
@@ -48,7 +65,198 @@ function summary(asset: MediaAsset): MediaAssetSummary {
   }
 }
 
-function validateMetadata(input: UploadMetadata): UploadMetadata {
+function folderSummary(folder: {
+  id: number
+  name: string
+  organisation: number | { id: number }
+}): MediaFolderSummary {
+  return { id: folder.id, name: folder.name, organisationID: relationID(folder.organisation) }
+}
+
+async function folderForOrganisation(payload: Payload, organisationID: number, folderID: number) {
+  const folder = await payload.findByID({
+    collection: 'media-folders',
+    depth: 0,
+    id: folderID,
+    overrideAccess: true,
+  })
+  if (relationID(folder.organisation) !== organisationID)
+    throw new MediaLibraryError('Folder not found.', 404)
+  return folder
+}
+
+async function folderForUpload(
+  payload: Payload,
+  owner: Member,
+  input: UploadMetadata,
+  organisationID?: number,
+) {
+  if (input.folderID === undefined) return undefined
+  if (!organisationID || !Number.isSafeInteger(input.folderID) || input.folderID <= 0) {
+    throw new MediaLibraryError('Choose a Folder in this Organisation.', 400)
+  }
+  await authorizeOrganisationMedia(payload, owner, { operation: 'create', organisationID })
+  return folderForOrganisation(payload, organisationID, input.folderID)
+}
+
+export async function createMediaFolder(
+  payload: Payload,
+  member: Member,
+  organisationID: number,
+  name: string,
+): Promise<MediaFolderSummary> {
+  if (
+    !Number.isSafeInteger(organisationID) ||
+    organisationID <= 0 ||
+    name.trim().length === 0 ||
+    name.trim() !== name ||
+    name.length > 120
+  ) {
+    throw new MediaLibraryError('Choose a valid Folder name.', 400)
+  }
+  await authorizeOrganisationMedia(payload, member, { operation: 'create', organisationID })
+  return folderSummary(
+    await payload.create({
+      collection: 'media-folders',
+      data: { name, organisation: organisationID, owner: member.id },
+      overrideAccess: true,
+    }),
+  )
+}
+
+export async function listMediaFolders(
+  payload: Payload,
+  member: Member,
+  organisationID: number,
+): Promise<MediaFolderSummary[]> {
+  await authorizeOrganisationMedia(payload, member, { operation: 'browse', organisationID })
+  const folders = await payload.find({
+    collection: 'media-folders',
+    depth: 0,
+    limit: 1000,
+    overrideAccess: true,
+    sort: 'name',
+    where: { organisation: { equals: organisationID } },
+  })
+  return folders.docs.map(folderSummary)
+}
+
+export async function renameMediaFolder(
+  payload: Payload,
+  member: Member,
+  folderID: number,
+  name: string,
+): Promise<MediaFolderSummary> {
+  if (name.trim().length === 0 || name.trim() !== name || name.length > 120)
+    throw new MediaLibraryError('Choose a valid Folder name.', 400)
+  const folder = await payload.findByID({
+    collection: 'media-folders',
+    depth: 0,
+    id: folderID,
+    overrideAccess: true,
+  })
+  const authorisation = await authorizeOrganisationMedia(payload, member, {
+    operation: 'create',
+    organisationID: relationID(folder.organisation),
+  })
+  const assets = await payload.find({
+    collection: 'media-assets',
+    depth: 0,
+    limit: 1,
+    overrideAccess: true,
+    where: { and: [{ folder: { equals: folderID } }, { owner: { not_equals: member.id } }] },
+  })
+  if (authorisation.role === 'publisher' && assets.docs[0])
+    throw new MediaLibraryError(
+      'Publishers cannot rename a Folder containing another Publisher’s Media Assets.',
+      403,
+    )
+  return folderSummary(
+    await payload.update({
+      collection: 'media-folders',
+      id: folderID,
+      data: { name },
+      overrideAccess: true,
+    }),
+  )
+}
+
+export async function moveMediaAssetToFolder(
+  payload: Payload,
+  member: Member,
+  mediaAssetId: MediaAssetId,
+  folderID: number | null,
+): Promise<MediaAssetSummary> {
+  const found = await payload.find({
+    collection: 'media-assets',
+    depth: 0,
+    limit: 1,
+    overrideAccess: true,
+    where: { mediaAssetId: { equals: mediaAssetId } },
+  })
+  const asset = found.docs[0]
+  if (!asset || !asset.organisation) throw new MediaLibraryError('Media Asset not found.', 404)
+  await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
+  if (folderID !== null)
+    await folderForOrganisation(payload, relationID(asset.organisation), folderID)
+  return summary(
+    await payload.update({
+      collection: 'media-assets',
+      id: asset.id,
+      data: { folder: folderID },
+      overrideAccess: true,
+    }),
+  )
+}
+
+export async function deleteMediaFolder(
+  payload: Payload,
+  member: Member,
+  folderID: number,
+): Promise<void> {
+  const folder = await payload.findByID({
+    collection: 'media-folders',
+    depth: 0,
+    id: folderID,
+    overrideAccess: true,
+  })
+  const organisationID = relationID(folder.organisation)
+  const authorization = await authorizeOrganisationMedia(payload, member, {
+    operation: 'create',
+    organisationID,
+  })
+  const otherPublisherAsset = await payload.find({
+    collection: 'media-assets',
+    depth: 0,
+    limit: 1,
+    overrideAccess: true,
+    where: { and: [{ folder: { equals: folderID } }, { owner: { not_equals: member.id } }] },
+  })
+  if (authorization.role === 'publisher' && otherPublisherAsset.docs[0]) {
+    throw new MediaLibraryError(
+      'Publishers cannot delete a Folder containing another Publisher’s Media Assets.',
+      403,
+    )
+  }
+  await payload.update({
+    collection: 'media-assets',
+    data: { folder: null },
+    overrideAccess: true,
+    where: { folder: { equals: folderID } },
+  })
+  await payload.update({
+    collection: 'upload-sessions',
+    data: { folder: null },
+    overrideAccess: true,
+    where: { folder: { equals: folderID } },
+  })
+  await payload.delete({ collection: 'media-folders', id: folderID, overrideAccess: true })
+}
+
+function validateMetadata(
+  input: UploadMetadata,
+  maximumUploadSizeBytes = MAX_ASSET_BYTES,
+): UploadMetadata {
   if (
     input.fileName.length === 0 ||
     input.fileName.length > 255 ||
@@ -63,13 +271,68 @@ function validateMetadata(input: UploadMetadata): UploadMetadata {
   if (extension !== 'mp4' && extension !== 'mkv') {
     throw new MediaLibraryError('Choose an MP4 or MKV video.', 400)
   }
-  if (!Number.isSafeInteger(input.size) || input.size <= 0 || input.size > MAX_ASSET_BYTES) {
-    throw new MediaLibraryError('The video must be no larger than 2 GB.', 400)
+  if (
+    !Number.isSafeInteger(input.size) ||
+    input.size <= 0 ||
+    input.size > Math.min(MAX_ASSET_BYTES, maximumUploadSizeBytes)
+  ) {
+    throw new MediaLibraryError("The video exceeds this Organisation's upload limit.", 400)
   }
   if (!input.fileFingerprint.trim() || input.fileFingerprint.length > 500) {
     throw new MediaLibraryError('The selected file could not be identified safely.', 400)
   }
   return { ...input, mimeType: extension === 'mp4' ? 'video/mp4' : 'video/x-matroska' }
+}
+
+function mediaProtectionPolicy(value: unknown): MediaProtectionPolicy | null {
+  return value === 'protected' || value === 'standard' ? value : null
+}
+
+async function organisationUploadDetails(
+  payload: Payload,
+  owner: Member,
+  input: UploadMetadata,
+): Promise<{
+  expiresAt: string
+  maximumUploadSizeBytes: number
+  mediaProtectionPolicy: MediaProtectionPolicy
+  organisationID: number
+  retentionDays: number
+}> {
+  const organisationID = input.organisationID
+  if (
+    organisationID === undefined ||
+    !Number.isSafeInteger(organisationID) ||
+    organisationID <= 0
+  ) {
+    throw new MediaLibraryError('Choose an Organisation for this upload.', 400)
+  }
+  await authorizeOrganisationMedia(payload, owner, {
+    operation: 'create',
+    organisationID,
+  })
+  const policy = await getOrganisationUploadPolicy(payload, organisationID)
+  const requestedPolicy = mediaProtectionPolicy(input.mediaProtectionPolicy)
+  if (input.mediaProtectionPolicy !== undefined && !requestedPolicy) {
+    throw new MediaLibraryError('Choose a valid Media Protection Policy.', 400)
+  }
+  const retentionDays = input.retentionDays ?? policy.defaultRetentionDays
+  if (
+    !Number.isSafeInteger(retentionDays) ||
+    retentionDays <= 0 ||
+    retentionDays > policy.defaultRetentionDays
+  ) {
+    throw new MediaLibraryError('Choose a retention period within the Organisation limit.', 400)
+  }
+  return {
+    expiresAt: new Date(Date.now() + retentionDays * 24 * 60 * 60 * 1000).toISOString(),
+    maximumUploadSizeBytes: policy.maximumUploadSizeBytes,
+    mediaProtectionPolicy: policy.drmRequired
+      ? 'protected'
+      : (requestedPolicy ?? policy.drmDefault),
+    organisationID,
+    retentionDays,
+  }
 }
 
 function sessionResponse(session: UploadSession, asset: MediaAsset, parts: CompletedPart[] = []) {
@@ -121,17 +384,18 @@ async function terminateUpload(
     actorID,
     assetID: relationID(session.asset),
     eventKey: `upload-session:${session.id}:${sessionStatus}`,
+    organisationID: optionalRelationID(session.organisation) ?? undefined,
     occurredAt,
   })
 }
 
 async function requirePendingSession(
   payload: Payload,
-  ownerID: number,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   providers: MediaProviders,
 ): Promise<UploadSession> {
-  const session = await findOwnedSession(payload, ownerID, uploadSessionId)
+  const session = await findAccessibleSession(payload, owner, uploadSessionId)
   if (session.status === 'completed') throw new MediaLibraryError('Upload already completed.', 409)
   if (session.status === 'aborted') throw new MediaLibraryError('Upload session was aborted.', 410)
   if (session.status === 'expired' || new Date(session.expiresAt).getTime() <= Date.now()) {
@@ -145,12 +409,14 @@ async function requirePendingSession(
 
 export async function createUploadSession(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   input: UploadMetadata,
   providers: MediaProviders = getMediaProviders(),
 ) {
   await assertMediaActivityAllowed(payload)
-  const metadata = validateMetadata(input)
+  const organisation = await organisationUploadDetails(payload, owner, input)
+  const folder = await folderForUpload(payload, owner, input, organisation?.organisationID)
+  const metadata = validateMetadata(input, organisation?.maximumUploadSizeBytes ?? MAX_ASSET_BYTES)
   await cleanupAbandonedUploads(payload, new Date(), providers)
   const now = new Date()
   const mediaAssetId = newMediaAssetId()
@@ -162,9 +428,13 @@ export async function createUploadSession(
     asset = await payload.create({
       collection: 'media-assets',
       data: {
+        expiresAt: organisation?.expiresAt,
         fileName: metadata.fileName,
+        folder: folder?.id,
         mediaAssetId,
+        mediaProtectionPolicy: organisation?.mediaProtectionPolicy ?? 'protected',
         mimeType: metadata.mimeType,
+        organisation: organisation?.organisationID,
         owner: owner.id,
         size: metadata.size,
         status: 'uploading',
@@ -180,11 +450,15 @@ export async function createUploadSession(
         expiresAt: new Date(now.getTime() + UPLOAD_SESSION_LIFETIME_MS).toISOString(),
         fileFingerprint: metadata.fileFingerprint,
         fileName: metadata.fileName,
+        folder: folder?.id,
+        mediaProtectionPolicy: organisation?.mediaProtectionPolicy ?? 'protected',
         mimeType: metadata.mimeType,
+        organisation: organisation?.organisationID,
         owner: owner.id,
         partSize: initiated.partSize,
         providerUploadId: initiated.providerUploadId,
         providerUploadData: initiated.providerUploadData,
+        retentionDays: organisation?.retentionDays,
         size: metadata.size,
         status: 'pending',
         uploadSessionId,
@@ -196,14 +470,12 @@ export async function createUploadSession(
       actorID: owner.id,
       assetID: asset.id,
       eventKey: `upload-session:${session.id}:started`,
+      organisationID: organisation?.organisationID,
       occurredAt: now,
     })
     return sessionResponse(session, asset)
   } catch (error) {
-    await providers.storage.abortMultipart(
-      initiated.providerUploadId,
-      initiated.providerUploadData,
-    )
+    await providers.storage.abortMultipart(initiated.providerUploadId, initiated.providerUploadData)
     if (asset) {
       await payload.delete({ collection: 'media-assets', id: asset.id, overrideAccess: true })
     }
@@ -211,9 +483,9 @@ export async function createUploadSession(
   }
 }
 
-async function findOwnedSession(
+async function findAccessibleSession(
   payload: Payload,
-  ownerID: number,
+  member: Member,
   uploadSessionId: UploadSessionId,
 ): Promise<UploadSession> {
   const result = await payload.find({
@@ -221,24 +493,39 @@ async function findOwnedSession(
     depth: 0,
     limit: 1,
     overrideAccess: true,
-    where: {
-      and: [{ uploadSessionId: { equals: uploadSessionId } }, { owner: { equals: ownerID } }],
-    },
+    where: { uploadSessionId: { equals: uploadSessionId } },
   })
   const session = result.docs[0]
   if (!session) throw new MediaLibraryError('Upload session not found.', 404)
+  const asset = await payload.findByID({
+    collection: 'media-assets',
+    depth: 0,
+    id: relationID(session.asset),
+    overrideAccess: true,
+  })
+  const organisationID = optionalRelationID(asset.organisation)
+  if (organisationID) {
+    if (optionalRelationID(session.organisation) !== organisationID) {
+      throw new MediaLibraryError('Upload session is not Organisation-scoped.', 409)
+    }
+    await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
+    return session
+  }
+  if (relationID(session.owner) !== member.id) {
+    throw new MediaLibraryError('Upload session not found.', 404)
+  }
   return session
 }
 
 export async function resumeUploadSession(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   fileFingerprint: string,
   providers: MediaProviders = getMediaProviders(),
 ) {
   await assertMediaActivityAllowed(payload)
-  const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
+  const session = await requirePendingSession(payload, owner, uploadSessionId, providers)
   if (session.fileFingerprint !== fileFingerprint) {
     throw new MediaLibraryError('The selected file does not match this upload session.', 409)
   }
@@ -271,14 +558,14 @@ function validatePartNumber(session: UploadSession, partNumber: number): void {
 
 export async function renewUploadPart(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   partNumber: number,
   part: { checksumSHA256?: string; size?: number } = {},
   providers: MediaProviders = getMediaProviders(),
 ) {
   await assertMediaActivityAllowed(payload)
-  const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
+  const session = await requirePendingSession(payload, owner, uploadSessionId, providers)
   validatePartNumber(session, partNumber)
   try {
     return await providers.storage.createPartUploadTarget({
@@ -299,14 +586,15 @@ export async function renewUploadPart(
 
 export async function receiveUploadPart(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   partNumber: number,
   bytes: Uint8Array,
   providers: MediaProviders = getMediaProviders(),
+  part: { checksumSHA256?: string } = {},
 ): Promise<CompletedPart> {
   await assertMediaActivityAllowed(payload)
-  const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
+  const session = await requirePendingSession(payload, owner, uploadSessionId, providers)
   validatePartNumber(session, partNumber)
   if (bytes.byteLength > session.partSize) {
     throw new MediaLibraryError(`Upload parts may not exceed ${session.partSize} bytes.`, 400)
@@ -314,6 +602,7 @@ export async function receiveUploadPart(
   const receiver = providers.storage as StorageProvider & {
     receivePart?: (input: {
       bytes: Uint8Array
+      checksumSHA256?: string
       partNumber: number
       providerUploadId: ProviderUploadId
     }) => Promise<CompletedPart>
@@ -324,6 +613,7 @@ export async function receiveUploadPart(
   try {
     return await receiver.receivePart({
       bytes,
+      checksumSHA256: part.checksumSHA256,
       partNumber,
       providerUploadId: providerUploadID(session),
     })
@@ -346,18 +636,19 @@ async function rejectCompletedUpload(
 
 export async function completeUpload(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   parts: CompletedPart[],
   providers: MediaProviders = getMediaProviders(),
   processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary> {
   await assertMediaActivityAllowed(payload)
-  const session = await requirePendingSession(payload, owner.id, uploadSessionId, providers)
+  const session = await requirePendingSession(payload, owner, uploadSessionId, providers)
+  const normalizedParts = [...parts].sort((left, right) => left.partNumber - right.partNumber)
   let stored
   try {
     stored = await providers.storage.completeMultipart({
-      parts,
+      parts: normalizedParts,
       providerUploadData: providerUploadData(session),
       providerUploadId: providerUploadID(session),
     })
@@ -438,7 +729,7 @@ export async function completeUpload(
       data: newProcessingJobData({
         asset,
         objectKey: stored.objectKey,
-        ownerID: owner.id,
+        ownerID: relationID(asset.owner),
         processingJobId,
         queuedAt,
         source: {
@@ -476,6 +767,7 @@ export async function completeUpload(
       actorID: owner.id,
       assetID: asset.id,
       eventKey: `upload-session:${session.id}:completed`,
+      organisationID: optionalRelationID(asset.organisation) ?? undefined,
       occurredAt: queuedAt,
     }),
     recordAuditEvent(payload, {
@@ -483,6 +775,7 @@ export async function completeUpload(
       actorID: owner.id,
       assetID: asset.id,
       eventKey: `processing-job:${processingJobId}:queued`,
+      organisationID: optionalRelationID(asset.organisation) ?? undefined,
       occurredAt: queuedAt,
     }),
   ])
@@ -497,11 +790,11 @@ export async function completeUpload(
 
 export async function abortUpload(
   payload: Payload,
-  owner: PilotMember,
+  owner: Member,
   uploadSessionId: UploadSessionId,
   providers: MediaProviders = getMediaProviders(),
 ): Promise<void> {
-  const session = await findOwnedSession(payload, owner.id, uploadSessionId)
+  const session = await findAccessibleSession(payload, owner, uploadSessionId)
   if (
     session.status === 'completed' ||
     session.status === 'aborted' ||
@@ -540,11 +833,12 @@ export async function cleanupAbandonedUploads(
 
 export async function listVisibleAssets(
   payload: Payload,
-  member: PilotMember,
-  processingOptions: ProcessingOptions = {},
+  member: Member,
+  organisationID?: number,
 ): Promise<MediaAssetSummary[]> {
-  await cleanupAbandonedUploads(payload)
-  await runProcessingCycle(payload, processingOptions)
+  if (organisationID !== undefined) {
+    await authorizeOrganisationMedia(payload, member, { operation: 'browse', organisationID })
+  }
   const result = await payload.find({
     collection: 'media-assets',
     depth: 0,
@@ -552,37 +846,52 @@ export async function listVisibleAssets(
     overrideAccess: true,
     sort: '-createdAt',
     where:
-      member.role === 'operator'
+      organisationID === undefined
         ? { status: { not_equals: 'deleted' } }
         : {
-            and: [{ owner: { equals: member.id } }, { status: { not_equals: 'deleted' } }],
+            and: [
+              { organisation: { equals: organisationID } },
+              { status: { not_equals: 'deleted' } },
+            ],
           },
   })
-  return result.docs.map(summary)
+  const visible = await Promise.all(
+    result.docs.map(async (asset) => {
+      if (!asset.organisation) return null
+      try {
+        await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'read' })
+        return asset
+      } catch {
+        return null
+      }
+    }),
+  )
+  return visible.filter((asset): asset is MediaAsset => asset !== null).map(summary)
 }
 
 export async function getVisibleAsset(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
-  processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetDetail> {
-  await runProcessingCycle(payload, processingOptions)
   const result = await payload.find({
     collection: 'media-assets',
     depth: 0,
     limit: 1,
     overrideAccess: true,
     where: {
-      and: [
-        { mediaAssetId: { equals: mediaAssetId } },
-        { status: { not_equals: 'deleted' } },
-        ...(member.role === 'operator' ? [] : [{ owner: { equals: member.id } }]),
-      ],
+      and: [{ mediaAssetId: { equals: mediaAssetId } }, { status: { not_equals: 'deleted' } }],
     },
   })
   const asset = result.docs[0]
   if (!asset) throw new MediaLibraryError('Media Asset not found.', 404)
+  if (!asset.organisation) throw new MediaLibraryError('Media Asset not found.', 404)
+  const authorization = await authorizeOrganisationMedia(payload, member, {
+    assetID: asset.id,
+    operation: 'read',
+  })
+  const canManage = authorization.role !== 'viewer'
+  const canShare = authorization.role === 'administrator' || authorization.role === 'publisher'
   const [sessions, jobs] = await Promise.all([
     payload.find({
       collection: 'upload-sessions',
@@ -603,10 +912,14 @@ export async function getVisibleAsset(
   if (!session) throw new MediaLibraryError('Upload Session not found.', 500)
   return {
     ...summary(asset),
+    assetID: asset.id,
     canRetry: asset.status === 'failed' && Boolean(session.objectKey),
+    canManage,
+    canShare,
     dispatchedAt: jobs.docs[0]?.dispatchedAt ?? null,
     failureMessage: jobs.docs[0]?.failureMessage ?? null,
     mimeType: asset.mimeType,
+    organisationID: optionalRelationID(asset.organisation),
     processingJobId: (jobs.docs[0]?.processingJobId as MediaAssetDetail['processingJobId']) ?? null,
     providerJobId: (jobs.docs[0]?.providerJobId as MediaAssetDetail['providerJobId']) ?? null,
     readyAt: jobs.docs[0]?.readyAt ?? null,
@@ -615,9 +928,20 @@ export async function getVisibleAsset(
   }
 }
 
+export async function getVisibleAssetThumbnail(
+  payload: Payload,
+  member: Member,
+  mediaAssetId: MediaAssetId,
+  providers: MediaProviders = getMediaProviders(),
+): Promise<Uint8Array | null> {
+  const asset = await getVisibleAsset(payload, member, mediaAssetId)
+  if (asset.status !== 'ready' || !asset.processingJobId) return null
+  return providers.storage.readOutputThumbnail(processingOutputPrefix(asset.processingJobId))
+}
+
 export async function retryVisibleAssetProcessing(
   payload: Payload,
-  member: PilotMember,
+  member: Member,
   mediaAssetId: MediaAssetId,
   processingOptions: ProcessingOptions = {},
 ): Promise<MediaAssetSummary> {
@@ -627,15 +951,12 @@ export async function retryVisibleAssetProcessing(
     depth: 0,
     limit: 1,
     overrideAccess: true,
-    where: {
-      and: [
-        { mediaAssetId: { equals: mediaAssetId } },
-        ...(member.role === 'operator' ? [] : [{ owner: { equals: member.id } }]),
-      ],
-    },
+    where: { mediaAssetId: { equals: mediaAssetId } },
   })
   const asset = result.docs[0]
   if (!asset) throw new MediaLibraryError('Media Asset not found.', 404)
+  if (!asset.organisation) throw new MediaLibraryError('Media Asset not found.', 404)
+  await authorizeOrganisationMedia(payload, member, { assetID: asset.id, operation: 'manage' })
   if (asset.status !== 'failed')
     throw new MediaLibraryError('Only failed assets can be retried.', 409)
 

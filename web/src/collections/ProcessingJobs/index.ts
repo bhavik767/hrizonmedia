@@ -12,6 +12,7 @@ export const ProcessingJobs: CollectionConfig = {
   admin: { hidden: true, useAsTitle: 'processingJobId' },
   fields: [
     { name: 'processingJobId', type: 'text', required: true, unique: true, index: true },
+    { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
     { name: 'providerJobId', type: 'text', unique: true, index: true },
     {
       name: 'asset',
@@ -23,7 +24,7 @@ export const ProcessingJobs: CollectionConfig = {
     {
       name: 'owner',
       type: 'relationship',
-      relationTo: 'pilot-members',
+      relationTo: 'members',
       required: true,
       index: true,
     },

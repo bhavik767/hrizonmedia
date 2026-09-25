@@ -16,12 +16,14 @@ import type { TranscodeProvider } from '@/media/providers/contracts'
 import { adaptiveRenditions, newProcessingJobData, runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
 import { POST as processingCallback } from '@/app/(frontend)/api/internal/transcode/callback/route'
-import type { PilotMember } from '@/payload-types'
-import { getOperatorOverview, updateOperationalControls } from '@/pilot/operations'
+import type { Member } from '@/payload-types'
+import { getOperationalOverview, updateOperationalControls } from '@/organisations/operations'
+import { createTestOrganisation, createTestPlatformAdministrator } from '../helpers/organisations'
 import { mp4Fixture } from '../helpers/mediaFixtures'
 
 let payload: Payload
-let uploader: PilotMember
+let organisationID: number
+let uploader: Member
 
 const at = (value: string) => new Date(value)
 const start = at('2026-09-14T12:00:00.000Z')
@@ -50,10 +52,14 @@ function fixture(source = '1920x1080:2') {
 async function clean() {
   await payload.delete({ collection: 'audit-events', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-operations', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'platform-administrators', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'upload-sessions', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisation-settings', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisation-memberships', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'organisations', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }
 
 async function upload(file = fixture(), provider: TranscodeProvider = fakeTranscodeProvider) {
@@ -65,6 +71,7 @@ async function upload(file = fixture(), provider: TranscodeProvider = fakeTransc
       fileFingerprint: `${file.name}:${file.size}:test`,
       fileName: file.name,
       mimeType: file.type,
+      organisationID,
       size: file.size,
     },
     providers,
@@ -93,17 +100,16 @@ describe('reliable Processing Jobs', () => {
     await clean()
     resetFakeMediaStorage()
     uploader = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'processing-uploader@example.test',
-        invitationAcceptedAt: start.toISOString(),
         name: 'Processing uploader',
         password: 'uploader-password',
-        role: 'uploader',
         status: 'active',
       },
       overrideAccess: true,
     })
+    organisationID = await createTestOrganisation(payload, uploader)
   })
 
   afterAll(clean)
@@ -111,9 +117,7 @@ describe('reliable Processing Jobs', () => {
   it('dispatches a completed upload immediately with idempotency and adaptive outputs', async () => {
     const provider = { ...fakeTranscodeProvider, queue: vi.fn(fakeTranscodeProvider.queue) }
     const session = await upload(fixture('1280x720:2'), provider)
-    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
-      now: start,
-    })
+    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId)
 
     expect(provider.queue).toHaveBeenCalledOnce()
     expect(provider.queue).toHaveBeenCalledWith(
@@ -202,6 +206,7 @@ describe('reliable Processing Jobs', () => {
         fileFingerprint: `${file.name}:${file.size}:test`,
         fileName: file.name,
         mimeType: file.type,
+        organisationID,
         size: file.size,
       },
       providers,
@@ -280,7 +285,7 @@ describe('reliable Processing Jobs', () => {
 
     expect(queue).toHaveBeenCalledOnce()
     await expect(
-      getVisibleAsset(payload, uploader, session.asset.mediaAssetId, { now: start }),
+      getVisibleAsset(payload, uploader, session.asset.mediaAssetId),
     ).resolves.toMatchObject({
       status: 'processing',
     })
@@ -312,17 +317,16 @@ describe('reliable Processing Jobs', () => {
       })
     }
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'concurrency-operator@example.test',
-        invitationAcceptedAt: start.toISOString(),
         name: 'Concurrency operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
     await updateOperationalControls(payload, operator, {
       killSwitchEnabled: false,
       providerConcurrency: 2,
@@ -361,17 +365,16 @@ describe('reliable Processing Jobs', () => {
       overrideAccess: true,
     })
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'processing-kill-switch-operator@example.test',
-        invitationAcceptedAt: start.toISOString(),
         name: 'Processing kill switch operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
     await updateOperationalControls(payload, operator, {
       killSwitchEnabled: true,
       providerConcurrency: 2,
@@ -443,10 +446,7 @@ describe('reliable Processing Jobs', () => {
       provider: transientProvider,
     })
 
-    const failed = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
-      now: at('2026-09-14T12:00:06.000Z'),
-      provider: transientProvider,
-    })
+    const failed = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId)
     expect(failed).toMatchObject({
       canRetry: true,
       failureMessage:
@@ -456,17 +456,16 @@ describe('reliable Processing Jobs', () => {
     expect(JSON.stringify(failed)).not.toContain('credential=abc')
 
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'processing-operator@example.test',
-        invitationAcceptedAt: start.toISOString(),
         name: 'Processing operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
     })
+    await createTestPlatformAdministrator(payload, operator)
     const retried = await retryVisibleAssetProcessing(
       payload,
       operator,
@@ -504,7 +503,7 @@ describe('reliable Processing Jobs', () => {
     expect(after.processingJobId).toBe(jobs.docs[0]!.processingJobId)
     expect(after.status).toBe('processing')
     await expect(
-      getVisibleAsset(payload, uploader, session.asset.mediaAssetId, { now: start }),
+      getVisibleAsset(payload, uploader, session.asset.mediaAssetId),
     ).resolves.toBeTruthy()
   })
 
@@ -512,9 +511,7 @@ describe('reliable Processing Jobs', () => {
     const session = await upload(fixture('1920x1080:600'))
 
     await runProcessingCycle(payload, { now: at('2026-09-14T12:14:00.000Z') })
-    const ready = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
-      now: at('2026-09-14T12:14:00.000Z'),
-    })
+    const ready = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId)
 
     expect(ready.status).toBe('ready')
     expect(at(ready.readyAt!).getTime() - start.getTime()).toBeLessThanOrEqual(15 * 60 * 1000)
@@ -540,10 +537,7 @@ describe('reliable Processing Jobs', () => {
       overrideAccess: true,
     })
 
-    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId, {
-      now: start,
-      provider,
-    })
+    const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId)
     expect(detail.canRetry).toBe(false)
     await expect(
       retryVisibleAssetProcessing(payload, uploader, session.asset.mediaAssetId, { now: start }),
@@ -562,6 +556,7 @@ describe('reliable Processing Jobs', () => {
     const callbackBody = JSON.stringify({
       callbackId: 'callback-issue-39',
       outputPrefix: processingOutputPrefix(job.processingJobId),
+      playReadyPackaged: true,
       providerJobId: job.providerJobId,
       status: 'ready',
     })
@@ -585,18 +580,17 @@ describe('reliable Processing Jobs', () => {
     expect((await processingCallback(request())).status).toBe(204)
     expect((await processingCallback(request())).status).toBe(204)
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'callback-audit-operator@example.test',
-        invitationAcceptedAt: start.toISOString(),
         name: 'Callback audit operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
     })
-    const callbackEvents = (await getOperatorOverview(payload, operator)).auditEvents.filter(
+    await createTestPlatformAdministrator(payload, operator)
+    const callbackEvents = (await getOperationalOverview(payload, operator)).auditEvents.filter(
       ({ action }) => action === 'processing_callback_received',
     )
     expect(callbackEvents).toHaveLength(1)
@@ -604,6 +598,14 @@ describe('reliable Processing Jobs', () => {
       assetId: session.asset.mediaAssetId,
       details: { providerJobId: job.providerJobId, status: 'ready' },
     })
+    await expect(
+      payload.find({
+        collection: 'media-assets',
+        limit: 1,
+        overrideAccess: true,
+        where: { mediaAssetId: { equals: session.asset.mediaAssetId } },
+      }),
+    ).resolves.toMatchObject({ docs: [{ playReadyPackaged: true }] })
     vi.unstubAllEnvs()
   })
 
@@ -774,18 +776,17 @@ describe('reliable Processing Jobs', () => {
 
     expect(response.status).toBe(401)
     const operator = await payload.create({
-      collection: 'pilot-members',
+      collection: 'members',
       data: {
         email: 'rejected-callback-operator@example.test',
-        invitationAcceptedAt: start.toISOString(),
         name: 'Rejected callback operator',
         password: 'operator-password',
-        role: 'operator',
         status: 'active',
       },
       overrideAccess: true,
     })
-    const events = (await getOperatorOverview(payload, operator)).auditEvents.filter(
+    await createTestPlatformAdministrator(payload, operator)
+    const events = (await getOperationalOverview(payload, operator)).auditEvents.filter(
       ({ action }) => action === 'processing_callback_rejected',
     )
     expect(events).toEqual([

@@ -64,7 +64,7 @@ export type SupportedTimezones =
 export interface Config {
   auth: {
     users: UserAuthOperations;
-    'pilot-members': PilotMemberAuthOperations;
+    members: MemberAuthOperations;
   };
   blocks: {};
   collections: {
@@ -74,8 +74,15 @@ export interface Config {
     categories: Category;
     authors: Author;
     users: User;
-    'pilot-members': PilotMember;
+    members: Member;
+    organisations: Organisation;
+    'organisation-memberships': OrganisationMembership;
+    'organisation-invitations': OrganisationInvitation;
+    'organisation-settings': OrganisationSetting;
+    'platform-administrators': PlatformAdministrator;
     'media-assets': MediaAsset;
+    'media-folders': MediaFolder;
+    'media-access': MediaAccess;
     'media-operations': MediaOperation;
     'upload-sessions': UploadSession;
     'processing-jobs': ProcessingJob;
@@ -105,8 +112,15 @@ export interface Config {
     categories: CategoriesSelect<false> | CategoriesSelect<true>;
     authors: AuthorsSelect<false> | AuthorsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
-    'pilot-members': PilotMembersSelect<false> | PilotMembersSelect<true>;
+    members: MembersSelect<false> | MembersSelect<true>;
+    organisations: OrganisationsSelect<false> | OrganisationsSelect<true>;
+    'organisation-memberships': OrganisationMembershipsSelect<false> | OrganisationMembershipsSelect<true>;
+    'organisation-invitations': OrganisationInvitationsSelect<false> | OrganisationInvitationsSelect<true>;
+    'organisation-settings': OrganisationSettingsSelect<false> | OrganisationSettingsSelect<true>;
+    'platform-administrators': PlatformAdministratorsSelect<false> | PlatformAdministratorsSelect<true>;
     'media-assets': MediaAssetsSelect<false> | MediaAssetsSelect<true>;
+    'media-folders': MediaFoldersSelect<false> | MediaFoldersSelect<true>;
+    'media-access': MediaAccessSelect<false> | MediaAccessSelect<true>;
     'media-operations': MediaOperationsSelect<false> | MediaOperationsSelect<true>;
     'upload-sessions': UploadSessionsSelect<false> | UploadSessionsSelect<true>;
     'processing-jobs': ProcessingJobsSelect<false> | ProcessingJobsSelect<true>;
@@ -146,7 +160,7 @@ export interface Config {
   widgets: {
     collections: CollectionsWidget;
   };
-  user: User | PilotMember;
+  user: User | Member;
   jobs: {
     tasks: {
       'process-media-jobs': TaskProcessMediaJobs;
@@ -177,7 +191,7 @@ export interface UserAuthOperations {
     password: string;
   };
 }
-export interface PilotMemberAuthOperations {
+export interface MemberAuthOperations {
   forgotPassword: {
     email: string;
     password: string;
@@ -1139,16 +1153,12 @@ export interface User {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "pilot-members".
+ * via the `definition` "members".
  */
-export interface PilotMember {
+export interface Member {
   id: number;
   name: string;
-  role: 'uploader' | 'operator';
   status: 'active' | 'disabled';
-  invitationTokenHash?: string | null;
-  invitationExpiresAt?: string | null;
-  invitationAcceptedAt?: string | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -1166,7 +1176,76 @@ export interface PilotMember {
       }[]
     | null;
   password?: string | null;
-  collection: 'pilot-members';
+  collection: 'members';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisations".
+ */
+export interface Organisation {
+  id: number;
+  name: string;
+  initialAdministrator?: (number | null) | Member;
+  status: 'active' | 'deleted';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisation-memberships".
+ */
+export interface OrganisationMembership {
+  id: number;
+  organisation: number | Organisation;
+  member: number | Member;
+  role: 'administrator' | 'publisher' | 'viewer';
+  status: 'active' | 'disabled';
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisation-invitations".
+ */
+export interface OrganisationInvitation {
+  id: number;
+  name: string;
+  email: string;
+  organisation: number | Organisation;
+  role: 'administrator' | 'publisher' | 'viewer';
+  tokenHash: string;
+  expiresAt: string;
+  acceptedAt?: string | null;
+  acceptedBy?: (number | null) | Member;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisation-settings".
+ */
+export interface OrganisationSetting {
+  id: number;
+  organisation: number | Organisation;
+  drmDefault: 'protected' | 'standard';
+  drmRequired?: boolean | null;
+  defaultRetentionDays: number;
+  maximumUploadSizeBytes: number;
+  setupCompletedAt: string;
+  logoDataUrl?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "platform-administrators".
+ */
+export interface PlatformAdministrator {
+  id: number;
+  member: number | Member;
+  status: 'active' | 'disabled';
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -1175,21 +1254,49 @@ export interface PilotMember {
 export interface MediaAsset {
   id: number;
   mediaAssetId: string;
-  owner: number | PilotMember;
+  organisation?: (number | null) | Organisation;
+  folder?: (number | null) | MediaFolder;
+  mediaProtectionPolicy?: ('protected' | 'standard') | null;
+  owner: number | Member;
   fileName: string;
   mimeType: string;
   size: number;
   durationSeconds?: number | null;
   verifiedAt?: string | null;
   drmContentId?: string | null;
+  playReadyPackaged?: boolean | null;
   expiresAt?: string | null;
   deletedAt?: string | null;
-  deletedBy?: (number | null) | PilotMember;
+  deletedBy?: (number | null) | Member;
   accessRevokedAt?: string | null;
   sourceDeletedAt?: string | null;
   outputsDeletedAt?: string | null;
   status: 'uploading' | 'queued' | 'processing' | 'ready' | 'failed' | 'expired' | 'deleted';
   statusChangedAt: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-folders".
+ */
+export interface MediaFolder {
+  id: number;
+  organisation: number | Organisation;
+  name: string;
+  owner: number | Member;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-access".
+ */
+export interface MediaAccess {
+  id: number;
+  asset: number | MediaAsset;
+  membership: number | OrganisationMembership;
+  status: 'active' | 'revoked';
   updatedAt: string;
   createdAt: string;
 }
@@ -1202,7 +1309,7 @@ export interface MediaOperation {
   key: string;
   providerConcurrency: number;
   killSwitchEnabled: boolean;
-  updatedBy?: (number | null) | PilotMember;
+  updatedBy?: (number | null) | Member;
   updatedAt: string;
   createdAt: string;
 }
@@ -1213,8 +1320,12 @@ export interface MediaOperation {
 export interface UploadSession {
   id: number;
   uploadSessionId: string;
+  organisation?: (number | null) | Organisation;
+  folder?: (number | null) | MediaFolder;
+  mediaProtectionPolicy?: ('protected' | 'standard') | null;
+  retentionDays?: number | null;
   asset: number | MediaAsset;
-  owner: number | PilotMember;
+  owner: number | Member;
   fileName: string;
   mimeType: string;
   size: number;
@@ -1235,9 +1346,10 @@ export interface UploadSession {
 export interface ProcessingJob {
   id: number;
   processingJobId: string;
+  organisation?: (number | null) | Organisation;
   providerJobId?: string | null;
   asset: number | MediaAsset;
-  owner: number | PilotMember;
+  owner: number | Member;
   status: 'queued' | 'dispatching' | 'processing' | 'ready' | 'failed';
   queuedAt: string;
   dispatchBy: string;
@@ -1275,10 +1387,13 @@ export interface ProcessingJob {
 export interface PlaybackGrant {
   id: number;
   playbackGrantId: string;
+  organisation?: (number | null) | Organisation;
   asset: number | MediaAsset;
-  owner: number | PilotMember;
+  owner: number | Member;
   expiresAt: string;
   deliveryExpiresAt: string;
+  leakId: string;
+  leakIdIssuedAt: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -1289,10 +1404,13 @@ export interface PlaybackGrant {
 export interface AuditEvent {
   id: number;
   eventKey: string;
+  organisation?: (number | null) | Organisation;
   action:
     | 'invitation_created'
     | 'invitation_accepted'
     | 'member_disabled'
+    | 'media_access_granted'
+    | 'media_access_revoked'
     | 'upload_started'
     | 'upload_completed'
     | 'upload_aborted'
@@ -1303,6 +1421,7 @@ export interface AuditEvent {
     | 'processing_failed'
     | 'processing_retried'
     | 'playback_granted'
+    | 'playback_leak_id_issued'
     | 'playback_licence_acquired'
     | 'processing_callback_received'
     | 'processing_callback_rejected'
@@ -1311,10 +1430,11 @@ export interface AuditEvent {
     | 'access_revoked'
     | 'source_deleted'
     | 'outputs_deleted'
-    | 'operations_controls_updated';
-  member?: (number | null) | PilotMember;
+    | 'operations_controls_updated'
+    | 'platform_recovery_accessed';
+  member?: (number | null) | Member;
   asset?: (number | null) | MediaAsset;
-  actor?: (number | null) | PilotMember;
+  actor?: (number | null) | Member;
   occurredAt: string;
   details?:
     | {
@@ -1552,12 +1672,40 @@ export interface PayloadLockedDocument {
         value: number | User;
       } | null)
     | ({
-        relationTo: 'pilot-members';
-        value: number | PilotMember;
+        relationTo: 'members';
+        value: number | Member;
+      } | null)
+    | ({
+        relationTo: 'organisations';
+        value: number | Organisation;
+      } | null)
+    | ({
+        relationTo: 'organisation-memberships';
+        value: number | OrganisationMembership;
+      } | null)
+    | ({
+        relationTo: 'organisation-invitations';
+        value: number | OrganisationInvitation;
+      } | null)
+    | ({
+        relationTo: 'organisation-settings';
+        value: number | OrganisationSetting;
+      } | null)
+    | ({
+        relationTo: 'platform-administrators';
+        value: number | PlatformAdministrator;
       } | null)
     | ({
         relationTo: 'media-assets';
         value: number | MediaAsset;
+      } | null)
+    | ({
+        relationTo: 'media-folders';
+        value: number | MediaFolder;
+      } | null)
+    | ({
+        relationTo: 'media-access';
+        value: number | MediaAccess;
       } | null)
     | ({
         relationTo: 'media-operations';
@@ -1610,8 +1758,8 @@ export interface PayloadLockedDocument {
         value: number | User;
       }
     | {
-        relationTo: 'pilot-members';
-        value: number | PilotMember;
+        relationTo: 'members';
+        value: number | Member;
       };
   updatedAt: string;
   createdAt: string;
@@ -1628,8 +1776,8 @@ export interface PayloadPreference {
         value: number | User;
       }
     | {
-        relationTo: 'pilot-members';
-        value: number | PilotMember;
+        relationTo: 'members';
+        value: number | Member;
       };
   key?: string | null;
   value?:
@@ -2081,15 +2229,11 @@ export interface UsersSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "pilot-members_select".
+ * via the `definition` "members_select".
  */
-export interface PilotMembersSelect<T extends boolean = true> {
+export interface MembersSelect<T extends boolean = true> {
   name?: T;
-  role?: T;
   status?: T;
-  invitationTokenHash?: T;
-  invitationExpiresAt?: T;
-  invitationAcceptedAt?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -2109,10 +2253,77 @@ export interface PilotMembersSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisations_select".
+ */
+export interface OrganisationsSelect<T extends boolean = true> {
+  name?: T;
+  initialAdministrator?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisation-memberships_select".
+ */
+export interface OrganisationMembershipsSelect<T extends boolean = true> {
+  organisation?: T;
+  member?: T;
+  role?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisation-invitations_select".
+ */
+export interface OrganisationInvitationsSelect<T extends boolean = true> {
+  name?: T;
+  email?: T;
+  organisation?: T;
+  role?: T;
+  tokenHash?: T;
+  expiresAt?: T;
+  acceptedAt?: T;
+  acceptedBy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organisation-settings_select".
+ */
+export interface OrganisationSettingsSelect<T extends boolean = true> {
+  organisation?: T;
+  drmDefault?: T;
+  drmRequired?: T;
+  defaultRetentionDays?: T;
+  maximumUploadSizeBytes?: T;
+  setupCompletedAt?: T;
+  logoDataUrl?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "platform-administrators_select".
+ */
+export interface PlatformAdministratorsSelect<T extends boolean = true> {
+  member?: T;
+  status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "media-assets_select".
  */
 export interface MediaAssetsSelect<T extends boolean = true> {
   mediaAssetId?: T;
+  organisation?: T;
+  folder?: T;
+  mediaProtectionPolicy?: T;
   owner?: T;
   fileName?: T;
   mimeType?: T;
@@ -2120,6 +2331,7 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   durationSeconds?: T;
   verifiedAt?: T;
   drmContentId?: T;
+  playReadyPackaged?: T;
   expiresAt?: T;
   deletedAt?: T;
   deletedBy?: T;
@@ -2128,6 +2340,28 @@ export interface MediaAssetsSelect<T extends boolean = true> {
   outputsDeletedAt?: T;
   status?: T;
   statusChangedAt?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-folders_select".
+ */
+export interface MediaFoldersSelect<T extends boolean = true> {
+  organisation?: T;
+  name?: T;
+  owner?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media-access_select".
+ */
+export interface MediaAccessSelect<T extends boolean = true> {
+  asset?: T;
+  membership?: T;
+  status?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -2149,6 +2383,10 @@ export interface MediaOperationsSelect<T extends boolean = true> {
  */
 export interface UploadSessionsSelect<T extends boolean = true> {
   uploadSessionId?: T;
+  organisation?: T;
+  folder?: T;
+  mediaProtectionPolicy?: T;
+  retentionDays?: T;
   asset?: T;
   owner?: T;
   fileName?: T;
@@ -2170,6 +2408,7 @@ export interface UploadSessionsSelect<T extends boolean = true> {
  */
 export interface ProcessingJobsSelect<T extends boolean = true> {
   processingJobId?: T;
+  organisation?: T;
   providerJobId?: T;
   asset?: T;
   owner?: T;
@@ -2201,10 +2440,13 @@ export interface ProcessingJobsSelect<T extends boolean = true> {
  */
 export interface PlaybackGrantsSelect<T extends boolean = true> {
   playbackGrantId?: T;
+  organisation?: T;
   asset?: T;
   owner?: T;
   expiresAt?: T;
   deliveryExpiresAt?: T;
+  leakId?: T;
+  leakIdIssuedAt?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -2214,6 +2456,7 @@ export interface PlaybackGrantsSelect<T extends boolean = true> {
  */
 export interface AuditEventsSelect<T extends boolean = true> {
   eventKey?: T;
+  organisation?: T;
   action?: T;
   member?: T;
   asset?: T;

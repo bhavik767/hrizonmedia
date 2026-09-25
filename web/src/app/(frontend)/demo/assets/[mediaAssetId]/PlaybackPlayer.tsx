@@ -10,20 +10,29 @@ interface PlaybackGrantContract {
   deliveryToken: string
   distinctiveIdentifier: 'not-allowed'
   expiresAt: string
-  keySystem: 'com.widevine.alpha'
+  hdcpRequired: false
+  fairPlayCertificateURL?: string
+  keySystem: 'com.apple.fps' | 'com.microsoft.playready' | 'com.widevine.alpha'
   licenceURL: string
+  manifestFormat: 'dash' | 'hls'
   manifestURL: string
   persistentState: 'not-allowed'
   playbackGrantId: string
   playbackGrantToken: string
   resourceAuthorization?: ResourceAuthorization
   sessionType: 'temporary'
+  watermark: Watermark
 }
 
 interface ResourceAuthorization {
   origin: string
   pathPrefix: string
   query: string
+}
+
+interface Watermark {
+  issuedAt: string
+  leakId: string
 }
 
 const UI_CONFIGURATION = {
@@ -49,19 +58,52 @@ async function responseJSON<T>(response: Response): Promise<T> {
   return body
 }
 
-export function PlaybackPlayer({
-  mediaAssetId,
-  viewerEmail,
-}: {
-  mediaAssetId: string
-  viewerEmail: string
-}) {
+async function keySystemAvailable(
+  keySystem: 'com.apple.fps' | 'com.microsoft.playready' | 'com.widevine.alpha',
+  initDataType: 'cenc' | 'skd',
+): Promise<boolean> {
+  if (!navigator.requestMediaKeySystemAccess) return false
+  try {
+    await navigator.requestMediaKeySystemAccess(keySystem, [
+      {
+        audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }],
+        initDataTypes: [initDataType],
+        videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.640028"' }],
+      },
+    ])
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function protectedPlaybackCapabilities() {
+  const [fairPlayAvailable, playReadyAvailable, widevineAvailable] = await Promise.all([
+    keySystemAvailable('com.apple.fps', 'skd'),
+    keySystemAvailable('com.microsoft.playready', 'cenc'),
+    keySystemAvailable('com.widevine.alpha', 'cenc'),
+  ])
+  if (!fairPlayAvailable && !playReadyAvailable && !widevineAvailable) {
+    throw new Error(
+      'Secure playback is not supported by this browser. FairPlay or Widevine DRM is unavailable.',
+    )
+  }
+  return { fairPlayAvailable, playReadyAvailable, widevineAvailable }
+}
+
+export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
   const playerRef = useRef<null | { destroy(): Promise<void> }>(null)
   const uiRef = useRef<null | { destroy(): Promise<unknown> }>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [message, setMessage] = useState('Playback has not started.')
-  const [timestamp, setTimestamp] = useState('')
+  const [watermark, setWatermark] = useState<
+    | null
+    | (Watermark & {
+        playbackGrantId: string
+        playbackGrantToken: string
+      })
+  >(null)
   const [watermarkPosition, setWatermarkPosition] = useState(0)
   const [starting, setStarting] = useState(false)
 
@@ -74,21 +116,38 @@ export function PlaybackPlayer({
   )
 
   useEffect(() => {
-    const updateTimestamp = () => setTimestamp(new Date().toISOString())
-    updateTimestamp()
-    const timestampTimer = window.setInterval(updateTimestamp, 1_000)
-    const positionTimer = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? undefined
-      : window.setInterval(
-          () => setWatermarkPosition((position) => (position + 1) % WATERMARK_POSITIONS.length),
-          6_000,
-        )
+    if (!watermark) return
+    let cancelled = false
+    let refreshing = false
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const refreshWatermark = async () => {
+      if (refreshing) return
+      refreshing = true
+      try {
+        const response = await fetch(`/api/demo/playback/${watermark.playbackGrantId}/watermark`, {
+          headers: { 'X-Playback-Grant': watermark.playbackGrantToken },
+          method: 'POST',
+        })
+        const next = await responseJSON<Watermark>(response)
+        if (!cancelled) {
+          setWatermark({ ...watermark, ...next })
+          if (!reducedMotion) {
+            setWatermarkPosition((position) => (position + 1) % WATERMARK_POSITIONS.length)
+          }
+        }
+      } catch (error) {
+        console.error(error)
+      } finally {
+        refreshing = false
+      }
+    }
+    const rotationTimer = window.setInterval(() => void refreshWatermark(), 30_000)
 
     return () => {
-      window.clearInterval(timestampTimer)
-      if (positionTimer !== undefined) window.clearInterval(positionTimer)
+      cancelled = true
+      window.clearInterval(rotationTimer)
     }
-  }, [])
+  }, [watermark])
 
   async function startPlayback() {
     const video = videoRef.current
@@ -97,11 +156,21 @@ export function PlaybackPlayer({
     setStarting(true)
     setMessage('Authorising encrypted playback…')
     try {
+      const capabilities = await protectedPlaybackCapabilities()
       const response = await fetch(`/api/demo/assets/${mediaAssetId}/playback-grants`, {
+        headers: {
+          'X-Hrizonmedia-Fairplay': capabilities.fairPlayAvailable ? 'available' : 'unavailable',
+          'X-Hrizonmedia-Playready': capabilities.playReadyAvailable ? 'available' : 'unavailable',
+          'X-Hrizonmedia-Widevine': capabilities.widevineAvailable ? 'available' : 'unavailable',
+        },
         method: 'POST',
       })
-      if (!response.ok) throw new Error(await response.text())
-      const grant = (await response.json()) as PlaybackGrantContract
+      const grant = await responseJSON<PlaybackGrantContract>(response)
+      setWatermark({
+        ...grant.watermark,
+        playbackGrantId: grant.playbackGrantId,
+        playbackGrantToken: grant.playbackGrantToken,
+      })
       const { default: shaka } = await import('shaka-player/dist/shaka-player.ui.js')
       shaka.polyfill.installAll()
       if (!shaka.Player.isBrowserSupported()) {
@@ -128,9 +197,28 @@ export function PlaybackPlayer({
             [grant.keySystem]: {
               distinctiveIdentifierRequired: false,
               persistentStateRequired: false,
+              ...(grant.fairPlayCertificateURL
+                ? { serverCertificateUri: grant.fairPlayCertificateURL }
+                : {}),
               sessionType: grant.sessionType,
             },
           },
+          ...(grant.keySystem === 'com.apple.fps'
+            ? {
+                initDataTransform: (
+                  initData: Uint8Array,
+                  initDataType: string,
+                  drmInfo: { serverCertificate?: Uint8Array },
+                ) => {
+                  if (initDataType !== 'skd' || !drmInfo.serverCertificate) return initData
+                  return shaka.drm.FairPlay.initDataTransform(
+                    initData,
+                    shaka.drm.FairPlay.defaultGetContentId(initData),
+                    drmInfo.serverCertificate,
+                  )
+                },
+              }
+            : {}),
           persistentSessionOnlinePlayback: false,
           persistentSessionsMetadata: [],
           servers: { [grant.keySystem]: grant.licenceURL },
@@ -199,6 +287,7 @@ export function PlaybackPlayer({
 
       const configuration = {
         distinctiveIdentifierRequired: false,
+        hdcpRequired: grant.hdcpRequired,
         keySystem: grant.keySystem,
         persistentSessionOnlinePlayback: false,
         persistentStateRequired: false,
@@ -212,7 +301,11 @@ export function PlaybackPlayer({
       await player.load(grant.manifestURL)
     } catch (error) {
       console.error(error)
-      setMessage('Secure playback could not start. Request a fresh grant and try again.')
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : 'Secure playback could not start. Request a fresh grant and try again.',
+      )
     } finally {
       setStarting(false)
     }
@@ -222,7 +315,7 @@ export function PlaybackPlayer({
     <section aria-labelledby="secure-playback-title" className="secure-playback">
       <div className="secure-playback__heading">
         <div>
-          <p className="eyebrow">Widevine streaming</p>
+          <p className="eyebrow">Protected streaming</p>
           <h2 id="secure-playback-title">Secure playback</h2>
         </div>
         <button disabled={starting} onClick={startPlayback} type="button">
@@ -240,31 +333,31 @@ export function PlaybackPlayer({
           playsInline
           ref={videoRef}
         />
-        <div
-          aria-label="Recording attribution watermark"
-          className="secure-playback__watermark"
-          data-position={WATERMARK_POSITIONS[watermarkPosition]}
-          data-testid="viewer-watermark"
-        >
-          <span>{viewerEmail}</span>
-          <time dateTime={timestamp}>
-            {timestamp
-              ? new Date(timestamp).toLocaleString('en-IN', {
-                  dateStyle: 'medium',
-                  timeStyle: 'medium',
-                })
-              : 'Loading current time…'}
-          </time>
-        </div>
+        {watermark && (
+          <div
+            aria-label="Recording attribution watermark"
+            className="secure-playback__watermark"
+            data-position={WATERMARK_POSITIONS[watermarkPosition]}
+            data-testid="viewer-watermark"
+          >
+            <span>{watermark.leakId}</span>
+            <time dateTime={watermark.issuedAt}>
+              {new Date(watermark.issuedAt).toLocaleString('en-IN', {
+                dateStyle: 'medium',
+                timeStyle: 'medium',
+              })}
+            </time>
+          </div>
+        )}
       </div>
       <p aria-live="polite" className="secure-playback__status">
         {message}
       </p>
       <p className="secure-playback__disclosure" id="playback-watermark-notice">
-        Your full email and the current timestamp move across playback to attribute screen
-        recordings. Streaming-only playback uses temporary rights; downloads, offline playback,
-        persistent licences, and picture-in-picture are disabled. Read the{' '}
-        <Link href="/demo/terms">Pilot terms</Link>.
+        A compact Leak ID and server-issued timestamp move across playback to support recording
+        investigations without displaying your email. Streaming-only playback uses temporary rights;
+        downloads, offline playback, persistent licences, and picture-in-picture are disabled. Read
+        the <Link href="/demo/terms">Workspace terms</Link>.
       </p>
     </section>
   )

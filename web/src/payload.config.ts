@@ -9,11 +9,18 @@ import { Authors } from './collections/Authors'
 import { AuditEvents } from './collections/AuditEvents'
 import { Categories } from './collections/Categories'
 import { Media } from './collections/Media'
+import { MediaAccess } from './collections/MediaAccess'
 import { MediaAssets } from './collections/MediaAssets'
+import { MediaFolders } from './collections/MediaFolders'
 import { MediaOperations } from './collections/MediaOperations'
+import { OrganisationMemberships } from './collections/OrganisationMemberships'
+import { OrganisationInvitations } from './collections/OrganisationInvitations'
+import { OrganisationSettings } from './collections/OrganisationSettings'
+import { Organisations } from './collections/Organisations'
 import { Pages } from './collections/Pages'
-import { PilotMembers } from './collections/PilotMembers'
+import { Members } from './collections/Members'
 import { PlaybackGrants } from './collections/PlaybackGrants'
+import { PlatformAdministrators } from './collections/PlatformAdministrators'
 import { Posts } from './collections/Posts'
 import { ProcessingJobs } from './collections/ProcessingJobs'
 import { ReusableBlocks } from './collections/ReusableBlocks'
@@ -116,8 +123,15 @@ export default buildConfig({
     Categories,
     Authors,
     Users,
-    PilotMembers,
+    Members,
+    Organisations,
+    OrganisationMemberships,
+    OrganisationInvitations,
+    OrganisationSettings,
+    PlatformAdministrators,
     MediaAssets,
+    MediaFolders,
+    MediaAccess,
     MediaOperations,
     UploadSessions,
     ProcessingJobs,
@@ -165,10 +179,12 @@ export default buildConfig({
     tasks: [
       {
         handler: async ({ req }) => {
+          const { cleanupAbandonedUploads } = await import('./media/library')
           const { runMediaLifecycle } = await import('./media/lifecycle')
           const { runProcessingCycle } = await import('./media/processing')
           const { logMediaDiagnostic } = await import('./media/diagnostics')
           try {
+            await cleanupAbandonedUploads(req.payload)
             await runProcessingCycle(req.payload)
             await runMediaLifecycle(req.payload)
             logMediaDiagnostic('info', 'media_cycle_completed')

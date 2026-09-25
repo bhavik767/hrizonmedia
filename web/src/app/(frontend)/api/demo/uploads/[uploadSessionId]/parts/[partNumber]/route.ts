@@ -1,12 +1,12 @@
 import { parseUploadSessionId } from '@/media/identifiers'
 import { renewUploadPart } from '@/media/library'
-import { parseJSONBody, withAuthenticatedUploader } from '@/media/request'
+import { parseJSONBody, withAuthenticatedMember } from '@/media/request'
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ partNumber: string; uploadSessionId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const { partNumber, uploadSessionId } = await context.params
     const parsedID = parseUploadSessionId(uploadSessionId)
     const parsedPartNumber = Number(partNumber)
@@ -27,8 +27,6 @@ export async function POST(
         return Response.json({ error: 'Upload part metadata is invalid.' }, { status: 400 })
       }
     }
-    return Response.json(
-      await renewUploadPart(payload, member, parsedID, parsedPartNumber, part),
-    )
+    return Response.json(await renewUploadPart(payload, member, parsedID, parsedPartNumber, part))
   })
 }

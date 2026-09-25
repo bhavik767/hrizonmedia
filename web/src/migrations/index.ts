@@ -10,6 +10,17 @@ import * as migration_20260914_195615_issue38_safe_retention_deletion from './20
 import * as migration_20260914_201110_issue38_deletion_actor from './20260914_201110_issue38_deletion_actor';
 import * as migration_20260914_220400_issue39_operator_oversight from './20260914_220400_issue39_operator_oversight';
 import * as migration_20260916_184500_issue43_provider_upload_data from './20260916_184500_issue43_provider_upload_data';
+import * as migration_20260922_000000_issue74_leak_ids from './20260922_000000_issue74_leak_ids';
+import * as migration_20260922_010000_issue76_playready_packaged from './20260922_010000_issue76_playready_packaged';
+import * as migration_20260922_020000_issue74_leak_audit_action from './20260922_020000_issue74_leak_audit_action';
+import * as migration_20260923_000000_issue84_organisation_foundation from './20260923_000000_issue84_organisation_foundation';
+import * as migration_20260923_010000_issue88_organisation_settings from './20260923_010000_issue88_organisation_settings';
+import * as migration_20260923_010000_issue89_organisation_invitations from './20260923_010000_issue89_organisation_invitations';
+import * as migration_20260923_020000_issue90_organisation_uploads from './20260923_020000_issue90_organisation_uploads';
+import * as migration_20260923_030000_issue91_media_access from './20260923_030000_issue91_media_access';
+import * as migration_20260923_040000_issue93_tenancy_cutover from './20260923_040000_issue93_tenancy_cutover';
+import * as migration_20260923_050000_issue107_media_folders from './20260923_050000_issue107_media_folders';
+import * as migration_20260924_000000_organisation_invitation_recipients from './20260924_000000_organisation_invitation_recipients';
 
 export const migrations = [
   {
@@ -71,5 +82,60 @@ export const migrations = [
     up: migration_20260916_184500_issue43_provider_upload_data.up,
     down: migration_20260916_184500_issue43_provider_upload_data.down,
     name: '20260916_184500_issue43_provider_upload_data',
+  },
+  {
+    up: migration_20260922_000000_issue74_leak_ids.up,
+    down: migration_20260922_000000_issue74_leak_ids.down,
+    name: '20260922_000000_issue74_leak_ids',
+  },
+  {
+    up: migration_20260922_010000_issue76_playready_packaged.up,
+    down: migration_20260922_010000_issue76_playready_packaged.down,
+    name: '20260922_010000_issue76_playready_packaged',
+  },
+  {
+    up: migration_20260922_020000_issue74_leak_audit_action.up,
+    down: migration_20260922_020000_issue74_leak_audit_action.down,
+    name: '20260922_020000_issue74_leak_audit_action',
+  },
+  {
+    up: migration_20260923_000000_issue84_organisation_foundation.up,
+    down: migration_20260923_000000_issue84_organisation_foundation.down,
+    name: '20260923_000000_issue84_organisation_foundation',
+  },
+  {
+    up: migration_20260923_010000_issue88_organisation_settings.up,
+    down: migration_20260923_010000_issue88_organisation_settings.down,
+    name: '20260923_010000_issue88_organisation_settings',
+  },
+  {
+    up: migration_20260923_010000_issue89_organisation_invitations.up,
+    down: migration_20260923_010000_issue89_organisation_invitations.down,
+    name: '20260923_010000_issue89_organisation_invitations',
+  },
+  {
+    up: migration_20260923_020000_issue90_organisation_uploads.up,
+    down: migration_20260923_020000_issue90_organisation_uploads.down,
+    name: '20260923_020000_issue90_organisation_uploads',
+  },
+  {
+    up: migration_20260923_030000_issue91_media_access.up,
+    down: migration_20260923_030000_issue91_media_access.down,
+    name: '20260923_030000_issue91_media_access',
+  },
+  {
+    up: migration_20260923_040000_issue93_tenancy_cutover.up,
+    down: migration_20260923_040000_issue93_tenancy_cutover.down,
+    name: '20260923_040000_issue93_tenancy_cutover',
+  },
+  {
+    up: migration_20260923_050000_issue107_media_folders.up,
+    down: migration_20260923_050000_issue107_media_folders.down,
+    name: '20260923_050000_issue107_media_folders',
+  },
+  {
+    up: migration_20260924_000000_organisation_invitation_recipients.up,
+    down: migration_20260924_000000_organisation_invitation_recipients.down,
+    name: '20260924_000000_organisation_invitation_recipients',
   },
 ];

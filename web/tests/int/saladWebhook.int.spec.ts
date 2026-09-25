@@ -16,18 +16,16 @@ async function clean() {
   await payload.delete({ collection: 'audit-events', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'processing-jobs', overrideAccess: true, where: {} })
   await payload.delete({ collection: 'media-assets', overrideAccess: true, where: {} })
-  await payload.delete({ collection: 'pilot-members', overrideAccess: true, where: {} })
+  await payload.delete({ collection: 'members', overrideAccess: true, where: {} })
 }
 
 async function createProcessingJobFixture() {
   const owner = await payload.create({
-    collection: 'pilot-members',
+    collection: 'members',
     data: {
       email: 'salad-webhook@example.test',
-      invitationAcceptedAt: now.toISOString(),
       name: 'Salad webhook uploader',
       password: 'test-password',
-      role: 'uploader',
       status: 'active',
     },
     overrideAccess: true,

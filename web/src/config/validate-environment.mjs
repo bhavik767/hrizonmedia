@@ -20,7 +20,7 @@ export function validateEnvironment(environment = process.env) {
     throw new Error(`Missing required production environment variables: ${missing.join(', ')}`)
   }
 
-  readRealMediaProviderConfiguration(environment)
+  const realMediaProviders = readRealMediaProviderConfiguration(environment)
 
   if (!/^postgres(?:ql)?:\/\//.test(environment.DATABASE_URL)) {
     throw new Error('DATABASE_URL must use PostgreSQL in production')
@@ -43,11 +43,8 @@ export function validateEnvironment(environment = process.env) {
     throw new Error('NEXT_PUBLIC_SERVER_URL must be a valid HTTPS origin in production')
   }
 
-  if (
-    environment.HRIZONMEDIA_DEMO_ENABLED === 'true' &&
-    environment.RAILWAY_ENVIRONMENT_NAME?.toLowerCase() !== 'staging'
-  ) {
-    throw new Error('The production Demo cannot start with deterministic fake media providers')
+  if (!realMediaProviders && environment.RAILWAY_ENVIRONMENT_NAME?.toLowerCase() !== 'staging') {
+    throw new Error('Production Dashboard requires verified real media providers')
   }
 }
 

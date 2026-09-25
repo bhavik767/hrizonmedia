@@ -52,7 +52,7 @@ describe('Railway environment validation', () => {
     expect(result.stderr).toContain('DATABASE_URL must use PostgreSQL in production')
   })
 
-  it('refuses to expose the Demo with fake providers in production', () => {
+  it('refuses to start the production Dashboard with fake providers', () => {
     const result = spawnSync(process.execPath, [validator], {
       encoding: 'utf8',
       env: {
@@ -60,7 +60,6 @@ describe('Railway environment validation', () => {
         BUCKET: 'cms-media',
         DATABASE_URL: 'postgresql://database.example.test/hrizonmedia',
         ENDPOINT: 'https://storage.example.test',
-        HRIZONMEDIA_DEMO_ENABLED: 'true',
         NODE_ENV: 'production',
         NEXT_PUBLIC_SERVER_URL: 'https://hrizonmedia.example.test',
         PATH: process.env.PATH,
@@ -73,7 +72,7 @@ describe('Railway environment validation', () => {
 
     expect(result.status).toBe(1)
     expect(result.stderr).toContain(
-      'The production Demo cannot start with deterministic fake media providers',
+      'Production Dashboard requires verified real media providers',
     )
   })
 

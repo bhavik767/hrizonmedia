@@ -1,17 +1,27 @@
 import { parseMediaAssetId } from '@/media/identifiers'
 import { createPlaybackGrant } from '@/media/playback'
-import { withAuthenticatedUploader } from '@/media/request'
+import { protectedPlaybackBrowser } from '@/media/playback-browser'
+import { withAuthenticatedMember } from '@/media/request'
 
 export async function POST(
   request: Request,
   context: { params: Promise<{ mediaAssetId: string }> },
 ): Promise<Response> {
-  return withAuthenticatedUploader(request, async ({ member, payload }) => {
+  return withAuthenticatedMember(request, async ({ member, payload }) => {
     const mediaAssetId = parseMediaAssetId((await context.params).mediaAssetId)
     if (!mediaAssetId) return Response.json({ error: 'Media Asset not found.' }, { status: 404 })
-    return Response.json(await createPlaybackGrant(payload, member, mediaAssetId), {
-      headers: { 'cache-control': 'no-store' },
-      status: 201,
-    })
+    return Response.json(
+      await createPlaybackGrant(payload, member, mediaAssetId, {
+        browser: protectedPlaybackBrowser(request.headers.get('user-agent'), {
+          fairPlayAvailable: request.headers.get('x-hrizonmedia-fairplay') === 'available',
+          playReadyAvailable: request.headers.get('x-hrizonmedia-playready') === 'available',
+          widevineAvailable: request.headers.get('x-hrizonmedia-widevine') === 'available',
+        }),
+      }),
+      {
+        headers: { 'cache-control': 'no-store' },
+        status: 201,
+      },
+    )
   })
 }

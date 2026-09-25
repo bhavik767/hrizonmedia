@@ -12,6 +12,15 @@ export const UploadSessions: CollectionConfig = {
   admin: { hidden: true, useAsTitle: 'uploadSessionId' },
   fields: [
     { name: 'uploadSessionId', type: 'text', required: true, unique: true, index: true },
+    { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
+    { name: 'folder', type: 'relationship', relationTo: 'media-folders', index: true },
+    {
+      name: 'mediaProtectionPolicy',
+      type: 'select',
+      options: ['protected', 'standard'],
+      defaultValue: 'protected',
+    },
+    { name: 'retentionDays', type: 'number' },
     {
       name: 'asset',
       type: 'relationship',
@@ -22,7 +31,7 @@ export const UploadSessions: CollectionConfig = {
     {
       name: 'owner',
       type: 'relationship',
-      relationTo: 'pilot-members',
+      relationTo: 'members',
       required: true,
       index: true,
     },
