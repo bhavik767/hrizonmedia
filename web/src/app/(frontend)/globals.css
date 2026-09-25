@@ -1719,6 +1719,14 @@ body:has(.dashboard-shell) .site-header {
     justify-content: center;
   }
 
+  .dashboard-shell--navigation-open .dashboard-menu-button {
+    background: var(--panel);
+    left: calc(min(82vw, 300px) - 54px);
+    position: fixed;
+    top: 18px;
+    z-index: 30;
+  }
+
   .dashboard-topbar p {
     font-size: 0.62rem;
   }

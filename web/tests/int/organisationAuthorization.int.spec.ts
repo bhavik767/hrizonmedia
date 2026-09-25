@@ -234,4 +234,43 @@ describe('Organisation media authorization', () => {
       }),
     ).resolves.toMatchObject({ totalDocs: 2 })
   })
+
+  it('uses an explicit Organisation Administrator Membership before Platform recovery access', async () => {
+    const administrator = await createMember(
+      'platform-organisation-admin@organisation-foundation.test',
+    )
+    await payload.create({
+      collection: 'platform-administrators',
+      data: { member: administrator.id, status: 'active' },
+      overrideAccess: true,
+    })
+    const membership = await payload.create({
+      collection: 'organisation-memberships',
+      data: {
+        member: administrator.id,
+        organisation: organisationID,
+        role: 'administrator',
+        status: 'active',
+      },
+      overrideAccess: true,
+    })
+
+    await expect(
+      authorizeOrganisationMedia(payload, administrator, { organisationID, operation: 'create' }),
+    ).resolves.toMatchObject({
+      membershipID: membership.id,
+      organisationID,
+      recoveryAccess: false,
+      role: 'administrator',
+    })
+    await expect(
+      payload.find({
+        collection: 'audit-events',
+        depth: 0,
+        limit: 10,
+        overrideAccess: true,
+        where: { action: { equals: 'platform_recovery_accessed' } },
+      }),
+    ).resolves.toMatchObject({ totalDocs: 0 })
+  })
 })

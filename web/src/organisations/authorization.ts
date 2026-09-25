@@ -133,6 +133,16 @@ export async function authorizeOrganisationMedia(
     throw new OrganisationAuthorizationError('Organisation is not active.', 404)
   }
 
+  const membership = await findActiveMembership(payload, member.id, organisationID)
+  if (membership?.role === 'administrator') {
+    return {
+      membershipID: membership.id,
+      organisationID,
+      recoveryAccess: false,
+      role: 'administrator',
+    }
+  }
+
   const platformAdministrator = await findActivePlatformAdministrator(payload, member.id)
   if (platformAdministrator) {
     await recordAuditEvent(payload, {
@@ -151,18 +161,17 @@ export async function authorizeOrganisationMedia(
     }
   }
 
-  const membership = await findActiveMembership(payload, member.id, organisationID)
   if (!membership) {
     throw new OrganisationAuthorizationError('Active Organisation Membership required.', 403)
   }
 
   const role = membership.role
   const ownsAsset = relationID(asset?.owner) === member.id
-  const canManage = role === 'administrator' || (role === 'publisher' && ownsAsset)
+  const canManage = role === 'publisher' && ownsAsset
   if (input.operation === 'browse') {
     return { membershipID: membership.id, organisationID, recoveryAccess: false, role }
   }
-  if (input.operation === 'create' && (role === 'administrator' || role === 'publisher')) {
+  if (input.operation === 'create' && role === 'publisher') {
     return { membershipID: membership.id, organisationID, recoveryAccess: false, role }
   }
   if (input.operation === 'manage' && canManage) {
