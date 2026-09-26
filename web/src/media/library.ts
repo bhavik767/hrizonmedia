@@ -634,6 +634,17 @@ async function rejectCompletedUpload(
   throw new MediaLibraryError(message, 400)
 }
 
+function logCompletionDiagnostic(
+  stage: 's3-complete' | 'source-probe' | 'transaction-start' | 'local-request',
+  error?: unknown,
+): void {
+  // Do not log the error message: provider errors can contain signed URLs or other sensitive data.
+  console.error('[DEBUG-5c70] Media upload completion failed.', {
+    errorType: error instanceof Error ? error.name : error === undefined ? undefined : typeof error,
+    stage,
+  })
+}
+
 export async function completeUpload(
   payload: Payload,
   owner: Member,
@@ -655,6 +666,7 @@ export async function completeUpload(
   } catch (error) {
     if (error instanceof MultipartUploadError)
       throw new MediaLibraryError('Uploaded parts could not be validated.', 400)
+    logCompletionDiagnostic('s3-complete', error)
     throw error
   }
 
@@ -670,6 +682,7 @@ export async function completeUpload(
         'The completed video could not be validated.',
       )
     }
+    logCompletionDiagnostic('source-probe', error)
     throw error
   }
   const extension = session.fileName.toLowerCase().split('.').at(-1)
@@ -712,9 +725,24 @@ export async function completeUpload(
   const queuedAt = processingOptions.now ?? new Date()
   const processingJobId = newProcessingJobId()
 
-  const transactionID = await payload.db.beginTransaction()
-  if (transactionID === null) throw new Error('Processing Jobs require database transactions.')
-  const req = await createLocalReq({ req: { transactionID } }, payload)
+  let transactionID: Awaited<ReturnType<typeof payload.db.beginTransaction>>
+  try {
+    transactionID = await payload.db.beginTransaction()
+  } catch (error) {
+    logCompletionDiagnostic('transaction-start', error)
+    throw error
+  }
+  if (transactionID === null) {
+    logCompletionDiagnostic('transaction-start')
+    throw new Error('Processing Jobs require database transactions.')
+  }
+  let req: Awaited<ReturnType<typeof createLocalReq>>
+  try {
+    req = await createLocalReq({ req: { transactionID } }, payload)
+  } catch (error) {
+    logCompletionDiagnostic('local-request', error)
+    throw error
+  }
   let queuedAsset: MediaAsset
   try {
     await payload.update({
