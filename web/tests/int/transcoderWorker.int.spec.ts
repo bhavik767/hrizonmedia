@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ffmpegArguments,
+  normalizePackagedFiles,
   packagerArguments,
   validateJob,
   verifyDashProtection,
@@ -50,6 +51,34 @@ describe('Salad transcoder worker contract', () => {
         'master.m3u8',
       ]),
     )
+  })
+
+  it('normalizes DoveRunner v4 combined DASH and HLS output for delivery', () => {
+    expect(
+      normalizePackagedFiles([
+        { absolute: '/work/packaged/dash/manifest.mpd', relative: 'dash/manifest.mpd' },
+        {
+          absolute: '/work/packaged/dash/video/avc1/1/seg-1.m4s',
+          relative: 'dash/video/avc1/1/seg-1.m4s',
+        },
+        { absolute: '/work/packaged/hls/master.m3u8', relative: 'hls/master.m3u8' },
+        {
+          absolute: '/work/packaged/hls/video/avc1/1/stream.m3u8',
+          relative: 'hls/video/avc1/1/stream.m3u8',
+        },
+      ]),
+    ).toEqual([
+      { absolute: '/work/packaged/dash/manifest.mpd', relative: 'manifest.mpd' },
+      {
+        absolute: '/work/packaged/dash/video/avc1/1/seg-1.m4s',
+        relative: 'video/avc1/1/seg-1.m4s',
+      },
+      { absolute: '/work/packaged/hls/master.m3u8', relative: 'master.m3u8' },
+      {
+        absolute: '/work/packaged/hls/video/avc1/1/stream.m3u8',
+        relative: 'video/avc1/1/stream.m3u8',
+      },
+    ])
   })
 
   it('rejects a DASH package that is missing PlayReady protection', () => {

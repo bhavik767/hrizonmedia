@@ -135,6 +135,21 @@ async function filesUnder(directory, root = directory) {
   return files
 }
 
+export function normalizePackagedFiles(files) {
+  const normalized = files.map((file) => ({
+    ...file,
+    relative: file.relative.replace(/^(?:dash|hls)\//, ''),
+  }))
+  const paths = new Set()
+  for (const file of normalized) {
+    if (paths.has(file.relative)) {
+      throw new Error(`DoveRunner created conflicting delivery path: ${file.relative}`)
+    }
+    paths.add(file.relative)
+  }
+  return normalized
+}
+
 async function sendCallback(job, status, environment, fetcher, { playReadyPackaged = false } = {}) {
   const timestamp = String(Date.now())
   const body = JSON.stringify({
@@ -238,7 +253,7 @@ export async function processJob(value, dependencies = {}) {
       packagerArguments(job, clearFiles, packagedDirectory, environment.DOVERUNNER_ENC_TOKEN),
       { timeout: 3 * 60 * 1000 },
     )
-    const packaged = await filesUnder(packagedDirectory)
+    const packaged = normalizePackagedFiles(await filesUnder(packagedDirectory))
     const deliveryFiles = [...packaged, { absolute: thumbnailPath, relative: 'thumbnail.jpg' }]
     const manifest = packaged.find(({ relative }) => relative === 'manifest.mpd')
     if (!manifest) throw new Error('DoveRunner did not create manifest.mpd.')
@@ -326,9 +341,7 @@ export async function processJob(value, dependencies = {}) {
       )
     }
     return { ready: true }
-  } catch (error) {
-    const message = error instanceof Error ? error.message.replace(/[\r\n]+/g, ' ').slice(0, 500) : 'Unknown error'
-    console.error(`[DEBUG-7c1e] transcode attempt failed: ${message}`)
+  } catch {
     await client.send(
       new PutObjectCommand({ Body: '{}', Bucket: bucket, Key: `${controlPrefix}.failed` }),
     )
