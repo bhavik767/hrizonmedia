@@ -641,7 +641,10 @@ function logCompletionDiagnostic(
     | 'asset-load'
     | 'transaction-start'
     | 'local-request'
-    | 'transaction-persist',
+    | 'persist-session'
+    | 'persist-job'
+    | 'persist-asset'
+    | 'transaction-commit',
   error?: unknown,
 ): void {
   // Do not log the error message: provider errors can contain signed URLs or other sensitive data.
@@ -756,6 +759,11 @@ export async function completeUpload(
     throw error
   }
   let queuedAsset: MediaAsset
+  let persistenceStage:
+    | 'persist-session'
+    | 'persist-job'
+    | 'persist-asset'
+    | 'transaction-commit' = 'persist-session'
   try {
     await payload.update({
       collection: 'upload-sessions',
@@ -764,6 +772,7 @@ export async function completeUpload(
       overrideAccess: true,
       req,
     })
+    persistenceStage = 'persist-job'
     await payload.create({
       collection: 'processing-jobs',
       data: newProcessingJobData({
@@ -781,6 +790,7 @@ export async function completeUpload(
       overrideAccess: true,
       req,
     })
+    persistenceStage = 'persist-asset'
     queuedAsset = await payload.update({
       collection: 'media-assets',
       data: {
@@ -795,9 +805,10 @@ export async function completeUpload(
       overrideAccess: true,
       req,
     })
+    persistenceStage = 'transaction-commit'
     await payload.db.commitTransaction(transactionID)
   } catch (error) {
-    logCompletionDiagnostic('transaction-persist', error)
+    logCompletionDiagnostic(persistenceStage, error)
     await payload.db.rollbackTransaction(transactionID)
     throw error
   }
