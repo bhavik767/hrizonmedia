@@ -326,7 +326,9 @@ export async function processJob(value, dependencies = {}) {
       )
     }
     return { ready: true }
-  } catch (_error) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message.replace(/[\r\n]+/g, ' ').slice(0, 500) : 'Unknown error'
+    console.error(`[DEBUG-7c1e] transcode attempt failed: ${message}`)
     await client.send(
       new PutObjectCommand({ Body: '{}', Bucket: bucket, Key: `${controlPrefix}.failed` }),
     )
