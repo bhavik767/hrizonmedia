@@ -454,6 +454,13 @@ describe('reliable Processing Jobs', () => {
       status: 'failed',
     })
     expect(JSON.stringify(failed)).not.toContain('credential=abc')
+    const originalJob = await payload.find({
+      collection: 'processing-jobs',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { asset: { equals: session.asset.id } },
+    })
 
     const operator = await payload.create({
       collection: 'members',
@@ -476,6 +483,14 @@ describe('reliable Processing Jobs', () => {
       },
     )
     expect(retried.status).toBe('processing')
+    const retriedJob = await payload.find({
+      collection: 'processing-jobs',
+      depth: 0,
+      limit: 1,
+      overrideAccess: true,
+      where: { asset: { equals: session.asset.id } },
+    })
+    expect(retriedJob.docs[0]!.processingJobId).not.toBe(originalJob.docs[0]!.processingJobId)
   })
 
   it('recovers an expired processing timeout without stranding or duplicating the job', async () => {

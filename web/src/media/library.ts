@@ -991,6 +991,7 @@ export async function retryVisibleAssetProcessing(
       failureCode: null,
       failureMessage: null,
       nextAttemptAt: now.toISOString(),
+      processingJobId: newProcessingJobId(),
       providerJobId: null,
       status: 'queued',
     },
