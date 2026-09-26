@@ -15,6 +15,7 @@ export interface SaladTranscodeConfiguration {
   organizationName: string
   projectName: string
   queueName: string
+  callbackOrigin: string
   webhookURL: string
 }
 
@@ -25,6 +26,7 @@ export interface SaladOutputVerification {
 }
 
 interface SaladJobInput extends SaladOutputVerification {
+  callbackOrigin: string
   processingJobId: string
   source: { durationSeconds: number; height: number; width: number }
 }
@@ -96,7 +98,7 @@ function matchesExpectedRenditions(actual: Rendition[], expected: Rendition[]): 
   )
 }
 
-function validatedInput(input: Parameters<TranscodeProvider['queue']>[0]) {
+function validatedInput(input: Parameters<TranscodeProvider['queue']>[0], callbackOrigin: string) {
   const validSource =
     Number.isFinite(input.source.durationSeconds) &&
     input.source.durationSeconds > 0 &&
@@ -105,7 +107,14 @@ function validatedInput(input: Parameters<TranscodeProvider['queue']>[0]) {
     Number.isInteger(input.source.width) &&
     input.source.width > 0
   const expected = expectedRenditions(input.source)
+  let canonicalCallbackOrigin: string
+  try {
+    canonicalCallbackOrigin = new URL(callbackOrigin).origin
+  } catch {
+    throw new PermanentTranscodeError('Transcode callback origin is invalid.')
+  }
   if (
+    canonicalCallbackOrigin !== callbackOrigin ||
     !PROCESSING_JOB_ID.test(input.idempotencyKey) ||
     !Number.isInteger(input.attempt) ||
     input.attempt < 1 ||
@@ -120,6 +129,7 @@ function validatedInput(input: Parameters<TranscodeProvider['queue']>[0]) {
   }
   return {
     attempt: input.attempt,
+    callbackOrigin: canonicalCallbackOrigin,
     drmContentId: `drm_${input.idempotencyKey}`,
     mediaAssetId: input.mediaAssetId,
     objectKey: input.objectKey,
@@ -216,7 +226,7 @@ export function createSaladTranscodeProvider(
     },
 
     async queue(input) {
-      const jobInput = validatedInput(input)
+      const jobInput = validatedInput(input, configuration.callbackOrigin)
       const job = await requestJob(fetcher, queueURL, {
         body: JSON.stringify({
           input: jobInput,

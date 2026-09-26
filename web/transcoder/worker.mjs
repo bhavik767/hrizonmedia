@@ -26,6 +26,7 @@ export function validateJob(value) {
   const job = value?.input ?? value
   if (
     !job ||
+    typeof job.callbackOrigin !== 'string' ||
     !PROCESSING_ID.test(job.processingJobId) ||
     job.outputPrefix !== `outputs/${job.processingJobId}/` ||
     !SOURCE_KEY.test(job.objectKey) ||
@@ -49,6 +50,18 @@ export function validateJob(value) {
     throw new Error('Invalid server-owned transcode job.')
   }
   return job
+}
+
+function callbackURL(job, environment) {
+  const allowedOrigins = (environment.TRANSCODER_CALLBACK_ORIGINS ?? environment.APPLICATION_ORIGIN ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .map((origin) => new URL(origin).origin)
+  if (!allowedOrigins.includes(job.callbackOrigin)) {
+    throw new Error('Worker callback origin is not allowed.')
+  }
+  return new URL('/api/internal/transcode/callback', job.callbackOrigin).toString()
 }
 
 export function ffmpegArguments(job, sourcePath, clearDirectory) {
@@ -133,7 +146,7 @@ async function sendCallback(job, status, environment, fetcher, { playReadyPackag
     .update(`${timestamp}.${body}`)
     .digest('base64url')
   const response = await fetcher(
-    `${environment.APPLICATION_ORIGIN}/api/internal/transcode/callback`,
+    callbackURL(job, environment),
     {
       body,
       headers: {
@@ -165,7 +178,7 @@ export async function processJob(value, dependencies = {}) {
   const bucket = environment.VIDEO_S3_BUCKET
   if (
     !bucket ||
-    !environment.APPLICATION_ORIGIN ||
+    !(environment.TRANSCODER_CALLBACK_ORIGINS ?? environment.APPLICATION_ORIGIN) ||
     !environment.TRANSCODER_CALLBACK_SECRET ||
     !environment.DOVERUNNER_ENC_TOKEN
   ) {
@@ -299,7 +312,13 @@ export async function processJob(value, dependencies = {}) {
         Key: completionKey,
       }),
     )
-    await sendCallback(job, 'ready', environment, fetcher, { playReadyPackaged: true })
+    try {
+      await sendCallback(job, 'ready', environment, fetcher, { playReadyPackaged: true })
+    } catch {
+      // The application poller verifies completion.json and final outputs, so a
+      // temporary callback outage must not discard an otherwise complete package.
+      console.error('Processing ready callback delivery failed.')
+    }
     for (const file of deliveryFiles) {
       await client.send(
         new DeleteObjectCommand({ Bucket: bucket, Key: `${attemptPrefix}${file.relative}` }),
@@ -310,7 +329,11 @@ export async function processJob(value, dependencies = {}) {
     await client.send(
       new PutObjectCommand({ Body: '{}', Bucket: bucket, Key: `${controlPrefix}.failed` }),
     )
-    await sendCallback(job, 'failed', environment, fetcher)
+    try {
+      await sendCallback(job, 'failed', environment, fetcher)
+    } catch {
+      console.error('Processing failure callback delivery failed.')
+    }
     return { failed: true }
   } finally {
     await client

@@ -25,6 +25,7 @@ function provider(fetch: typeof globalThis.fetch, verifyOutputs = vi.fn(async ()
         organizationName: 'hrizonmedia',
         projectName: 'hrizonmedia-staging',
         queueName: 'video-transcoding',
+        callbackOrigin: 'https://staging.example.test',
         webhookURL: 'https://staging.example.test/api/internal/salad/webhook',
       },
       { fetch, tombstone: vi.fn(async () => undefined), verifyOutputs },
@@ -66,6 +67,7 @@ describe('SaladCloud transcode provider', () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       input: {
         attempt: 1,
+        callbackOrigin: 'https://staging.example.test',
         drmContentId: `drm_${processingJobId}`,
         mediaAssetId,
         objectKey: 'sources/upload_00000000-0000-4000-8000-000000000000/source.mp4',
