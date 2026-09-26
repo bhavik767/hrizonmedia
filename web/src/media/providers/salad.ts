@@ -16,6 +16,7 @@ export interface SaladTranscodeConfiguration {
   projectName: string
   queueName: string
   callbackOrigin: string
+  callbackSecret: string
   webhookURL: string
 }
 
@@ -27,6 +28,7 @@ export interface SaladOutputVerification {
 
 interface SaladJobInput extends SaladOutputVerification {
   callbackOrigin: string
+  callbackSecret: string
   processingJobId: string
   source: { durationSeconds: number; height: number; width: number }
 }
@@ -98,7 +100,11 @@ function matchesExpectedRenditions(actual: Rendition[], expected: Rendition[]): 
   )
 }
 
-function validatedInput(input: Parameters<TranscodeProvider['queue']>[0], callbackOrigin: string) {
+function validatedInput(
+  input: Parameters<TranscodeProvider['queue']>[0],
+  callbackOrigin: string,
+  callbackSecret: string,
+) {
   const validSource =
     Number.isFinite(input.source.durationSeconds) &&
     input.source.durationSeconds > 0 &&
@@ -115,6 +121,7 @@ function validatedInput(input: Parameters<TranscodeProvider['queue']>[0], callba
   }
   if (
     canonicalCallbackOrigin !== callbackOrigin ||
+    callbackSecret.length < 32 ||
     !PROCESSING_JOB_ID.test(input.idempotencyKey) ||
     !Number.isInteger(input.attempt) ||
     input.attempt < 1 ||
@@ -130,6 +137,7 @@ function validatedInput(input: Parameters<TranscodeProvider['queue']>[0], callba
   return {
     attempt: input.attempt,
     callbackOrigin: canonicalCallbackOrigin,
+    callbackSecret,
     drmContentId: `drm_${input.idempotencyKey}`,
     mediaAssetId: input.mediaAssetId,
     objectKey: input.objectKey,
@@ -226,7 +234,11 @@ export function createSaladTranscodeProvider(
     },
 
     async queue(input) {
-      const jobInput = validatedInput(input, configuration.callbackOrigin)
+      const jobInput = validatedInput(
+        input,
+        configuration.callbackOrigin,
+        configuration.callbackSecret,
+      )
       const job = await requestJob(fetcher, queueURL, {
         body: JSON.stringify({
           input: jobInput,

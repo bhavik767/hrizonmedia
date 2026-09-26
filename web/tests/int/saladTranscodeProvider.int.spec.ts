@@ -26,6 +26,7 @@ function provider(fetch: typeof globalThis.fetch, verifyOutputs = vi.fn(async ()
         projectName: 'hrizonmedia-staging',
         queueName: 'video-transcoding',
         callbackOrigin: 'https://staging.example.test',
+        callbackSecret: 'callback-secret-with-at-least-thirty-two-characters',
         webhookURL: 'https://staging.example.test/api/internal/salad/webhook',
       },
       { fetch, tombstone: vi.fn(async () => undefined), verifyOutputs },
@@ -68,6 +69,7 @@ describe('SaladCloud transcode provider', () => {
       input: {
         attempt: 1,
         callbackOrigin: 'https://staging.example.test',
+        callbackSecret: 'callback-secret-with-at-least-thirty-two-characters',
         drmContentId: `drm_${processingJobId}`,
         mediaAssetId,
         objectKey: 'sources/upload_00000000-0000-4000-8000-000000000000/source.mp4',

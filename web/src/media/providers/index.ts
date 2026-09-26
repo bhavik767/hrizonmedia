@@ -42,6 +42,7 @@ export function getMediaProviders(environment: NodeJS.ProcessEnv = process.env):
         projectName: configuration.saladProjectName,
         queueName: configuration.saladQueueName,
         callbackOrigin: configuration.transcodeCallbackOrigin,
+        callbackSecret: configuration.transcodeCallbackSecret,
         webhookURL: configuration.saladWebhookURL,
       },
       {

@@ -27,6 +27,8 @@ export function validateJob(value) {
   if (
     !job ||
     typeof job.callbackOrigin !== 'string' ||
+    typeof job.callbackSecret !== 'string' ||
+    job.callbackSecret.length < 32 ||
     !PROCESSING_ID.test(job.processingJobId) ||
     job.outputPrefix !== `outputs/${job.processingJobId}/` ||
     !SOURCE_KEY.test(job.objectKey) ||
@@ -142,7 +144,7 @@ async function sendCallback(job, status, environment, fetcher, { playReadyPackag
     ...(status === 'ready' ? { playReadyPackaged } : {}),
     status,
   })
-  const signature = createHmac('sha256', environment.TRANSCODER_CALLBACK_SECRET)
+  const signature = createHmac('sha256', job.callbackSecret)
     .update(`${timestamp}.${body}`)
     .digest('base64url')
   const response = await fetcher(
@@ -179,7 +181,6 @@ export async function processJob(value, dependencies = {}) {
   if (
     !bucket ||
     !(environment.TRANSCODER_CALLBACK_ORIGINS ?? environment.APPLICATION_ORIGIN) ||
-    !environment.TRANSCODER_CALLBACK_SECRET ||
     !environment.DOVERUNNER_ENC_TOKEN
   ) {
     throw new Error('Worker provider configuration is incomplete.')

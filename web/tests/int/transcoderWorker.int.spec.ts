@@ -11,6 +11,7 @@ const processingJobId = 'processing_00000000-0000-4000-8000-000000000000'
 const job = {
   attempt: 1,
   callbackOrigin: 'https://staging.example.test',
+  callbackSecret: 'callback-secret-with-at-least-thirty-two-characters',
   drmContentId: `drm_${processingJobId}`,
   objectKey: 'sources/upload_00000000-0000-4000-8000-000000000000/source.mp4',
   outputPrefix: `outputs/${processingJobId}/`,
