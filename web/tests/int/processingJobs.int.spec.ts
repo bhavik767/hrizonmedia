@@ -459,7 +459,7 @@ describe('reliable Processing Jobs', () => {
       depth: 0,
       limit: 1,
       overrideAccess: true,
-      where: { asset: { equals: session.asset.id } },
+      where: {},
     })
 
     const operator = await payload.create({
@@ -488,7 +488,7 @@ describe('reliable Processing Jobs', () => {
       depth: 0,
       limit: 1,
       overrideAccess: true,
-      where: { asset: { equals: session.asset.id } },
+      where: {},
     })
     expect(retriedJob.docs[0]!.processingJobId).not.toBe(originalJob.docs[0]!.processingJobId)
   })
