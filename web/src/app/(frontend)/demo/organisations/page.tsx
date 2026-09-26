@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
-import { ensureDemoEnabled } from '@/members/demoAvailability'
 import { getMember } from '@/members/session'
 import { requirePlatformAdministrator } from '@/organisations/authorization'
 import config from '@/payload.config'
@@ -14,7 +13,6 @@ import { PlatformAdministratorForm } from './PlatformAdministratorForm'
 export const metadata: Metadata = { title: 'Organisation administration | WeCloud Dashboard' }
 
 export default async function OrganisationAdministrationPage() {
-  await ensureDemoEnabled()
   const actor = await getMember()
   if (!actor) redirect('/demo/sign-in?returnTo=%2Fdemo%2Forganisations')
 

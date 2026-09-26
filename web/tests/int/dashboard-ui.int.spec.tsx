@@ -43,11 +43,9 @@ describe('dashboard interaction regressions', () => {
 
   it('fully hides and restores the dashboard navigation when the menu button is toggled', async () => {
     render(
-      React.createElement(
-        DashboardShell,
-        { currentPath: '/demo' },
-        React.createElement('main', null, 'Dashboard content'),
-      ),
+      <DashboardShell currentPath="/demo">
+        <main>Dashboard content</main>
+      </DashboardShell>,
     )
 
     const closeButton = await screen.findByRole('button', { name: 'Close navigation' })

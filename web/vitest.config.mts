@@ -9,6 +9,6 @@ export default defineConfig({
     // Payload integration files share one disposable local database.
     fileParallelism: false,
     setupFiles: ['./vitest.setup.ts'],
-    include: ['tests/int/**/*.int.spec.ts'],
+    include: ['tests/int/**/*.int.spec.{ts,tsx}'],
   },
 })
