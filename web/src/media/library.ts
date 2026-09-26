@@ -635,7 +635,13 @@ async function rejectCompletedUpload(
 }
 
 function logCompletionDiagnostic(
-  stage: 's3-complete' | 'source-probe' | 'transaction-start' | 'local-request',
+  stage:
+    | 's3-complete'
+    | 'source-probe'
+    | 'asset-load'
+    | 'transaction-start'
+    | 'local-request'
+    | 'transaction-persist',
   error?: unknown,
 ): void {
   // Do not log the error message: provider errors can contain signed URLs or other sensitive data.
@@ -716,12 +722,18 @@ export async function completeUpload(
   }
 
   const assetRecordID = relationID(session.asset)
-  const asset = await payload.findByID({
-    collection: 'media-assets',
-    depth: 0,
-    id: assetRecordID,
-    overrideAccess: true,
-  })
+  let asset: MediaAsset
+  try {
+    asset = await payload.findByID({
+      collection: 'media-assets',
+      depth: 0,
+      id: assetRecordID,
+      overrideAccess: true,
+    })
+  } catch (error) {
+    logCompletionDiagnostic('asset-load', error)
+    throw error
+  }
   const queuedAt = processingOptions.now ?? new Date()
   const processingJobId = newProcessingJobId()
 
@@ -785,6 +797,7 @@ export async function completeUpload(
     })
     await payload.db.commitTransaction(transactionID)
   } catch (error) {
+    logCompletionDiagnostic('transaction-persist', error)
     await payload.db.rollbackTransaction(transactionID)
     throw error
   }
