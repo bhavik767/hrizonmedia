@@ -647,9 +647,18 @@ function logCompletionDiagnostic(
     | 'transaction-commit',
   error?: unknown,
 ): void {
-  // Do not log the error message: provider errors can contain signed URLs or other sensitive data.
+  const message = error instanceof Error ? error.message : ''
+  const redactedMessage = message
+    .replace(/(?:postgres(?:ql)?|mongodb):\/\/\S+/gi, '<REDACTED_CONNECTION_URL>')
+    .replace(/https?:\/\/\S+/gi, '<REDACTED_URL>')
+    .replace(
+      /\b(?:api[-_ ]?key|authorization|credential|password|secret|token)\b\s*(?:=|:)\s*\S+/gi,
+      '<REDACTED_SECRET>',
+    )
+    .slice(0, 500)
   console.error('[DEBUG-5c70] Media upload completion failed.', {
     errorType: error instanceof Error ? error.name : error === undefined ? undefined : typeof error,
+    message: redactedMessage || undefined,
     stage,
   })
 }
