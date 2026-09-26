@@ -10,6 +10,7 @@ export const ProcessingJobs: CollectionConfig = {
     update: () => false,
   },
   admin: { hidden: true, useAsTitle: 'processingJobId' },
+  lockDocuments: false,
   fields: [
     { name: 'processingJobId', type: 'text', required: true, unique: true, index: true },
     { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },

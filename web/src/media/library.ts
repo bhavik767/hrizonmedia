@@ -634,35 +634,6 @@ async function rejectCompletedUpload(
   throw new MediaLibraryError(message, 400)
 }
 
-function logCompletionDiagnostic(
-  stage:
-    | 's3-complete'
-    | 'source-probe'
-    | 'asset-load'
-    | 'transaction-start'
-    | 'local-request'
-    | 'persist-session'
-    | 'persist-job'
-    | 'persist-asset'
-    | 'transaction-commit',
-  error?: unknown,
-): void {
-  const message = error instanceof Error ? error.message : ''
-  const redactedMessage = message
-    .replace(/(?:postgres(?:ql)?|mongodb):\/\/\S+/gi, '<REDACTED_CONNECTION_URL>')
-    .replace(/https?:\/\/\S+/gi, '<REDACTED_URL>')
-    .replace(
-      /\b(?:api[-_ ]?key|authorization|credential|password|secret|token)\b\s*(?:=|:)\s*\S+/gi,
-      '<REDACTED_SECRET>',
-    )
-    .slice(0, 500)
-  console.error('[DEBUG-5c70] Media upload completion failed.', {
-    errorType: error instanceof Error ? error.name : error === undefined ? undefined : typeof error,
-    message: redactedMessage || undefined,
-    stage,
-  })
-}
-
 export async function completeUpload(
   payload: Payload,
   owner: Member,
@@ -684,7 +655,6 @@ export async function completeUpload(
   } catch (error) {
     if (error instanceof MultipartUploadError)
       throw new MediaLibraryError('Uploaded parts could not be validated.', 400)
-    logCompletionDiagnostic('s3-complete', error)
     throw error
   }
 
@@ -700,7 +670,6 @@ export async function completeUpload(
         'The completed video could not be validated.',
       )
     }
-    logCompletionDiagnostic('source-probe', error)
     throw error
   }
   const extension = session.fileName.toLowerCase().split('.').at(-1)
@@ -734,45 +703,19 @@ export async function completeUpload(
   }
 
   const assetRecordID = relationID(session.asset)
-  let asset: MediaAsset
-  try {
-    asset = await payload.findByID({
-      collection: 'media-assets',
-      depth: 0,
-      id: assetRecordID,
-      overrideAccess: true,
-    })
-  } catch (error) {
-    logCompletionDiagnostic('asset-load', error)
-    throw error
-  }
+  const asset = await payload.findByID({
+    collection: 'media-assets',
+    depth: 0,
+    id: assetRecordID,
+    overrideAccess: true,
+  })
   const queuedAt = processingOptions.now ?? new Date()
   const processingJobId = newProcessingJobId()
 
-  let transactionID: Awaited<ReturnType<typeof payload.db.beginTransaction>>
-  try {
-    transactionID = await payload.db.beginTransaction()
-  } catch (error) {
-    logCompletionDiagnostic('transaction-start', error)
-    throw error
-  }
-  if (transactionID === null) {
-    logCompletionDiagnostic('transaction-start')
-    throw new Error('Processing Jobs require database transactions.')
-  }
-  let req: Awaited<ReturnType<typeof createLocalReq>>
-  try {
-    req = await createLocalReq({ req: { transactionID } }, payload)
-  } catch (error) {
-    logCompletionDiagnostic('local-request', error)
-    throw error
-  }
+  const transactionID = await payload.db.beginTransaction()
+  if (transactionID === null) throw new Error('Processing Jobs require database transactions.')
+  const req = await createLocalReq({ req: { transactionID } }, payload)
   let queuedAsset: MediaAsset
-  let persistenceStage:
-    | 'persist-session'
-    | 'persist-job'
-    | 'persist-asset'
-    | 'transaction-commit' = 'persist-session'
   try {
     await payload.update({
       collection: 'upload-sessions',
@@ -781,7 +724,6 @@ export async function completeUpload(
       overrideAccess: true,
       req,
     })
-    persistenceStage = 'persist-job'
     await payload.create({
       collection: 'processing-jobs',
       data: newProcessingJobData({
@@ -799,7 +741,6 @@ export async function completeUpload(
       overrideAccess: true,
       req,
     })
-    persistenceStage = 'persist-asset'
     queuedAsset = await payload.update({
       collection: 'media-assets',
       data: {
@@ -814,10 +755,8 @@ export async function completeUpload(
       overrideAccess: true,
       req,
     })
-    persistenceStage = 'transaction-commit'
     await payload.db.commitTransaction(transactionID)
   } catch (error) {
-    logCompletionDiagnostic(persistenceStage, error)
     await payload.db.rollbackTransaction(transactionID)
     throw error
   }

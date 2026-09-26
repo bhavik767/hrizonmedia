@@ -10,6 +10,7 @@ export const MediaAssets: CollectionConfig = {
     update: () => false,
   },
   admin: { hidden: true, useAsTitle: 'fileName' },
+  lockDocuments: false,
   fields: [
     { name: 'mediaAssetId', type: 'text', required: true, unique: true, index: true },
     { name: 'organisation', type: 'relationship', relationTo: 'organisations', index: true },
