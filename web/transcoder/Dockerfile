@@ -17,7 +17,7 @@ FROM node:22-bookworm-slim@sha256:25330af3531fb5e23318554a0aa911125b6e91b1b777ed
 
 # This is the vetted DoveRunner packager source revision.
 ARG PALLYCON_PACKAGER_REF=9462c321bb4c5cc32aa6d136563d438d9ee0ac96
-ARG DEBIAN_SNAPSHOT=20250101T000000Z
+ARG DEBIAN_SNAPSHOT=20260924T000000Z
 
 RUN printf '%s\n' "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" > /etc/apt/sources.list \
   && rm -f /etc/apt/sources.list.d/debian.sources \
@@ -33,7 +33,7 @@ RUN printf '%s\n' "deb [check-valid-until=no] http://snapshot.debian.org/archive
 
 FROM node:22-bookworm-slim@sha256:25330af3531fb5e23318554a0aa911125b6e91b1b777edf7655501d207c067a2
 
-ARG DEBIAN_SNAPSHOT=20250101T000000Z
+ARG DEBIAN_SNAPSHOT=20260924T000000Z
 
 ENV NODE_ENV=production \
     PORT=8080 \
@@ -82,7 +82,8 @@ COPY transcoder/ ./transcoder/
 COPY --from=queue-worker /out/salad-http-job-queue-worker /usr/local/bin/salad-http-job-queue-worker
 COPY transcoder/entrypoint.sh /usr/local/bin/hrizon-transcoder-entrypoint
 
-RUN chmod 755 /usr/local/bin/salad-http-job-queue-worker /usr/local/bin/hrizon-transcoder-entrypoint \
+RUN sed -i 's/\r$//' /usr/local/bin/hrizon-transcoder-entrypoint \
+  && chmod 755 /usr/local/bin/salad-http-job-queue-worker /usr/local/bin/hrizon-transcoder-entrypoint \
   && useradd --create-home --uid 10001 worker
 
 USER worker

@@ -45,7 +45,7 @@ try {
     'run', '--rm', '--entrypoint', '/bin/sh', image, '-ec',
     'test -x "$FFMPEG_BIN" && "$FFMPEG_BIN" -version >/dev/null && test -x "$DOVERUNNER_PACKAGER_BIN" && "$DOVERUNNER_PACKAGER_BIN" --help >/dev/null',
   ])
-  const { stdout } = await docker(['run', '--detach', '--rm', '-e', 'PORT=8080', '-p', '127.0.0.1::8080', image])
+  const { stdout } = await docker(['run', '--detach', '--rm', '-e', 'PORT=8080', '-p', '127.0.0.1:0:8080', image])
   containerId = stdout.trim()
   const { stdout: portOutput } = await docker(['port', containerId, '8080/tcp'])
   const port = portOutput.trim().match(/:(\d+)$/)?.[1]
