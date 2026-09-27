@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 
 import { DashboardShell } from '../DashboardShell'
 import { getDashboardData } from '../dashboardData'
-import { ComingSoonPage, isDemoModule } from '../ComingSoonPage'
+import { ComingSoonPage as ComingSoonPanel, isDemoModule } from '../ComingSoonPage'
 
 export default async function ComingSoonPage({ params }: { params: Promise<{ area: string }> }) {
   const { area } = await params
@@ -13,7 +13,7 @@ export default async function ComingSoonPage({ params }: { params: Promise<{ are
   return (
     <DashboardShell currentPath={`/demo/${area}`}>
       <main className="dashboard-content" id="main-content">
-        <ComingSoonPage module={area} />
+        <ComingSoonPanel module={area} />
       </main>
     </DashboardShell>
   )
