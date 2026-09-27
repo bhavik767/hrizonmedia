@@ -3,18 +3,32 @@
 
 FROM golang:1.25-bookworm AS queue-worker
 
-# Use the current released queue worker. The previous pinned revision can
-# terminate its gRPC job stream with RST_STREAM/INTERNAL_ERROR on Salad.
-ARG SALAD_QUEUE_WORKER_REF=v0.7.0
+# v0.7.0, pinned to its source revision so a moved tag cannot change a release.
+ARG SALAD_QUEUE_WORKER_REF=b788070320afda986fb58a281b9f8ecfd4ef8b3d
 
-RUN git clone https://github.com/SaladTechnologies/salad-cloud-job-queue-worker.git /src \
+RUN git init /src \
   && cd /src \
-  && git checkout --detach "$SALAD_QUEUE_WORKER_REF" \
+  && git remote add origin https://github.com/SaladTechnologies/salad-cloud-job-queue-worker.git \
+  && git fetch --depth 1 origin "$SALAD_QUEUE_WORKER_REF" \
+  && git checkout --detach FETCH_HEAD \
   && go build -trimpath -ldflags='-s -w' -o /out/salad-http-job-queue-worker ./cmd/salad-http-job-queue-worker
 
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim AS packager-source
 
+# This is the vetted DoveRunner packager source revision.
 ARG PALLYCON_PACKAGER_REF=9462c321bb4c5cc32aa6d136563d438d9ee0ac96
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates git \
+  && rm -rf /var/lib/apt/lists/* \
+  && git init /opt/pallycon \
+  && cd /opt/pallycon \
+  && git remote add origin https://github.com/inka-pallycon/pallycon-drm-cli-packager.git \
+  && git fetch --depth 1 origin "$PALLYCON_PACKAGER_REF" \
+  && git checkout --detach FETCH_HEAD \
+  && rm -rf .git
+
+FROM node:22-bookworm-slim
 
 ENV NODE_ENV=production \
     PORT=8080 \
@@ -29,7 +43,7 @@ WORKDIR /app
 # The packager binary is invoked during the build to make a missing native library
 # fail fast. The queue worker and application are both supervised below.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends bash ca-certificates curl ffmpeg git tini \
+  && apt-get install -y --no-install-recommends bash ca-certificates curl ffmpeg tini \
   && rm -rf /var/lib/apt/lists/*
 
 # DoveRunner's current x86_64 packager links against OpenSSL 1.1. Debian 12 no
@@ -43,9 +57,10 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends libc-ares2 \
   && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 https://github.com/inka-pallycon/pallycon-drm-cli-packager.git /opt/pallycon \
-  && cd /opt/pallycon \
-  && git checkout --detach "$PALLYCON_PACKAGER_REF" \
+COPY --from=packager-source /opt/pallycon /opt/pallycon
+
+RUN test -x "$FFMPEG_BIN" \
+  && "$FFMPEG_BIN" -version >/dev/null \
   && test -f "$DOVERUNNER_PACKAGER_BIN" \
   && chmod 755 "$DOVERUNNER_PACKAGER_BIN" \
   && "$DOVERUNNER_PACKAGER_BIN" --help >/dev/null
