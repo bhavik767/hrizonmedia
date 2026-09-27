@@ -21,6 +21,22 @@ async function waitForHealth(origin) {
   throw new Error('Transcoder image did not become healthy within 30 seconds.')
 }
 
+async function waitForQueueWorker() {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      await docker([
+        'exec', containerId, '/bin/sh', '-ec',
+        "grep -aql 'salad-http-job-queue-worker' /proc/[0-9]*/cmdline >/dev/null",
+      ])
+      return
+    } catch {
+      // The entrypoint has not started the queue worker yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+  }
+  throw new Error('Transcoder queue worker did not start within 30 seconds.')
+}
+
 try {
   await docker(['build', '--platform', 'linux/amd64', '--pull=false', '-f', 'transcoder/Dockerfile', '-t', image, '.'], {
     stdio: 'inherit',
@@ -35,6 +51,7 @@ try {
   const port = portOutput.trim().match(/:(\d+)$/)?.[1]
   if (!port) throw new Error('Docker did not publish the transcoder HTTP port.')
   const origin = `http://127.0.0.1:${port}`
+  await waitForQueueWorker()
   await waitForHealth(origin)
   const response = await fetch(`${origin}/jobs`, {
     body: JSON.stringify({ input: { processingJobId: 'sentinel' } }),
