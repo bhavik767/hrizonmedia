@@ -571,7 +571,6 @@ describe('reliable Processing Jobs', () => {
     const callbackBody = JSON.stringify({
       callbackId: 'callback-issue-39',
       outputPrefix: processingOutputPrefix(job.processingJobId),
-      playReadyPackaged: true,
       providerJobId: job.providerJobId,
       status: 'ready',
     })

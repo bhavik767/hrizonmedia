@@ -36,6 +36,12 @@ export interface Rendition {
   width: number
 }
 
+export interface OutputVerification {
+  attempt: number
+  outputPrefix: string
+  renditions: Rendition[]
+}
+
 export interface MediaProbe {
   durationSeconds: number
   height: number
@@ -96,6 +102,7 @@ export interface TranscodeProvider {
     source: SourceMedia
     startedAt: Date
   }): Promise<'processing' | 'ready'>
+  verifyOutputs(input: OutputVerification): Promise<void>
 }
 
 export interface DeliveryAuthorization {

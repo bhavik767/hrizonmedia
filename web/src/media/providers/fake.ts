@@ -337,6 +337,8 @@ export const fakeTranscodeProvider: TranscodeProvider = {
         : Math.min(source.durationSeconds * 1_400, 7_000)
     return elapsed >= simulatedDuration ? 'ready' : 'processing'
   },
+
+  async verifyOutputs() {},
 }
 
 export const fakeDeliveryProvider: DeliveryProvider = {
