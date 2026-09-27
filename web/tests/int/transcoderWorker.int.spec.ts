@@ -28,11 +28,24 @@ const job = {
   source: { durationSeconds: 600, height: 720, width: 1280 },
 }
 
-function workerDependencies({ callbackOK = true, gpuAvailable = true, gpuEncodingFailure, sourceFailure } = {}) {
-  const commands = []
+type WorkerCommand = { constructor: { name: string }; input?: { Key?: string } }
+type WorkerDependenciesOptions = {
+  callbackOK?: boolean
+  gpuAvailable?: boolean
+  gpuEncodingFailure?: Error
+  sourceFailure?: Error
+}
+
+function workerDependencies({
+  callbackOK = true,
+  gpuAvailable = true,
+  gpuEncodingFailure,
+  sourceFailure,
+}: WorkerDependenciesOptions = {}) {
+  const commands: WorkerCommand[] = []
   const publication = { active: 0, peak: 0 }
   const client = {
-    send: vi.fn(async (command) => {
+    send: vi.fn(async (command: WorkerCommand) => {
       commands.push(command)
       if (command.constructor.name === 'HeadObjectCommand') {
         throw Object.assign(new Error('missing'), { $metadata: { httpStatusCode: 404 } })
@@ -53,19 +66,19 @@ function workerDependencies({ callbackOK = true, gpuAvailable = true, gpuEncodin
       return {}
     }),
   }
-  const execFile = vi.fn(async (_executable, args) => {
+  const execFile = vi.fn(async (_executable: string, args: string[]) => {
     if (args[0] === '--query-gpu=name') return { stdout: gpuAvailable ? 'GPU 0' : '' }
     if (args.includes('-encoders')) return { stdout: ' V..... h264_nvenc NVIDIA NVENC H.264 encoder' }
     if (args.includes('h264_nvenc') && gpuEncodingFailure) throw gpuEncodingFailure
     if (args.includes('-frames:v')) {
-      await writeFile(args.at(-1), 'thumbnail')
+      await writeFile(args.at(-1)!, 'thumbnail')
       return { stdout: '' }
     }
     if (args.includes('libx264') || args.includes('h264_nvenc')) {
-      await writeFile(args.at(-1), 'clear video')
+      await writeFile(args.at(-1)!, 'clear video')
       return { stdout: '' }
     }
-    const packagedDirectory = args[args.indexOf('-o') + 1]
+    const packagedDirectory = args[args.indexOf('-o') + 1]!
     await mkdir(`${packagedDirectory}/video`, { recursive: true })
     await Promise.all([
       writeFile(
@@ -114,7 +127,7 @@ describe('Salad transcoder worker contract', () => {
   it('bounds concurrent publication work', async () => {
     let active = 0
     let peak = 0
-    const results = await mapWithConcurrency([1, 2, 3, 4, 5], 2, async (value) => {
+    const results = await mapWithConcurrency([1, 2, 3, 4, 5], 2, async (value: number) => {
       active += 1
       peak = Math.max(peak, active)
       await new Promise((resolve) => setTimeout(resolve, 5))
@@ -334,7 +347,9 @@ describe('Salad transcoder worker contract', () => {
       expect(client.send).not.toHaveBeenCalled()
       expect(execFile).not.toHaveBeenCalled()
     } finally {
-      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      )
     }
   })
 })
