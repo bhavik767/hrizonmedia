@@ -133,6 +133,42 @@ describe('SaladCloud native webhook', () => {
     ).resolves.toMatchObject({ attempts: 1, status: 'queued' })
   })
 
+  it('returns an unverifiable package to the retry path instead of publishing it', async () => {
+    const { job, processingJobId } = await createProcessingJobFixture()
+    const deleteOutputPrefix = vi.fn(async () => undefined)
+
+    await expect(
+      applyProcessingCallback(
+        payload,
+        {
+          callbackId: 'unverifiable-package',
+          outputPrefix: processingOutputPrefix(processingJobId),
+          providerJobId: `provider_job_${nativeJobId}`,
+          status: 'ready',
+        },
+        now,
+        {
+          deleteOutputPrefix,
+          verifyOutputs: async () => {
+            throw new Error('CMAF package is incomplete.')
+          },
+        },
+      ),
+    ).resolves.toBe('applied')
+
+    await expect(
+      payload.findByID({ collection: 'processing-jobs', id: job.id, overrideAccess: true }),
+    ).resolves.toMatchObject({ providerJobId: null, status: 'queued' })
+    await expect(
+      payload.findByID({
+        collection: 'media-assets',
+        id: typeof job.asset === 'number' ? job.asset : job.asset.id,
+        overrideAccess: true,
+      }),
+    ).resolves.toMatchObject({ status: 'queued' })
+    expect(deleteOutputPrefix).toHaveBeenCalledWith(processingOutputPrefix(processingJobId))
+  })
+
   it('rejects a tampered native webhook without changing the Processing Job', async () => {
     const { job, processingJobId } = await createProcessingJobFixture()
     const signed = JSON.stringify({

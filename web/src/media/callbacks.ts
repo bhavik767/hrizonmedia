@@ -5,6 +5,7 @@ import { createLocalReq, type Payload } from 'payload'
 import { recordAuditEvent } from '@/audit/events'
 
 import { processingOutputPrefix } from './identifiers'
+import type { OutputVerification } from './providers/contracts'
 import {
   failProcessingJob,
   retryOrFailProcessingJob,
@@ -20,12 +21,15 @@ export async function applyProcessingCallback(
   input: {
     callbackId: string
     outputPrefix: string
-    playReadyPackaged?: boolean
     providerJobId: string
     retryFailure?: boolean
     status: 'failed' | 'ready'
   },
   now = new Date(),
+  dependencies: {
+    deleteOutputPrefix?: (outputPrefix: string) => Promise<void>
+    verifyOutputs?: (input: OutputVerification) => Promise<void>
+  } = {},
 ): Promise<'applied' | 'duplicate' | 'ignored'> {
   const transactionID = await payload.db.beginTransaction()
   if (transactionID === null) throw new Error('Processing callbacks require transactions.')
@@ -93,15 +97,33 @@ export async function applyProcessingCallback(
       throw Object.assign(new Error('Processing Job is not awaiting a callback.'), { status: 409 })
     }
 
+    let packageVerified = true
     if (input.status === 'ready') {
-      await payload.update({
-        collection: 'processing-jobs',
-        data: { processingDeadlineAt: null, readyAt: now.toISOString(), status: 'ready' },
-        id: job.id,
-        overrideAccess: true,
-        req,
-      })
-      await setProcessingAssetStatus(payload, job, 'ready', now, req, input.playReadyPackaged === true)
+      try {
+        if (!dependencies.verifyOutputs) throw new Error('Output verification is unavailable.')
+        await dependencies.verifyOutputs({
+          attempt: job.attempts,
+          outputPrefix: input.outputPrefix,
+          renditions: job.renditions as OutputVerification['renditions'],
+        })
+      } catch {
+        packageVerified = false
+        await dependencies.deleteOutputPrefix?.(input.outputPrefix)
+        await retryOrFailProcessingJob(payload, job, now, 'package_verification_failed', req)
+      }
+    }
+
+    if (input.status === 'ready') {
+      if (packageVerified) {
+        await payload.update({
+          collection: 'processing-jobs',
+          data: { processingDeadlineAt: null, readyAt: now.toISOString(), status: 'ready' },
+          id: job.id,
+          overrideAccess: true,
+          req,
+        })
+        await setProcessingAssetStatus(payload, job, 'ready', now, req, true)
+      }
     } else {
       if (input.retryFailure) {
         await retryOrFailProcessingJob(payload, job, now, 'provider_callback_failed', req)
@@ -113,6 +135,7 @@ export async function applyProcessingCallback(
       action: 'processing_callback_received',
       assetID: relationID(job.asset),
       details: {
+        packageVerified,
         outputPrefix: input.outputPrefix,
         providerJobId: input.providerJobId,
         status: input.status,

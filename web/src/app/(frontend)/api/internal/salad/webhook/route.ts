@@ -8,7 +8,6 @@ import { readBoundedBody } from '@/media/body'
 import { applyProcessingCallback } from '@/media/callbacks'
 import type { ProviderJobId } from '@/media/identifiers'
 import { getMediaProviders } from '@/media/providers'
-import { PermanentTranscodeError, TransientTranscodeError } from '@/media/providers/errors'
 import config from '@/payload.config'
 
 const NATIVE_JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -100,46 +99,27 @@ export async function POST(request: Request): Promise<Response> {
   if (!event) return reject('invalid_body', 400, 'Webhook body is invalid.')
 
   const payload = await getPayload({ config })
+  const providers = getMediaProviders()
   const providerJobId = `provider_job_${event.nativeJobId}` as ProviderJobId
   try {
-    if (event.status === 'succeeded') {
-      const jobs = await payload.find({
-        collection: 'processing-jobs',
-        depth: 0,
-        limit: 1,
-        overrideAccess: true,
-        where: { providerJobId: { equals: providerJobId } },
-      })
-      const job = jobs.docs[0]
-      if (!job) return reject('job_not_found', 404, 'Processing Job not found.')
-      const status = await getMediaProviders().transcode.status({
-        now: new Date(),
+    const result = await applyProcessingCallback(
+      payload,
+      {
+        callbackId: `salad:${headers['webhook-id']}`,
+        outputPrefix: event.outputPrefix,
         providerJobId,
-        source: {
-          durationSeconds: job.sourceDurationSeconds,
-          height: job.sourceHeight,
-          width: job.sourceWidth,
-        },
-        startedAt: new Date(job.startedAt!),
-      })
-      if (status !== 'ready') return reject('outputs_not_ready', 409, 'Processing outputs are not ready.')
-    }
-    const result = await applyProcessingCallback(payload, {
-      callbackId: `salad:${headers['webhook-id']}`,
-      outputPrefix: event.outputPrefix,
-      providerJobId,
-      retryFailure: event.status !== 'succeeded',
-      status: event.status === 'succeeded' ? 'ready' : 'failed',
-    })
-    if (result === 'ignored') await getMediaProviders().storage.deletePrefix(event.outputPrefix)
+        retryFailure: event.status !== 'succeeded',
+        status: event.status === 'succeeded' ? 'ready' : 'failed',
+      },
+      new Date(),
+      {
+        deleteOutputPrefix: providers.storage.deletePrefix,
+        verifyOutputs: providers.transcode.verifyOutputs,
+      },
+    )
+    if (result === 'ignored') await providers.storage.deletePrefix(event.outputPrefix)
     return new Response(null, { status: 204 })
   } catch (error) {
-    if (error instanceof TransientTranscodeError) {
-      return reject('provider_unavailable', 503, 'Provider verification is unavailable.')
-    }
-    if (error instanceof PermanentTranscodeError) {
-      return reject('provider_rejected', 422, 'Provider result is invalid.')
-    }
     if (error instanceof Error && 'status' in error && typeof error.status === 'number') {
       return reject('state_conflict', error.status, error.message)
     }

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import type { ProviderJobId } from '../identifiers'
-import type { Rendition, TranscodeProvider } from './contracts'
+import type { OutputVerification, Rendition, TranscodeProvider } from './contracts'
 import { PermanentTranscodeError, TransientTranscodeError } from './errors'
 
 const SALAD_API_ORIGIN = 'https://api.salad.com/api/public'
@@ -20,11 +20,7 @@ export interface SaladTranscodeConfiguration {
   webhookURL: string
 }
 
-export interface SaladOutputVerification {
-  attempt: number
-  outputPrefix: string
-  renditions: Rendition[]
-}
+export type SaladOutputVerification = OutputVerification
 
 interface SaladJobInput extends SaladOutputVerification {
   callbackOrigin: string
@@ -42,7 +38,7 @@ interface SaladJob {
 interface SaladDependencies {
   fetch?: typeof globalThis.fetch
   tombstone(processingJobId: string): Promise<void>
-  verifyOutputs(input: SaladOutputVerification): Promise<void>
+  verifyOutputs(input: OutputVerification): Promise<void>
 }
 
 function nativeJobId(providerJobId: string): string {
@@ -215,6 +211,8 @@ export function createSaladTranscodeProvider(
     // The worker and S3 verifier both reject a ready result unless its DASH
     // manifest contains the PlayReady system ID.
     producesPlayReadyPackage: true,
+
+    verifyOutputs: dependencies.verifyOutputs,
 
     async deleteOutputs({ processingJobId, providerJobId: id }) {
       if (processingJobId) await dependencies.tombstone(processingJobId)
