@@ -359,7 +359,8 @@ export async function processJob(value, dependencies = {}) {
   }
 }
 
-export function startServer(dependencies) {
+export function startServer(dependencies = {}) {
+  const environment = dependencies.environment ?? process.env
   return createServer(async (request, response) => {
     if (request.method === 'GET' && request.url === '/health') return response.end('ok')
     if (request.method !== 'POST' || request.url !== '/jobs') {
@@ -377,7 +378,7 @@ export function startServer(dependencies) {
     } catch {
       response.writeHead(503).end()
     }
-  }).listen(Number(process.env.PORT ?? 8080), '0.0.0.0')
+  }).listen(Number(environment.PORT ?? 8080), '0.0.0.0')
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) startServer()

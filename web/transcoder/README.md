@@ -5,6 +5,12 @@ queue connection to `POST /jobs` on `$PORT` (health check: `GET /health`). The i
 must provide FFmpeg and the licensed DoveRunner CLI packager; override their paths
 with `FFMPEG_BIN` and `DOVERUNNER_PACKAGER_BIN` when they are not on `PATH`.
 
+Build `transcoder/Dockerfile` from the `web/` directory. It pins the Linux/amd64 base
+image digests, snapshot date, Salad queue worker, DoveRunner packager, vetted FFmpeg
+package, and native libraries into the image; it does not install executables when a
+Processing Job starts. Publish the resulting image and configure Salad with its
+immutable image digest, rather than a mutable tag.
+
 Install only server-side values in the container: AWS credentials scoped to the
 dedicated video bucket, `VIDEO_S3_BUCKET`, `VIDEO_S3_REGION`, `DOVERUNNER_ENC_TOKEN`,
 `APPLICATION_ORIGIN`, and `TRANSCODER_CALLBACK_SECRET`. Never bake values into the
@@ -43,6 +49,19 @@ work. Bootstrap staging with this sequence instead:
 4. Only after the sentinel is delivered may the group scale to zero. Then submit a
    real fixture and prove that queue depth causes a cold worker to become ready and
    process it.
+
+Run the credential-free image proof before creating or updating a Salad group:
+
+```
+npm run test:transcoder:smoke -- hrizonmedia-transcoder:issue-127
+```
+
+It builds the worker image, verifies both baked executables, confirms the queue worker
+is running, starts its normal entrypoint, confirms `GET /health`, and submits the
+invalid sentinel to `POST /jobs`. The sentinel returns `503` before the worker reads a
+Media Asset, connects to storage, or invokes a transcoding executable. Run the
+queue-delivered sentinel in step 3 above as the separate Salad control-plane proof;
+this local image test does not replace it.
 
 Treat `GET /queues/{queue_name}` container-group membership as diagnostic metadata,
 not the sole readiness gate. During the 2026-09 staging bootstrap it lagged behind a

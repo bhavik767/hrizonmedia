@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   ffmpegArguments,
   normalizePackagedFiles,
   packagerArguments,
+  startServer,
   validateJob,
   verifyDashProtection,
 } from '../../transcoder/worker.mjs'
@@ -105,5 +106,38 @@ describe('Salad transcoder worker contract', () => {
         renditions: [{ audioCodec: 'aac', height: 1080, videoCodec: 'h264', width: 1920 }],
       }),
     ).toThrow('Invalid server-owned transcode job')
+  })
+
+  it('starts a healthy queue route and rejects a credential-free sentinel before touching media', async () => {
+    const client = { send: vi.fn() }
+    const execFile = vi.fn()
+    const server = startServer({
+      client,
+      environment: { PORT: '0' },
+      execFile,
+    })
+
+    await new Promise((resolve) => server.once('listening', resolve))
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('Expected a TCP worker listener.')
+    expect(address.port).not.toBe(8080)
+    const origin = `http://127.0.0.1:${address.port}`
+
+    try {
+      expect((await fetch(`${origin}/health`)).status).toBe(200)
+      expect(
+        (
+          await fetch(`${origin}/jobs`, {
+            body: JSON.stringify({ input: { processingJobId: 'sentinel' } }),
+            headers: { 'content-type': 'application/json' },
+            method: 'POST',
+          })
+        ).status,
+      ).toBe(503)
+      expect(client.send).not.toHaveBeenCalled()
+      expect(execFile).not.toHaveBeenCalled()
+    } finally {
+      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    }
   })
 })
