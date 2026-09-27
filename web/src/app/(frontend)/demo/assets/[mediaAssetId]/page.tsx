@@ -27,7 +27,13 @@ function formatTimestamp(timestamp: string): string {
   }).format(new Date(timestamp))
 }
 
-export default async function AssetPage({ params }: { params: Promise<{ mediaAssetId: string }> }) {
+export default async function AssetPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ mediaAssetId: string }>
+  searchParams: Promise<{ autoplay?: string }>
+}) {
   const member = await getMember()
   if (!member) redirect('/demo/sign-in?returnTo=%2Fdemo')
   const mediaAssetId = parseMediaAssetId((await params).mediaAssetId)
@@ -89,7 +95,12 @@ export default async function AssetPage({ params }: { params: Promise<{ mediaAss
 
         <div className={styles.layout}>
           <div className={styles.main}>
-            {asset.status === 'ready' && <PlaybackPlayer mediaAssetId={asset.mediaAssetId} />}
+            {asset.status === 'ready' && (
+              <PlaybackPlayer
+                autoStart={(await searchParams).autoplay === '1'}
+                mediaAssetId={asset.mediaAssetId}
+              />
+            )}
             {asset.status === 'failed' && asset.failureMessage && (
               <section aria-labelledby="processing-failure-title" className="processing-failure">
                 <h2 id="processing-failure-title">Processing failed</h2>

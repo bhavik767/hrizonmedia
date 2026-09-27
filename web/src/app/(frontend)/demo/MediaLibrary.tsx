@@ -877,6 +877,7 @@ export function MediaLibrary({
         >
           {visibleAssets.map((asset) => {
             const isTemporaryAsset = asset.mediaAssetId.startsWith('local_')
+            const assetHref = `/demo/assets/${asset.mediaAssetId}${asset.status === 'ready' ? '?autoplay=1' : ''}`
             const thumbnail = (
               <>
                 {asset.status === 'ready' && !isTemporaryAsset ? (
@@ -904,9 +905,11 @@ export function MediaLibrary({
                   </div>
                 ) : (
                   <Link
-                    aria-label={`Open ${asset.fileName}`}
+                    aria-label={
+                      asset.status === 'ready' ? `Play ${asset.fileName}` : `Open ${asset.fileName}`
+                    }
                     className="asset-card__thumbnail"
-                    href={`/demo/assets/${asset.mediaAssetId}`}
+                    href={assetHref}
                   >
                     {thumbnail}
                   </Link>
@@ -915,7 +918,7 @@ export function MediaLibrary({
                   {isTemporaryAsset ? (
                     <h3>{asset.fileName}</h3>
                   ) : (
-                    <Link href={`/demo/assets/${asset.mediaAssetId}`}>{asset.fileName}</Link>
+                    <Link href={assetHref}>{asset.fileName}</Link>
                   )}
                   <p>Uploaded {readableDate(asset.createdAt)}</p>
                   <p>Duration {readableDuration(asset.durationSeconds)}</p>
@@ -945,8 +948,8 @@ export function MediaLibrary({
                     </select>
                   )}
                   {!isTemporaryAsset && (
-                    <Link className="asset-card__open" href={`/demo/assets/${asset.mediaAssetId}`}>
-                      Inspect asset
+                    <Link className="asset-card__open" href={assetHref}>
+                      {asset.status === 'ready' ? 'Play asset' : 'Inspect asset'}
                     </Link>
                   )}
                 </div>

@@ -2,7 +2,7 @@
 
 import 'shaka-player/dist/controls.css'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 
 interface PlaybackGrantContract {
@@ -91,7 +91,13 @@ async function protectedPlaybackCapabilities() {
   return { fairPlayAvailable, playReadyAvailable, widevineAvailable }
 }
 
-export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
+export function PlaybackPlayer({
+  autoStart = false,
+  mediaAssetId,
+}: {
+  autoStart?: boolean
+  mediaAssetId: string
+}) {
   const playerRef = useRef<null | { destroy(): Promise<void> }>(null)
   const uiRef = useRef<null | { destroy(): Promise<unknown> }>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
@@ -106,6 +112,7 @@ export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
   >(null)
   const [watermarkPosition, setWatermarkPosition] = useState(0)
   const [starting, setStarting] = useState(false)
+  const hasAutoStarted = useRef(false)
 
   useEffect(
     () => () => {
@@ -149,7 +156,7 @@ export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
     }
   }, [watermark])
 
-  async function startPlayback() {
+  const startPlayback = useCallback(async () => {
     const video = videoRef.current
     const videoContainer = videoContainerRef.current
     if (!video || !videoContainer || starting) return
@@ -299,6 +306,13 @@ export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
       )
       setMessage(`Playback authorised until ${new Date(grant.expiresAt).toLocaleTimeString()}.`)
       await player.load(grant.manifestURL)
+      video.muted = autoStart
+      await video.play()
+      setMessage(
+        autoStart
+          ? 'Secure playback started. Unmute with the player controls.'
+          : `Playback authorised until ${new Date(grant.expiresAt).toLocaleTimeString()}.`,
+      )
     } catch (error) {
       console.error(error)
       setMessage(
@@ -309,7 +323,13 @@ export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
     } finally {
       setStarting(false)
     }
-  }
+  }, [autoStart, mediaAssetId, starting])
+
+  useEffect(() => {
+    if (!autoStart || hasAutoStarted.current) return
+    hasAutoStarted.current = true
+    void startPlayback()
+  }, [autoStart, startPlayback])
 
   return (
     <section aria-labelledby="secure-playback-title" className="secure-playback">
@@ -319,7 +339,7 @@ export function PlaybackPlayer({ mediaAssetId }: { mediaAssetId: string }) {
           <h2 id="secure-playback-title">Secure playback</h2>
         </div>
         <button disabled={starting} onClick={startPlayback} type="button">
-          {starting ? 'Starting secure playback…' : 'Start secure playback'}
+          {starting ? 'Starting secure playback…' : 'Restart secure playback'}
         </button>
       </div>
       <div className="secure-playback__video" ref={videoContainerRef}>
