@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto'
 import { execFile as execFileCallback } from 'node:child_process'
 import { createServer } from 'node:http'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { Agent } from 'node:https'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -15,12 +16,17 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
+import { NodeHttpHandler } from '@smithy/node-http-handler'
 
 const execFile = promisify(execFileCallback)
 const PROCESSING_ID = /^processing_[0-9a-f-]{36}$/
 const SOURCE_KEY = /^sources\/upload_[0-9a-f-]{36}\/source\.(?:mp4|mkv)$/
 const PLAYREADY_DASH_SYSTEM_ID = '9a04f079-9840-4286-ab92-e65be0885f95'
 const WIDEVINE_DASH_SYSTEM_ID = 'edef8ba9-79d6-4ace-a3c8-27dcd51d21ed'
+const GPU_PROBE_TIMEOUT_MS = 10_000
+const STORAGE_CONNECTION_TIMEOUT_MS = 10_000
+const STORAGE_SOCKET_TIMEOUT_MS = 5 * 60 * 1000
+export const STORAGE_PUBLICATION_CONCURRENCY = 4
 
 export function validateJob(value) {
   const job = value?.input ?? value
@@ -66,7 +72,11 @@ function callbackURL(job, environment) {
   return new URL('/api/internal/transcode/callback', job.callbackOrigin).toString()
 }
 
-export function ffmpegArguments(job, sourcePath, clearDirectory) {
+export function ffmpegArguments(job, sourcePath, clearDirectory, strategy = 'cpu') {
+  const videoArguments =
+    strategy === 'gpu'
+      ? ['-c:v', 'h264_nvenc', '-preset', 'p4', '-cq', '23']
+      : ['-c:v', 'libx264', '-preset', 'medium', '-crf', '22']
   return job.renditions.map(({ height, width }) => [
     '-y',
     '-i',
@@ -77,12 +87,7 @@ export function ffmpegArguments(job, sourcePath, clearDirectory) {
     '0:a:0?',
     '-vf',
     `scale=${width}:${height}`,
-    '-c:v',
-    'libx264',
-    '-preset',
-    'medium',
-    '-crf',
-    '22',
+    ...videoArguments,
     '-c:a',
     'aac',
     '-b:a',
@@ -91,6 +96,95 @@ export function ffmpegArguments(job, sourcePath, clearDirectory) {
     '+faststart',
     path.join(clearDirectory, `${height}p.mp4`),
   ])
+}
+
+export async function mapWithConcurrency(items, concurrency, operation) {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error('Storage concurrency must be a positive integer.')
+  }
+  const results = new Array(items.length)
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await operation(items[index], index)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker))
+  return results
+}
+
+export async function supportsGpuEncoding(run, environment) {
+  try {
+    const gpu = await run(
+      environment.NVIDIA_SMI_BIN ?? 'nvidia-smi',
+      ['--query-gpu=name', '--format=csv,noheader'],
+      { timeout: GPU_PROBE_TIMEOUT_MS },
+    )
+    if (!String(gpu?.stdout ?? '').trim()) return false
+    const encoders = await run(
+      environment.FFMPEG_BIN ?? 'ffmpeg',
+      ['-hide_banner', '-encoders'],
+      { timeout: GPU_PROBE_TIMEOUT_MS },
+    )
+    return /\bh264_nvenc\b/.test(String(encoders?.stdout ?? ''))
+  } catch {
+    return false
+  }
+}
+
+function logWorkerDiagnostic(level, event, job, stage) {
+  console[level](
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level,
+      event,
+      processingJobId: job.processingJobId,
+      attempt: job.attempt,
+      ...(stage ? { stage } : {}),
+    }),
+  )
+}
+
+function isRecoverableGpuFailure(error) {
+  return error?.code !== 'ETIMEDOUT' && !error?.killed && error?.signal !== 'SIGTERM'
+}
+
+async function encodeRenditions(job, sourcePath, clearDirectory, environment, run) {
+  const executable = environment.FFMPEG_BIN ?? 'ffmpeg'
+  const encode = async (strategy) => {
+    for (const args of ffmpegArguments(job, sourcePath, clearDirectory, strategy)) {
+      await run(executable, args, { timeout: 12 * 60 * 1000 })
+    }
+  }
+  if (await supportsGpuEncoding(run, environment)) {
+    logWorkerDiagnostic('info', 'transcoder_stage_started', job, 'gpu_encoding')
+    try {
+      await encode('gpu')
+      logWorkerDiagnostic('info', 'transcoder_stage_completed', job, 'gpu_encoding')
+      return
+    } catch (error) {
+      if (!isRecoverableGpuFailure(error)) throw error
+      logWorkerDiagnostic('error', 'transcoder_gpu_fallback', job, 'gpu_encoding')
+    }
+  } else {
+    logWorkerDiagnostic('info', 'transcoder_gpu_unavailable', job, 'capability_selection')
+  }
+  logWorkerDiagnostic('info', 'transcoder_stage_started', job, 'cpu_encoding')
+  await encode('cpu')
+  logWorkerDiagnostic('info', 'transcoder_stage_completed', job, 'cpu_encoding')
+}
+
+function createStorageClient(environment) {
+  return new S3Client({
+    region: environment.VIDEO_S3_REGION,
+    maxAttempts: 3,
+    requestHandler: new NodeHttpHandler({
+      connectionTimeout: STORAGE_CONNECTION_TIMEOUT_MS,
+      socketTimeout: STORAGE_SOCKET_TIMEOUT_MS,
+      httpsAgent: new Agent({ keepAlive: true, maxSockets: STORAGE_PUBLICATION_CONCURRENCY }),
+    }),
+  })
 }
 
 export function packagerArguments(job, clearFiles, packagedDirectory, encryptionToken) {
@@ -188,7 +282,7 @@ export function verifyDashProtection(manifestText) {
 export async function processJob(value, dependencies = {}) {
   const job = validateJob(value)
   const environment = dependencies.environment ?? process.env
-  const client = dependencies.client ?? new S3Client({ region: environment.VIDEO_S3_REGION })
+  const client = dependencies.client ?? createStorageClient(environment)
   const run = dependencies.execFile ?? execFile
   const fetcher = dependencies.fetch ?? fetch
   const bucket = environment.VIDEO_S3_BUCKET
@@ -223,6 +317,7 @@ export async function processJob(value, dependencies = {}) {
   }
 
   const directory = await mkdtemp(path.join(tmpdir(), 'hrizon-transcode-'))
+  let stage = 'source_download'
   try {
     const sourcePath = path.join(
       directory,
@@ -231,6 +326,7 @@ export async function processJob(value, dependencies = {}) {
     const clearDirectory = path.join(directory, 'clear')
     const packagedDirectory = path.join(directory, 'packaged')
     const thumbnailPath = path.join(directory, 'thumbnail.jpg')
+    logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
     const source = await client.send(new GetObjectCommand({ Bucket: bucket, Key: job.objectKey }))
     const bytes = await source.Body?.transformToByteArray?.()
     if (!bytes) throw new Error('Private source could not be read.')
@@ -238,20 +334,28 @@ export async function processJob(value, dependencies = {}) {
     await mkdir(clearDirectory)
     await mkdir(packagedDirectory)
     await writeFile(sourcePath, bytes)
+    logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
+    stage = 'thumbnail'
+    logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
     await run(
       environment.FFMPEG_BIN ?? 'ffmpeg',
       ['-i', sourcePath, '-frames:v', '1', '-q:v', '3', '-vf', 'scale=640:-2', '-y', thumbnailPath],
       { timeout: 60 * 1000 },
     )
-    for (const args of ffmpegArguments(job, sourcePath, clearDirectory)) {
-      await run(environment.FFMPEG_BIN ?? 'ffmpeg', args, { timeout: 12 * 60 * 1000 })
-    }
+    logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
+    stage = 'encoding'
+    await encodeRenditions(job, sourcePath, clearDirectory, environment, run)
     const clearFiles = await filesUnder(clearDirectory)
+    stage = 'packaging'
+    logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
     await run(
       environment.DOVERUNNER_PACKAGER_BIN ?? 'PallyConPackager',
       packagerArguments(job, clearFiles, packagedDirectory, environment.DOVERUNNER_ENC_TOKEN),
       { timeout: 3 * 60 * 1000 },
     )
+    logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
+    stage = 'validation'
+    logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
     const packaged = normalizePackagedFiles(await filesUnder(packagedDirectory))
     const deliveryFiles = [...packaged, { absolute: thumbnailPath, relative: 'thumbnail.jpg' }]
     const manifest = packaged.find(({ relative }) => relative === 'manifest.mpd')
@@ -274,11 +378,14 @@ export async function processJob(value, dependencies = {}) {
     ) {
       throw new Error('DoveRunner HLS manifest is invalid.')
     }
+    logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
     if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) {
       return { cancelled: true }
     }
     const attemptPrefix = `transcode-attempts/${job.processingJobId}/${job.attempt}/`
-    for (const file of deliveryFiles) {
+    stage = 'attempt_upload'
+    logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
+    await mapWithConcurrency(deliveryFiles, STORAGE_PUBLICATION_CONCURRENCY, async (file) => {
       const contentType = file.relative.endsWith('.mpd')
         ? 'application/dash+xml'
         : file.relative.endsWith('.m3u8')
@@ -296,8 +403,11 @@ export async function processJob(value, dependencies = {}) {
           Key: `${attemptPrefix}${file.relative}`,
         }),
       )
-    }
-    for (const file of deliveryFiles) {
+    })
+    logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
+    stage = 'canonical_publication'
+    logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
+    await mapWithConcurrency(deliveryFiles, STORAGE_PUBLICATION_CONCURRENCY, async (file) => {
       await client.send(
         new CopyObjectCommand({
           Bucket: bucket,
@@ -305,13 +415,14 @@ export async function processJob(value, dependencies = {}) {
           Key: `${job.outputPrefix}${file.relative}`,
         }),
       )
-    }
+    })
+    logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
     if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) {
-      for (const file of deliveryFiles) {
+      await mapWithConcurrency(deliveryFiles, STORAGE_PUBLICATION_CONCURRENCY, async (file) => {
         await client.send(
           new DeleteObjectCommand({ Bucket: bucket, Key: `${job.outputPrefix}${file.relative}` }),
         )
-      }
+      })
       return { cancelled: true }
     }
     await client.send(
@@ -332,22 +443,23 @@ export async function processJob(value, dependencies = {}) {
     } catch {
       // The application poller verifies completion.json and final outputs, so a
       // temporary callback outage must not discard an otherwise complete package.
-      console.error('Processing ready callback delivery failed.')
+      logWorkerDiagnostic('error', 'transcoder_callback_failed', job, 'ready_callback')
     }
-    for (const file of deliveryFiles) {
+    await mapWithConcurrency(deliveryFiles, STORAGE_PUBLICATION_CONCURRENCY, async (file) => {
       await client.send(
         new DeleteObjectCommand({ Bucket: bucket, Key: `${attemptPrefix}${file.relative}` }),
       )
-    }
+    })
     return { ready: true }
   } catch {
+    logWorkerDiagnostic('error', 'transcoder_stage_failed', job, stage)
     await client.send(
       new PutObjectCommand({ Body: '{}', Bucket: bucket, Key: `${controlPrefix}.failed` }),
     )
     try {
       await sendCallback(job, 'failed', environment, fetcher)
     } catch {
-      console.error('Processing failure callback delivery failed.')
+      logWorkerDiagnostic('error', 'transcoder_callback_failed', job, 'failure_callback')
     }
     return { failed: true }
   } finally {
