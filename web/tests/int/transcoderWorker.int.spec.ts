@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdir, writeFile } from 'node:fs/promises'
 
 import {
   ffmpegArguments,
+  mapWithConcurrency,
   normalizePackagedFiles,
   packagerArguments,
+  processJob,
   startServer,
   validateJob,
   verifyDashProtection,
@@ -25,6 +28,87 @@ const job = {
   source: { durationSeconds: 600, height: 720, width: 1280 },
 }
 
+type WorkerCommand = { constructor: { name: string }; input?: { Key?: string } }
+type WorkerDependenciesOptions = {
+  callbackOK?: boolean
+  gpuAvailable?: boolean
+  gpuEncodingFailure?: Error
+  sourceFailure?: Error
+}
+
+function workerDependencies({
+  callbackOK = true,
+  gpuAvailable = true,
+  gpuEncodingFailure,
+  sourceFailure,
+}: WorkerDependenciesOptions = {}) {
+  const commands: WorkerCommand[] = []
+  const publication = { active: 0, peak: 0 }
+  const client = {
+    send: vi.fn(async (command: WorkerCommand) => {
+      commands.push(command)
+      if (command.constructor.name === 'HeadObjectCommand') {
+        throw Object.assign(new Error('missing'), { $metadata: { httpStatusCode: 404 } })
+      }
+      if (command.constructor.name === 'GetObjectCommand') {
+        if (sourceFailure) throw sourceFailure
+        return { Body: { transformToByteArray: async () => Buffer.from('private source bytes') } }
+      }
+      if (
+        command.constructor.name === 'PutObjectCommand' &&
+        command.input?.Key?.startsWith(`transcode-attempts/${job.processingJobId}/`)
+      ) {
+        publication.active += 1
+        publication.peak = Math.max(publication.peak, publication.active)
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        publication.active -= 1
+      }
+      return {}
+    }),
+  }
+  const execFile = vi.fn(async (_executable: string, args: string[]) => {
+    if (args[0] === '--query-gpu=name') return { stdout: gpuAvailable ? 'GPU 0' : '' }
+    if (args.includes('-encoders')) return { stdout: ' V..... h264_nvenc NVIDIA NVENC H.264 encoder' }
+    if (args.includes('h264_nvenc') && gpuEncodingFailure) throw gpuEncodingFailure
+    if (args.includes('-frames:v')) {
+      await writeFile(args.at(-1)!, 'thumbnail')
+      return { stdout: '' }
+    }
+    if (args.includes('libx264') || args.includes('h264_nvenc')) {
+      await writeFile(args.at(-1)!, 'clear video')
+      return { stdout: '' }
+    }
+    const packagedDirectory = args[args.indexOf('-o') + 1]!
+    await mkdir(`${packagedDirectory}/video`, { recursive: true })
+    await Promise.all([
+      writeFile(
+        `${packagedDirectory}/manifest.mpd`,
+        '<MPD>edef8ba9-79d6-4ace-a3c8-27dcd51d21ed 9a04f079-9840-4286-ab92-e65be0885f95</MPD>',
+      ),
+      writeFile(`${packagedDirectory}/master.m3u8`, '#EXTM3U'),
+      writeFile(
+        `${packagedDirectory}/video/stream.m3u8`,
+        '#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,KEYFORMAT="com.apple.streamingkeydelivery"',
+      ),
+      writeFile(`${packagedDirectory}/video/segment.m4s`, 'segment'),
+    ])
+    return { stdout: '' }
+  })
+  return {
+    client,
+    commands,
+    execFile,
+    fetch: vi.fn(async () => ({ ok: callbackOK })),
+    publication,
+    environment: {
+      APPLICATION_ORIGIN: job.callbackOrigin,
+      DOVERUNNER_ENC_TOKEN: 'never-log-this-encryption-token',
+      VIDEO_S3_BUCKET: 'private-video-bucket',
+      VIDEO_S3_REGION: 'ap-south-1',
+    },
+  }
+}
+
 describe('Salad transcoder worker contract', () => {
   it('accepts the server-owned ladder and builds H.264/AAC commands without upscaling', () => {
     expect(validateJob({ input: job })).toEqual(job)
@@ -32,6 +116,132 @@ describe('Salad transcoder worker contract', () => {
     expect(commands).toHaveLength(2)
     expect(commands[0]).toEqual(expect.arrayContaining(['scale=640:360', 'libx264', 'aac']))
     expect(commands[1]).toEqual(expect.arrayContaining(['scale=1280:720', 'libx264', 'aac']))
+  })
+
+  it('uses the approved NVENC strategy only after GPU capability selection', () => {
+    expect(ffmpegArguments(job, '/work/source.mp4', '/work/clear', 'gpu')[0]).toEqual(
+      expect.arrayContaining(['scale=640:360', 'h264_nvenc', 'p4', 'aac']),
+    )
+  })
+
+  it('bounds concurrent publication work', async () => {
+    let active = 0
+    let peak = 0
+    const results = await mapWithConcurrency([1, 2, 3, 4, 5], 2, async (value: number) => {
+      active += 1
+      peak = Math.max(peak, active)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      active -= 1
+      return value * 2
+    })
+
+    expect(results).toEqual([2, 4, 6, 8, 10])
+    expect(peak).toBe(2)
+  })
+
+  it('falls back from a recoverable GPU encoding failure without changing the Processing Job ladder', async () => {
+    const diagnostics = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const gpuFallback = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const dependencies = workerDependencies({ gpuEncodingFailure: Object.assign(new Error('gpu busy'), { code: 1 }) })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ ready: true })
+      const gpuCommands = dependencies.execFile.mock.calls.filter(([, args]) => args.includes('h264_nvenc'))
+      const cpuCommands = dependencies.execFile.mock.calls.filter(([, args]) => args.includes('libx264'))
+      expect(gpuCommands).toHaveLength(1)
+      expect(cpuCommands).toHaveLength(job.renditions.length)
+      expect(cpuCommands.map(([, args]) => args.at(-1))).toEqual([
+        expect.stringMatching(/360p\.mp4$/),
+        expect.stringMatching(/720p\.mp4$/),
+      ])
+      expect(
+        dependencies.commands
+          .map((command) => command.input?.Key)
+          .filter((key) => typeof key === 'string'),
+      ).toContain(`${job.outputPrefix}completion.json`)
+      expect(gpuFallback).toHaveBeenCalledWith(expect.stringContaining('transcoder_gpu_fallback'))
+      expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"source_download"')
+      expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"packaging"')
+      expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"validation"')
+      expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"attempt_upload"')
+      expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"canonical_publication"')
+      expect(diagnostics.mock.calls.flat().join('\n')).not.toContain(dependencies.environment.DOVERUNNER_ENC_TOKEN)
+      expect(gpuFallback.mock.calls.flat().join('\n')).not.toContain(job.callbackSecret)
+    } finally {
+      diagnostics.mockRestore()
+      gpuFallback.mockRestore()
+    }
+  })
+
+  it('uses the CPU strategy when the Processing Job finds no compatible GPU', async () => {
+    const diagnostics = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const dependencies = workerDependencies({ gpuAvailable: false })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ ready: true })
+      expect(dependencies.execFile.mock.calls.some(([, args]) => args.includes('h264_nvenc'))).toBe(false)
+      expect(dependencies.execFile.mock.calls.filter(([, args]) => args.includes('libx264'))).toHaveLength(
+        job.renditions.length,
+      )
+      expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining('transcoder_gpu_unavailable'))
+    } finally {
+      diagnostics.mockRestore()
+    }
+  })
+
+  it('limits attempt upload concurrency during Processing Job publication', async () => {
+    const diagnostics = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const dependencies = workerDependencies({ gpuAvailable: false })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ ready: true })
+      expect(dependencies.publication.peak).toBe(4)
+    } finally {
+      diagnostics.mockRestore()
+    }
+  })
+
+  it('marks a timed-out GPU attempt failed instead of risking an unbounded CPU retry', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const dependencies = workerDependencies({
+      gpuEncodingFailure: Object.assign(new Error('timed out'), { code: 'ETIMEDOUT', killed: true, signal: 'SIGTERM' }),
+    })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      expect(dependencies.execFile.mock.calls.some(([, args]) => args.includes('libx264'))).toBe(false)
+      expect(
+        dependencies.commands.some(
+          (command) => command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+        ),
+      ).toBe(true)
+      expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining('"stage":"encoding"'))
+      expect(diagnostics.mock.calls.flat().join('\n')).not.toContain(job.callbackSecret)
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
+  it('records a source download failure safely and continues when a ready callback is unavailable', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const sourceFailure = new Error(`unavailable ${job.callbackSecret}`)
+    const failedDependencies = workerDependencies({ sourceFailure })
+    const callbackDependencies = workerDependencies({ callbackOK: false, gpuAvailable: false })
+
+    try {
+      await expect(processJob({ input: job }, failedDependencies)).resolves.toEqual({ failed: true })
+      expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining('"stage":"source_download"'))
+      expect(diagnostics.mock.calls.flat().join('\n')).not.toContain(job.callbackSecret)
+
+      await expect(processJob({ input: job }, callbackDependencies)).resolves.toEqual({ ready: true })
+      expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining('"stage":"ready_callback"'))
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
   })
 
   it('requests separately named DASH/CENC and HLS/CBCS delivery packages', () => {
@@ -137,7 +347,9 @@ describe('Salad transcoder worker contract', () => {
       expect(client.send).not.toHaveBeenCalled()
       expect(execFile).not.toHaveBeenCalled()
     } finally {
-      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      )
     }
   })
 })
