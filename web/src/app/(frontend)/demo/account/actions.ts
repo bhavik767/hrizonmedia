@@ -37,6 +37,12 @@ export async function changePasswordAction(
     if (error instanceof Response && error.status === 429) {
       return { error: 'Too many attempts. Try again in a minute.' }
     }
+    // Temporary diagnostic: never log form values, which include passwords.
+    console.error('[member-password-change-failed]', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorName: error instanceof Error ? error.name : typeof error,
+      memberID: actor.id,
+    })
     return {
       error: error instanceof MemberPasswordError ? error.message : 'Unable to change password.',
     }
