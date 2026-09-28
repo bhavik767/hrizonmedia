@@ -21,6 +21,7 @@ import * as migration_20260923_030000_issue91_media_access from './20260923_0300
 import * as migration_20260923_040000_issue93_tenancy_cutover from './20260923_040000_issue93_tenancy_cutover';
 import * as migration_20260923_050000_issue107_media_folders from './20260923_050000_issue107_media_folders';
 import * as migration_20260924_000000_organisation_invitation_recipients from './20260924_000000_organisation_invitation_recipients';
+import * as migration_20260928_123000_media_folders_locked_documents_relation from './20260928_123000_media_folders_locked_documents_relation';
 
 export const migrations = [
   {
@@ -137,5 +138,10 @@ export const migrations = [
     up: migration_20260924_000000_organisation_invitation_recipients.up,
     down: migration_20260924_000000_organisation_invitation_recipients.down,
     name: '20260924_000000_organisation_invitation_recipients',
+  },
+  {
+    up: migration_20260928_123000_media_folders_locked_documents_relation.up,
+    down: migration_20260928_123000_media_folders_locked_documents_relation.down,
+    name: '20260928_123000_media_folders_locked_documents_relation',
   },
 ];
