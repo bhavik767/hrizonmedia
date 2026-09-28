@@ -43,7 +43,7 @@ export function validateEnvironment(environment = process.env) {
     throw new Error('NEXT_PUBLIC_SERVER_URL must be a valid HTTPS origin in production')
   }
 
-  if (!realMediaProviders && environment.RAILWAY_ENVIRONMENT_NAME?.toLowerCase() !== 'staging') {
+  if (!realMediaProviders && environment.DEPLOYMENT_ENVIRONMENT?.toLowerCase() !== 'staging') {
     throw new Error('Production Dashboard requires verified real media providers')
   }
 }

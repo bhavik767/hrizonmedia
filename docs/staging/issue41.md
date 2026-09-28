@@ -1,5 +1,7 @@
 # Issue #41 staging verification
 
+> Archived evidence from the retired hosting stack. Do not use this document as a deployment runbook; use [`web/DEPLOYMENT.md`](../../web/DEPLOYMENT.md) for Hetzner.
+
 Staging URL: https://hrizonmedia-staging-web-staging.up.railway.app
 
 The existing `hrizonmedia` Railway project now has an isolated `staging` environment,

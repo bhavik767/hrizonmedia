@@ -1,0 +1,72 @@
+name: wecloud
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - /srv/wecloud/config/internal.env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: ${WECLOUD_WEB_IMAGE:?Set WECLOUD_WEB_IMAGE to an immutable image tag}
+    restart: unless-stopped
+    env_file:
+      - /srv/wecloud/config/internal.env
+      - /srv/wecloud/config/providers.env
+    environment:
+      MEDIA_SCHEDULER_EXTERNAL: 'true'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3000:3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  scheduler:
+    image: ${WECLOUD_WEB_IMAGE:?Set WECLOUD_WEB_IMAGE to an immutable image tag}
+    restart: unless-stopped
+    command: ['node', 'run-media-scheduler.mjs']
+    env_file:
+      - /srv/wecloud/config/internal.env
+    environment:
+      MEDIA_SCHEDULER_ORIGIN: http://app:3000
+    depends_on:
+      app:
+        condition: service_healthy
+
+  proxy:
+    profiles: ['public']
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - /srv/wecloud/config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

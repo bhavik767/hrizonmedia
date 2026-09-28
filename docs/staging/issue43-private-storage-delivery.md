@@ -1,5 +1,7 @@
 # Issue #43: private storage and CDN delivery
 
+> Archived issue evidence. Deployment-specific references are historical; use [`web/DEPLOYMENT.md`](../../web/DEPLOYMENT.md) for current Hetzner operations.
+
 Implementation base: `6e4f7d81b1a1c17e75a47143314092479102a63d` (`origin/master`).
 
 The application selects the AWS adapters only when the complete `VIDEO_*` variable

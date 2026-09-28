@@ -6,8 +6,9 @@ import { describe, expect, it } from 'vitest'
 
 const validator = path.resolve(process.cwd(), 'src/config/validate-environment.mjs')
 const dockerfile = path.resolve(process.cwd(), 'Dockerfile')
+const composefile = path.resolve(process.cwd(), 'deploy/compose.yaml')
 
-describe('Railway environment validation', () => {
+describe('deployment environment validation', () => {
   it('packages the validator and its media-provider dependency in the production image', () => {
     const dockerfileContents = readFileSync(dockerfile, 'utf8')
 
@@ -16,6 +17,18 @@ describe('Railway environment validation', () => {
     )
     expect(dockerfileContents).toContain(
       'COPY --from=builder --chown=nextjs:nodejs /app/src/config/media-provider-environment.mjs ./media-provider-environment.mjs',
+    )
+  })
+
+  it('runs media maintenance from a dedicated Hetzner scheduler service', () => {
+    const composeContents = readFileSync(composefile, 'utf8')
+    const dockerfileContents = readFileSync(dockerfile, 'utf8')
+
+    expect(composeContents).toContain('scheduler:')
+    expect(composeContents).toContain("MEDIA_SCHEDULER_EXTERNAL: 'true'")
+    expect(composeContents).toContain("command: ['node', 'run-media-scheduler.mjs']")
+    expect(dockerfileContents).toContain(
+      'COPY --from=builder --chown=nextjs:nodejs /app/scripts/run-media-scheduler.mjs ./run-media-scheduler.mjs',
     )
   })
 
@@ -64,16 +77,14 @@ describe('Railway environment validation', () => {
         NEXT_PUBLIC_SERVER_URL: 'https://hrizonmedia.example.test',
         PATH: process.env.PATH,
         PAYLOAD_SECRET: 'payload-secret',
-        RAILWAY_ENVIRONMENT_NAME: 'production',
+        DEPLOYMENT_ENVIRONMENT: 'production',
         SECRET_ACCESS_KEY: 'secret-key',
         TRANSCODER_CALLBACK_SECRET: 'callback-secret',
       },
     })
 
     expect(result.status).toBe(1)
-    expect(result.stderr).toContain(
-      'Production Dashboard requires verified real media providers',
-    )
+    expect(result.stderr).toContain('Production Dashboard requires verified real media providers')
   })
 
   it('rejects a partial real storage and delivery configuration', () => {

@@ -6,11 +6,7 @@ import { recordAuditEvent } from '@/audit/events'
 
 import { processingOutputPrefix } from './identifiers'
 import type { OutputVerification } from './providers/contracts'
-import {
-  failProcessingJob,
-  retryOrFailProcessingJob,
-  setProcessingAssetStatus,
-} from './processing'
+import { failProcessingJob, retryOrFailProcessingJob, setProcessingAssetStatus } from './processing'
 
 function relationID(value: number | { id: number }): number {
   return typeof value === 'number' ? value : value.id
@@ -19,6 +15,7 @@ function relationID(value: number | { id: number }): number {
 export async function applyProcessingCallback(
   payload: Payload,
   input: {
+    attempt?: number
     callbackId: string
     outputPrefix: string
     providerJobId: string
@@ -54,7 +51,8 @@ export async function applyProcessingCallback(
         'providerJobId' in details &&
         details.providerJobId === input.providerJobId &&
         'status' in details &&
-        details.status === input.status
+        details.status === input.status &&
+        (!('attempt' in details) || details.attempt === input.attempt)
       if (!sameEvent) {
         throw Object.assign(new Error('Callback event ID has already been used.'), { status: 409 })
       }
@@ -71,6 +69,9 @@ export async function applyProcessingCallback(
     })
     const job = jobs.docs[0]
     if (!job) throw Object.assign(new Error('Processing Job not found.'), { status: 404 })
+    if (input.attempt !== undefined && input.attempt !== job.attempts) {
+      throw Object.assign(new Error('Processing callback attempt is stale.'), { status: 409 })
+    }
     if (input.outputPrefix !== processingOutputPrefix(job.processingJobId)) {
       throw Object.assign(new Error('Callback output prefix is invalid.'), { status: 400 })
     }
@@ -135,6 +136,7 @@ export async function applyProcessingCallback(
       action: 'processing_callback_received',
       assetID: relationID(job.asset),
       details: {
+        attempt: input.attempt,
         packageVerified,
         outputPrefix: input.outputPrefix,
         providerJobId: input.providerJobId,

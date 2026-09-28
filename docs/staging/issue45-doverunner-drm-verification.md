@@ -1,5 +1,7 @@
 # Issue #45: DoveRunner DRM verification gate
 
+> Archived issue evidence. Deployment-specific references are historical; use [`web/DEPLOYMENT.md`](../../web/DEPLOYMENT.md) for current Hetzner operations.
+
 Status: **implementation complete; real-provider verification and Multi-DRM claim gate remain closed**.
 Updated: 2026-09-17. Source: [issue #45](https://github.com/bhavik767/hrizonmedia/issues/45).
 

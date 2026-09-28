@@ -396,8 +396,8 @@ export function resetFakeMediaStorage(): void {
 }
 
 export function getFakeProviders(environment: NodeJS.ProcessEnv = process.env) {
-  const railwayEnvironment = environment.RAILWAY_ENVIRONMENT_NAME?.toLowerCase()
-  if (environment.NODE_ENV === 'production' && railwayEnvironment !== 'staging') {
+  const deploymentEnvironment = environment.DEPLOYMENT_ENVIRONMENT?.toLowerCase()
+  if (environment.NODE_ENV === 'production' && deploymentEnvironment !== 'staging') {
     throw new Error('Deterministic fake media providers are prohibited in production.')
   }
 

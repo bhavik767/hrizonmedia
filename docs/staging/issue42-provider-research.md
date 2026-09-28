@@ -1,5 +1,7 @@
 # Issue #42 provider-contract research
 
+> Archived research from the retired hosting stack. Deployment-specific references are historical; use [`web/DEPLOYMENT.md`](../../web/DEPLOYMENT.md) for current operations.
+
 Research date: 2026-09-16  
 Scope: contract decisions for the selected S3, CloudFront, SaladCloud and
 DoveRunner staging providers. This note does not claim that the real adapters or

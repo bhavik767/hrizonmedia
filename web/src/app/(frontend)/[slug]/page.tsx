@@ -19,7 +19,7 @@ import { getCachedGlobal } from '@/utilities/getGlobals'
 import { buildPageSchema } from '@/utilities/schema'
 import { StructuredData } from '@/utilities/schema/StructuredData'
 
-// Railway provides Payload's database and secret at runtime, not while the image is built.
+// Deployment secrets are injected at runtime, not while the image is built.
 export const dynamic = 'force-dynamic'
 
 export async function generateStaticParams() {
@@ -72,11 +72,7 @@ export default async function Page({ params: paramsPromise }: Args) {
 
       <RenderHero {...hero} />
       <RenderBlocks blocks={layout} />
-      <FAQBlock
-        className="mt-12"
-        heading={page.faq?.heading}
-        items={resolveFAQItems(page.faq)}
-      />
+      <FAQBlock className="mt-12" heading={page.faq?.heading} items={resolveFAQItems(page.faq)} />
     </article>
   )
 }

@@ -73,5 +73,5 @@ export async function generateStaticParams() {
   return []
 }
 
-// Railway provides Payload's database and secret at runtime, not while the image is built.
+// Deployment secrets are injected at runtime, not while the image is built.
 export const dynamic = 'force-dynamic'

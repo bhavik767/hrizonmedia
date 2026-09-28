@@ -3,9 +3,12 @@ declare global {
     interface ProcessEnv {
       PAYLOAD_SECRET?: string
       DATABASE_URL?: string
+      DEPLOYMENT_ENVIRONMENT?: 'development' | 'staging' | 'production'
+      MEDIA_SCHEDULER_EXTERNAL?: 'true' | 'false'
+      MEDIA_SCHEDULER_INTERVAL_MS?: string
+      MEDIA_SCHEDULER_ORIGIN?: string
       NEXT_PUBLIC_SERVER_URL?: string
-      RAILWAY_PUBLIC_DOMAIN?: string
-      VERCEL_PROJECT_PRODUCTION_URL?: string
+      SERVER_URL?: string
       BUCKET?: string
       ACCESS_KEY_ID?: string
       SECRET_ACCESS_KEY?: string
