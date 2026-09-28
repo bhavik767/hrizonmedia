@@ -57,11 +57,13 @@ export async function GET(
     <AdaptationSet mimeType="video/mp4" codecs="avc1.640028" contentType="video">
       <ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011" value="cenc" />
       <ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed" />
+      <ContentProtection schemeIdUri="urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95" />
 ${videoRepresentations}
     </AdaptationSet>
     <AdaptationSet mimeType="audio/mp4" codecs="mp4a.40.2" contentType="audio" lang="en">
       <ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011" value="cenc" />
       <ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed" />
+      <ContentProtection schemeIdUri="urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95" />
       <Representation id="audio" bandwidth="128000" audioSamplingRate="48000">
         ${segmentTemplate(segmentBase, 'audio', query)}
       </Representation>
