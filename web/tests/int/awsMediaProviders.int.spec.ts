@@ -102,6 +102,79 @@ describe('S3 storage provider', () => {
     expect(send.mock.calls[4]![0]).toBeInstanceOf(ListObjectsV2Command)
   })
 
+  it('accepts DoveRunner nested HLS playlists referenced by URI attributes and lines', async () => {
+    const processingJobId = newProcessingJobId()
+    const outputPrefix = `outputs/${processingJobId}/`
+    const renditions = [
+      { audioCodec: 'aac' as const, height: 360 as const, videoCodec: 'h264' as const, width: 640 },
+    ]
+    const encryptedPlaylist =
+      '#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://asset",KEYFORMAT="com.apple.streamingkeydelivery"\n'
+    const { client, send } = commandSender([
+      {
+        Body: {
+          transformToString: async () =>
+            JSON.stringify({ attempt: 1, outputPrefix, renditions, version: 1 }),
+        },
+        ContentLength: 512,
+      },
+      {
+        Body: {
+          transformToString: async () =>
+            '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><ContentProtection schemeIdUri="urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95"/><Representation codecs="avc1.64001f" height="360"/><Representation codecs="mp4a.40.2"/></MPD>',
+        },
+        ContentLength: 1024,
+        ContentType: 'application/dash+xml',
+      },
+      {
+        Body: {
+          transformToString: async () =>
+            '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,URI="audio/mp4a/eng_2ch/stream.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=1\nvideo/avc1/1/stream.m3u8\n',
+        },
+        ContentLength: 1024,
+        ContentType: 'application/vnd.apple.mpegurl',
+      },
+      {
+        Body: { transformToString: async () => encryptedPlaylist },
+        ContentLength: 1024,
+        ContentType: 'application/vnd.apple.mpegurl',
+      },
+      {
+        Body: { transformToString: async () => encryptedPlaylist },
+        ContentLength: 1024,
+        ContentType: 'application/vnd.apple.mpegurl',
+      },
+      {
+        Contents: [
+          { Key: `${outputPrefix}master.m3u8` },
+          { Key: `${outputPrefix}video/avc1/1/init.mp4` },
+          { Key: `${outputPrefix}video/avc1/1/seg-1.m4s` },
+        ],
+      },
+    ])
+    const verify = createS3OutputVerifier(
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
+      { client },
+    )
+
+    await expect(verify({ attempt: 1, outputPrefix, renditions })).resolves.toBeUndefined()
+    const playlistKeys = send.mock.calls
+      .slice(3, 5)
+      .map(([command]) => (command as GetObjectCommand).input.Key)
+    expect(playlistKeys).toHaveLength(2)
+    expect(playlistKeys).toEqual(
+      expect.arrayContaining([
+        `${outputPrefix}audio/mp4a/eng_2ch/stream.m3u8`,
+        `${outputPrefix}video/avc1/1/stream.m3u8`,
+      ]),
+    )
+  })
+
   it('rejects a DASH output without PlayReady protection', async () => {
     const processingJobId = newProcessingJobId()
     const outputPrefix = `outputs/${processingJobId}/`

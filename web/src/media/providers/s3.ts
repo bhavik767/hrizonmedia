@@ -85,6 +85,26 @@ function createS3Client(configuration: S3Configuration): CommandClient {
   }) as unknown as CommandClient
 }
 
+function hlsPlaylistReferences(manifest: string): string[] {
+  const candidates = [
+    ...manifest.split(/\r?\n/).filter((line) => line && !line.startsWith('#')),
+    ...[...manifest.matchAll(/\bURI="([^"]+\.m3u8)"/gi)].map((match) => match[1]!),
+  ]
+  const references = candidates.filter((reference) => {
+    if (
+      reference.startsWith('/') ||
+      reference.includes('\\') ||
+      reference.includes('?') ||
+      reference.includes('#') ||
+      reference.split('/').some((part) => !part || part === '.' || part === '..')
+    ) {
+      return false
+    }
+    return /^[A-Za-z0-9._/-]+\.m3u8$/.test(reference)
+  })
+  return [...new Set(references)]
+}
+
 export function createS3OutputVerifier(
   configuration: S3Configuration,
   dependencies: Pick<S3Dependencies, 'client'> = {},
@@ -168,9 +188,7 @@ export function createS3OutputVerifier(
       throw new Error('Transcoder HLS manifest is missing or invalid.')
     }
     const hlsManifestText = await hlsManifest.Body.transformToString()
-    const hlsPlaylistNames = hlsManifestText
-      .split(/\r?\n/)
-      .filter((line) => !line.startsWith('#') && /^[A-Za-z0-9._-]+\.m3u8$/.test(line))
+    const hlsPlaylistNames = hlsPlaylistReferences(hlsManifestText)
     if (!/^#EXTM3U/m.test(hlsManifestText) || hlsPlaylistNames.length === 0) {
       throw new Error('Transcoder HLS manifest does not contain an encrypted playlist.')
     }
