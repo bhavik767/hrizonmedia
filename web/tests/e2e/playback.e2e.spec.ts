@@ -1,7 +1,31 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import type { PlaybackGrantResponse } from '@/media/playback'
 import { cleanupMembers, seedUploaders, testInvitee } from '../helpers/seedMembers'
 import { mp4Fixture } from '../helpers/mediaFixtures'
+
+type FairPlayGrant = Extract<PlaybackGrantResponse, { keySystem: 'com.apple.fps' }>
+type PlayReadyGrant = Extract<PlaybackGrantResponse, { keySystem: 'com.microsoft.playready' }>
+
+async function requestPlaybackGrant<Grant extends PlaybackGrantResponse>(
+  page: Page,
+  mediaAssetId: string,
+  headers: Record<string, string>,
+): Promise<Grant> {
+  const response = await page.request.post(`/api/demo/assets/${mediaAssetId}/playback-grants`, {
+    headers: { Origin: new URL(page.url()).origin, ...headers },
+  })
+  expect(response.status()).toBe(201)
+  return (await response.json()) as Grant
+}
+
+async function expectProtectedSegment(page: Page, manifest: string): Promise<void> {
+  const segmentTemplate = manifest.match(
+    /\/api\/demo\/playback\/[^"\s]+video-360-(?:\$Number\$|1)\.m4s\?[^"\s]+/,
+  )?.[0]
+  expect(segmentTemplate).toBeTruthy()
+  expect((await page.request.get(segmentTemplate!.replace('$Number$', '1'))).status()).toBe(200)
+}
 
 async function signIn(page: Page) {
   await page.goto('/demo/sign-in')
@@ -18,59 +42,6 @@ async function openReadyAsset(page: Page, fileName: string) {
     buffer: mp4Fixture(),
     mimeType: 'video/mp4',
     name: fileName,
-  })
-
-  test('issues Safari a FairPlay HLS grant and rejects its DASH package route', async ({
-    page,
-  }) => {
-    await openReadyAsset(page, 'fairplay-lesson.mp4')
-    const mediaAssetId = page.url().split('/').at(-1)!
-    const origin = new URL(page.url()).origin
-    const grantResponse = await page.request.post(
-      `/api/demo/assets/${mediaAssetId}/playback-grants`,
-      {
-        headers: {
-          Origin: origin,
-          'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
-          'X-Hrizonmedia-Fairplay': 'available',
-          'X-Hrizonmedia-Widevine': 'unavailable',
-        },
-      },
-    )
-    expect(grantResponse.status()).toBe(201)
-    const grant = (await grantResponse.json()) as {
-      fairPlayCertificateURL: string
-      keySystem: string
-      licenceURL: string
-      manifestFormat: string
-      manifestURL: string
-      playbackGrantToken: string
-    }
-    expect(grant).toMatchObject({
-      fairPlayCertificateURL: expect.stringContaining('/fairplay-certificate'),
-      keySystem: 'com.apple.fps',
-      manifestFormat: 'hls',
-    })
-    const master = await page.request.get(grant.manifestURL)
-    expect(master.status()).toBe(200)
-    const masterPlaylist = await master.text()
-    expect(masterPlaylist).toContain('/fairplay.m3u8')
-    const mediaPlaylist = await page.request.get(
-      masterPlaylist.match(/\/api\/demo\/playback\/[^\n]+fairplay\.m3u8\?[^\n]+/)![0],
-    )
-    expect(mediaPlaylist.status()).toBe(200)
-    expect(await mediaPlaylist.text()).toContain('KEYFORMAT="com.apple.streamingkeydelivery"')
-    const certificate = await page.request.get(grant.fairPlayCertificateURL)
-    expect(certificate.status()).toBe(200)
-    expect(certificate.headers()['content-type']).toBe('application/octet-stream')
-    const dash = await page.request.get(grant.manifestURL.replace('/master.m3u8', '/manifest.mpd'))
-    expect(dash.status()).toBe(403)
-    const licence = await page.request.post(grant.licenceURL, {
-      data: Buffer.from('deterministic-fairplay-spc'),
-      headers: { Origin: origin, 'X-Playback-Grant': grant.playbackGrantToken },
-    })
-    expect(licence.status()).toBe(200)
   })
   await page.getByRole('button', { name: 'Start Upload' }).click()
   const asset = page.getByRole('article', { name: fileName })
@@ -109,11 +80,10 @@ test.describe('encrypted playback contract', () => {
 
     const grantResponse = await grantResponsePromise
     expect(grantResponse.status()).toBe(201)
-    const grant = (await grantResponse.json()) as {
-      licenceURL: string
-      playbackGrantToken: string
-      watermark: { issuedAt: string; leakId: string }
-    }
+    const grant = (await grantResponse.json()) as Pick<
+      PlaybackGrantResponse,
+      'licenceURL' | 'playbackGrantToken' | 'watermark'
+    >
     expect(grant.watermark).toMatchObject({
       issuedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       leakId: expect.stringMatching(/^lk_[A-Za-z0-9_-]{16}$/),
@@ -126,6 +96,12 @@ test.describe('encrypted playback contract', () => {
     expect(manifest).toContain('/video-360-init.mp4')
     expect(manifest).toContain('/video-1080-init.mp4')
     expect(manifest).toContain('/audio-init.mp4')
+    await expectProtectedSegment(page, manifest)
+    expect(
+      (
+        await page.request.get(manifestResponse.url().replace('/manifest.mpd', '/master.m3u8'))
+      ).status(),
+    ).toBe(403)
     const licenceResponse = await page.request.post(grant.licenceURL, {
       data: Buffer.from('deterministic-widevine-challenge'),
       headers: {
@@ -170,6 +146,78 @@ test.describe('encrypted playback contract', () => {
           playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
         },
       })
+  })
+
+  test('issues Safari a FairPlay HLS grant that authorizes only protected HLS delivery', async ({
+    page,
+  }) => {
+    await openReadyAsset(page, 'fairplay-lesson.mp4')
+    const mediaAssetId = page.url().split('/').at(-1)!
+    const origin = new URL(page.url()).origin
+    const grant = await requestPlaybackGrant<FairPlayGrant>(page, mediaAssetId, {
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15',
+      'X-Hrizonmedia-Fairplay': 'available',
+      'X-Hrizonmedia-Widevine': 'unavailable',
+    })
+    expect(grant).toMatchObject({
+      fairPlayCertificateURL: expect.stringContaining('/fairplay-certificate'),
+      keySystem: 'com.apple.fps',
+      manifestFormat: 'hls',
+    })
+    const master = await page.request.get(grant.manifestURL)
+    expect(master.status()).toBe(200)
+    const masterPlaylist = await master.text()
+    const mediaPlaylistURL = masterPlaylist.match(
+      /\/api\/demo\/playback\/[^\n]+fairplay\.m3u8\?[^\n]+/,
+    )?.[0]
+    expect(mediaPlaylistURL).toBeTruthy()
+    const mediaPlaylist = await page.request.get(mediaPlaylistURL!)
+    expect(mediaPlaylist.status()).toBe(200)
+    const playlist = await mediaPlaylist.text()
+    expect(playlist).toContain('KEYFORMAT="com.apple.streamingkeydelivery"')
+    await expectProtectedSegment(page, playlist)
+    const certificate = await page.request.get(grant.fairPlayCertificateURL)
+    expect(certificate.status()).toBe(200)
+    expect(certificate.headers()['content-type']).toBe('application/octet-stream')
+    const dash = await page.request.get(grant.manifestURL.replace('/master.m3u8', '/manifest.mpd'))
+    expect(dash.status()).toBe(403)
+    const licence = await page.request.post(grant.licenceURL, {
+      data: Buffer.from('deterministic-fairplay-spc'),
+      headers: { Origin: origin, 'X-Playback-Grant': grant.playbackGrantToken },
+    })
+    expect(licence.status()).toBe(200)
+  })
+
+  test('issues Edge a PlayReady DASH grant that authorizes only protected DASH delivery', async ({
+    page,
+  }) => {
+    await openReadyAsset(page, 'playready-lesson.mp4')
+    const mediaAssetId = page.url().split('/').at(-1)!
+    const origin = new URL(page.url()).origin
+    const grant = await requestPlaybackGrant<PlayReadyGrant>(page, mediaAssetId, {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/126.0.0.0 Safari/537.36',
+      'X-Hrizonmedia-Playready': 'available',
+      'X-Hrizonmedia-Widevine': 'unavailable',
+    })
+    expect(grant).toMatchObject({
+      keySystem: 'com.microsoft.playready',
+      manifestFormat: 'dash',
+    })
+    const manifestResponse = await page.request.get(grant.manifestURL)
+    expect(manifestResponse.status()).toBe(200)
+    const manifest = await manifestResponse.text()
+    expect(manifest).toContain('urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed')
+    expect(manifest).toContain('urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95')
+    await expectProtectedSegment(page, manifest)
+    const hls = await page.request.get(grant.manifestURL.replace('/manifest.mpd', '/master.m3u8'))
+    expect(hls.status()).toBe(403)
+    const licence = await page.request.post(grant.licenceURL, {
+      data: Buffer.from('deterministic-playready-challenge'),
+      headers: { Origin: origin, 'X-Playback-Grant': grant.playbackGrantToken },
+    })
+    expect(licence.status()).toBe(200)
   })
 
   test('shows a browser-compatibility reason without issuing a playback fallback', async ({
