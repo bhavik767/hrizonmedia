@@ -4,6 +4,9 @@ declare global {
       PAYLOAD_SECRET?: string
       DATABASE_URL?: string
       DEPLOYMENT_ENVIRONMENT?: 'development' | 'staging' | 'production'
+      MEDIA_SCHEDULER_EXTERNAL?: 'true' | 'false'
+      MEDIA_SCHEDULER_INTERVAL_MS?: string
+      MEDIA_SCHEDULER_ORIGIN?: string
       NEXT_PUBLIC_SERVER_URL?: string
       SERVER_URL?: string
       BUCKET?: string

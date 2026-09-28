@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 const validator = path.resolve(process.cwd(), 'src/config/validate-environment.mjs')
 const dockerfile = path.resolve(process.cwd(), 'Dockerfile')
+const composefile = path.resolve(process.cwd(), 'deploy/compose.yaml')
 
 describe('deployment environment validation', () => {
   it('packages the validator and its media-provider dependency in the production image', () => {
@@ -16,6 +17,18 @@ describe('deployment environment validation', () => {
     )
     expect(dockerfileContents).toContain(
       'COPY --from=builder --chown=nextjs:nodejs /app/src/config/media-provider-environment.mjs ./media-provider-environment.mjs',
+    )
+  })
+
+  it('runs media maintenance from a dedicated Hetzner scheduler service', () => {
+    const composeContents = readFileSync(composefile, 'utf8')
+    const dockerfileContents = readFileSync(dockerfile, 'utf8')
+
+    expect(composeContents).toContain('scheduler:')
+    expect(composeContents).toContain("MEDIA_SCHEDULER_EXTERNAL: 'true'")
+    expect(composeContents).toContain("command: ['node', 'run-media-scheduler.mjs']")
+    expect(dockerfileContents).toContain(
+      'COPY --from=builder --chown=nextjs:nodejs /app/scripts/run-media-scheduler.mjs ./run-media-scheduler.mjs',
     )
   })
 

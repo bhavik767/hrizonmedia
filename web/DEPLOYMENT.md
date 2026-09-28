@@ -2,7 +2,9 @@
 
 Hetzner is the only active application deployment target. The public origin is
 `https://wecloud.biz`; Caddy terminates TLS and proxies to the Next.js/Payload
-container on the private Compose network.
+container on the private Compose network. A dedicated scheduler container calls
+Payload's authenticated media queue endpoint every ten seconds; the app disables
+its in-process runner when that external scheduler is present.
 
 ## Server layout
 
@@ -50,10 +52,10 @@ stack that intentionally uses deterministic fake media providers.
 
 ## Verify and roll back
 
-After deployment, confirm all three Compose services are healthy, `/health` returns
-HTTP 200 locally and publicly, and the application logs show successful
-`media_cycle_completed` events. Exercise one upload through processing and playback
-before declaring a media change complete.
+After deployment, confirm PostgreSQL, app, scheduler, and proxy are running,
+`/health` returns HTTP 200 locally and publicly, and the application logs show
+successful `media_cycle_completed` events. Exercise one upload through processing
+and playback before declaring a media change complete.
 
 To roll back, put the last known-good immutable tag in `deploy.env` and run the
 same `docker compose ... up -d` command. Do not delete the previous image until

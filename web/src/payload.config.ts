@@ -157,7 +157,8 @@ export default buildConfig({
   jobs: {
     // Remote fixtures share PostgreSQL, but must never claim jobs with runner-local fakes.
     autoRun:
-      process.env.HRIZONMEDIA_STAGING_TESTS === 'true'
+      process.env.HRIZONMEDIA_STAGING_TESTS === 'true' ||
+      process.env.MEDIA_SCHEDULER_EXTERNAL === 'true'
         ? []
         : [{ cron: '*/10 * * * * *', limit: 1, queue: 'media-processing' }],
     access: {
