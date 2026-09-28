@@ -1,35 +1,8 @@
 import Link from 'next/link'
-import { Archive, CircleHelp, Code2, Globe2, Radio, Server, UserRound } from 'lucide-react'
+import { Archive, CircleHelp, Code2, Globe2, Radio, Server } from 'lucide-react'
 import type { ComponentType } from 'react'
 
 const moduleDetails = {
-  account: {
-    breadcrumb: 'Account & Organization',
-    description:
-      'Manage your organization profile, multi-factor authentication, team member permissions, automated invoicing, and security compliance audit trails.',
-    features: [
-      [
-        'Enterprise SSO / SAML',
-        'Connect Google Workspace, Okta, or Azure AD for seamless team authentication.',
-      ],
-      [
-        'Granular Role-Based Access',
-        'Create scoped roles for organisation administration, publishing, and viewing.',
-      ],
-      [
-        'Tax Invoicing & GST',
-        'Automated monthly GST invoices, credit threshold alerts, and centralized billing.',
-      ],
-      [
-        'Comprehensive Audit Logs',
-        'Immutable activity logs recording Media Asset and access-policy activity.',
-      ],
-    ],
-    icon: UserRound,
-    iconColor: '#10b981',
-    release: 'Q4 2026 Planned',
-    title: 'Account & Organization Settings',
-  },
   cdn: {
     breadcrumb: 'Global Edge CDN',
     description:

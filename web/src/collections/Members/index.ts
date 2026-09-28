@@ -21,6 +21,7 @@ export const Members: CollectionConfig = {
     },
     maxLoginAttempts: 5,
     lockTime: 10 * 60 * 1000,
+    useSessions: true,
   },
   fields: [
     {

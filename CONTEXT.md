@@ -12,6 +12,7 @@ The tenant boundary for Members, media, settings, invitations, and retention pol
 
 **Member**:
 An active or disabled identity that may hold memberships in one or more Organisations.
+A Member uses one password across those memberships and any Platform Administrator authority.
 _Avoid_: user, CMS administrator
 
 **Organisation Membership**:

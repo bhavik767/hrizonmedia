@@ -26,6 +26,7 @@ function trustedOrigins(request: Request): Set<string> {
 }
 
 function ratePolicy(pathname: string): { bucket: string; limit: number } {
+  if (pathname.endsWith('/account/password')) return { bucket: 'password', limit: 5 }
   if (/\/uploads\/[^/]+\/parts\/[^/]+$/.test(pathname)) {
     return { bucket: 'upload-targets', limit: 600 }
   }
@@ -69,8 +70,8 @@ export function enforceDemoMutationRateLimit(
   current.count += 1
 }
 
-export function guardDemoActionMutation(headers: Headers, memberID = 0): void {
-  const request = new Request(`${getServerSideURL()}/demo`, { headers, method: 'POST' })
+export function guardDemoActionMutation(headers: Headers, memberID = 0, pathname = '/demo'): void {
+  const request = new Request(`${getServerSideURL()}${pathname}`, { headers, method: 'POST' })
   assertDemoMutationOrigin(request)
   enforceDemoMutationRateLimit(request, { id: memberID })
 }
