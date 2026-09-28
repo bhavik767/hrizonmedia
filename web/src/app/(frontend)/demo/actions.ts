@@ -46,15 +46,21 @@ export async function signIn(formData: FormData) {
   const password = String(formData.get('password') || '')
   const returnTo = safeReturnTo(formData.get('returnTo'))
   let error = 'Email or password is incorrect.'
+  const requestHeaders = await headers()
 
   try {
-    guardDemoActionMutation(await headers())
+    guardDemoActionMutation(requestHeaders)
     await login({ collection: 'members', config, email, password })
   } catch (caught) {
     // Temporary diagnostic: never log form values, which include passwords.
     console.error('[member-sign-in-failed]', {
       errorMessage: caught instanceof Error ? caught.message : String(caught),
       errorName: caught instanceof Error ? caught.name : typeof caught,
+      fetchSite: requestHeaders.get('sec-fetch-site'),
+      origin: requestHeaders.get('origin'),
+      responseStatus:
+        typeof caught === 'object' && caught !== null && 'status' in caught ? caught.status : undefined,
+      serverURL: process.env.NEXT_PUBLIC_SERVER_URL,
     })
     if (caught instanceof Response && caught.status === 429)
       error = 'Too many sign-in attempts. Try again shortly.'
