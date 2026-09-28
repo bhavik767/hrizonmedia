@@ -2,6 +2,7 @@ import canUseDOM from './canUseDOM'
 
 export const getServerSideURL = () => {
   return (
+    process.env.SERVER_URL ||
     process.env.NEXT_PUBLIC_SERVER_URL ||
     (process.env.RAILWAY_PUBLIC_DOMAIN
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
