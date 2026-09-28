@@ -10,7 +10,11 @@ import {
   receiveUploadPart,
   retryVisibleAssetProcessing,
 } from '@/media/library'
-import { fakeTranscodeProvider, getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
+import {
+  fakeTranscodeProvider,
+  getFakeProviders,
+  resetFakeMediaStorage,
+} from '@/media/providers/fake'
 import { PermanentTranscodeError, TransientTranscodeError } from '@/media/providers/errors'
 import type { TranscodeProvider } from '@/media/providers/contracts'
 import { adaptiveRenditions, newProcessingJobData, runProcessingCycle } from '@/media/processing'
@@ -188,7 +192,7 @@ describe('reliable Processing Jobs', () => {
 
   it('refuses the default fake processing provider in production', async () => {
     vi.stubEnv('NODE_ENV', 'production')
-    vi.stubEnv('RAILWAY_ENVIRONMENT_NAME', 'production')
+    vi.stubEnv('DEPLOYMENT_ENVIRONMENT', 'production')
     try {
       await expect(runProcessingCycle(payload)).rejects.toThrow('prohibited in production')
     } finally {
@@ -620,6 +624,74 @@ describe('reliable Processing Jobs', () => {
         where: { mediaAssetId: { equals: session.asset.mediaAssetId } },
       }),
     ).resolves.toMatchObject({ docs: [{ playReadyPackaged: true }] })
+    vi.unstubAllEnvs()
+  })
+
+  it('rejects a late shared-worker callback from an older processing attempt', async () => {
+    const session = await upload()
+    const job = (
+      await payload.find({
+        collection: 'processing-jobs',
+        limit: 1,
+        overrideAccess: true,
+        where: {},
+      })
+    ).docs[0]!
+    await payload.update({
+      collection: 'processing-jobs',
+      data: {
+        attempts: 2,
+        providerJobId: 'provider_job_current-attempt',
+        status: 'processing',
+      },
+      id: job.id,
+      overrideAccess: true,
+    })
+
+    const callbackBody = JSON.stringify({
+      attempt: 1,
+      callbackId: `worker:${job.processingJobId}:1:ready`,
+      outputPrefix: processingOutputPrefix(job.processingJobId),
+      processingJobId: job.processingJobId,
+      status: 'ready',
+    })
+    const timestamp = String(Date.now())
+    const secret = 'callback-test-secret'
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    const response = await processingCallback(
+      new Request('http://localhost/api/internal/transcode/callback', {
+        body: callbackBody,
+        headers: {
+          'content-type': 'application/json',
+          'x-hrizon-signature': createHmac('sha256', secret)
+            .update(`${timestamp}.${callbackBody}`)
+            .digest('base64url'),
+          'x-hrizon-timestamp': timestamp,
+        },
+        method: 'POST',
+      }),
+    )
+
+    expect(response.status).toBe(409)
+    await expect(
+      payload.findByID({
+        collection: 'processing-jobs',
+        id: job.id,
+        overrideAccess: true,
+      }),
+    ).resolves.toMatchObject({
+      attempts: 2,
+      providerJobId: 'provider_job_current-attempt',
+      status: 'processing',
+    })
+    await expect(
+      payload.find({
+        collection: 'media-assets',
+        limit: 1,
+        overrideAccess: true,
+        where: { mediaAssetId: { equals: session.asset.mediaAssetId } },
+      }),
+    ).resolves.toMatchObject({ docs: [{ status: 'processing' }] })
     vi.unstubAllEnvs()
   })
 

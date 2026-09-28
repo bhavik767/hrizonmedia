@@ -4,7 +4,7 @@ import { defineConfig } from '@playwright/test'
 // before loading the local config (which otherwise supplies local test credentials).
 if (
   process.env.HRIZONMEDIA_STAGING_TESTS !== 'true' ||
-  process.env.RAILWAY_ENVIRONMENT_NAME !== 'staging' ||
+  process.env.DEPLOYMENT_ENVIRONMENT !== 'staging' ||
   !process.env.DATABASE_URL ||
   !process.env.PAYLOAD_SECRET
 ) {

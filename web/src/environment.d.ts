@@ -3,9 +3,9 @@ declare global {
     interface ProcessEnv {
       PAYLOAD_SECRET?: string
       DATABASE_URL?: string
+      DEPLOYMENT_ENVIRONMENT?: 'development' | 'staging' | 'production'
       NEXT_PUBLIC_SERVER_URL?: string
-      RAILWAY_PUBLIC_DOMAIN?: string
-      VERCEL_PROJECT_PRODUCTION_URL?: string
+      SERVER_URL?: string
       BUCKET?: string
       ACCESS_KEY_ID?: string
       SECRET_ACCESS_KEY?: string

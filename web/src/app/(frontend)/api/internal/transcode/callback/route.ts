@@ -79,6 +79,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   let input: {
+    attempt?: unknown
     callbackId?: unknown
     outputPrefix?: unknown
     processingJobId?: unknown
@@ -100,7 +101,10 @@ export async function POST(request: Request): Promise<Response> {
       (typeof input.providerJobId === 'string' &&
         /^provider_job_[A-Za-z0-9_-]{1,128}$/.test(input.providerJobId)) ||
       (typeof input.processingJobId === 'string' &&
-        /^processing_[0-9a-f-]{36}$/.test(input.processingJobId))
+        /^processing_[0-9a-f-]{36}$/.test(input.processingJobId) &&
+        Number.isInteger(input.attempt) &&
+        (input.attempt as number) >= 1 &&
+        (input.attempt as number) <= 3)
     ) ||
     typeof input.outputPrefix !== 'string' ||
     input.outputPrefix.length > 200 ||
@@ -128,6 +132,7 @@ export async function POST(request: Request): Promise<Response> {
     const result = await applyProcessingCallback(
       payload,
       {
+        attempt: typeof input.attempt === 'number' ? input.attempt : undefined,
         callbackId: input.callbackId,
         outputPrefix: input.outputPrefix,
         providerJobId,
@@ -147,7 +152,11 @@ export async function POST(request: Request): Promise<Response> {
         error.status === 404 ? 'job_not_found' : 'state_conflict',
         error.status,
         error.message,
-        { callbackId: input.callbackId, providerJobId: input.providerJobId },
+        {
+          attempt: input.attempt,
+          callbackId: input.callbackId,
+          providerJobId: input.providerJobId,
+        },
       )
     }
     console.error('Processing callback application failed.')

@@ -45,7 +45,7 @@ const bucketConfigured = Boolean(
   process.env.ENDPOINT,
 )
 
-const railwayStorage = s3Storage({
+const cmsStorage = s3Storage({
   alwaysInsertFields: true,
   bucket: process.env.BUCKET || 'local-storage-disabled',
   collections: {
@@ -148,7 +148,7 @@ export default buildConfig({
     browseByFolder: false,
   },
   globals: [Header, Footer, Organization, Integrations],
-  plugins: [...plugins, railwayStorage],
+  plugins: [...plugins, cmsStorage],
   secret: process.env.PAYLOAD_SECRET || '',
   sharp,
   typescript: {

@@ -231,12 +231,12 @@ describe('deterministic media providers', () => {
     )
   })
 
-  it('allows fakes in Railway staging but refuses them in production', () => {
+  it('allows fakes in isolated staging but refuses them in production', () => {
     expect(() =>
-      getFakeProviders({ NODE_ENV: 'production', RAILWAY_ENVIRONMENT_NAME: 'staging' }),
+      getFakeProviders({ NODE_ENV: 'production', DEPLOYMENT_ENVIRONMENT: 'staging' }),
     ).not.toThrow()
     expect(() =>
-      getFakeProviders({ NODE_ENV: 'production', RAILWAY_ENVIRONMENT_NAME: 'production' }),
+      getFakeProviders({ NODE_ENV: 'production', DEPLOYMENT_ENVIRONMENT: 'production' }),
     ).toThrow('prohibited in production')
   })
 })

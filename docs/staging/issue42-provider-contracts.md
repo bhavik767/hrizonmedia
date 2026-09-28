@@ -1,5 +1,7 @@
 # Issue #42: real video provider handoff
 
+> Archived planning evidence from the retired hosting stack. Hostnames and configuration locations below are historical; use [`web/DEPLOYMENT.md`](../../web/DEPLOYMENT.md) for the live Hetzner stack.
+
 Status: **complete; provider selection, access handoff and contract decisions recorded**.
 Updated: 2026-09-16. Source: [issue #42](https://github.com/bhavik767/hrizonmedia/issues/42)
 and its [parent specification #29](https://github.com/bhavik767/hrizonmedia/issues/29).

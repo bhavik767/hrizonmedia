@@ -61,7 +61,11 @@ export function validateJob(value) {
 }
 
 function callbackURL(job, environment) {
-  const allowedOrigins = (environment.TRANSCODER_CALLBACK_ORIGINS ?? environment.APPLICATION_ORIGIN ?? '')
+  const allowedOrigins = (
+    environment.TRANSCODER_CALLBACK_ORIGINS ??
+    environment.APPLICATION_ORIGIN ??
+    ''
+  )
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean)
@@ -122,11 +126,9 @@ export async function supportsGpuEncoding(run, environment) {
       { timeout: GPU_PROBE_TIMEOUT_MS },
     )
     if (!String(gpu?.stdout ?? '').trim()) return false
-    const encoders = await run(
-      environment.FFMPEG_BIN ?? 'ffmpeg',
-      ['-hide_banner', '-encoders'],
-      { timeout: GPU_PROBE_TIMEOUT_MS },
-    )
+    const encoders = await run(environment.FFMPEG_BIN ?? 'ffmpeg', ['-hide_banner', '-encoders'], {
+      timeout: GPU_PROBE_TIMEOUT_MS,
+    })
     return /\bh264_nvenc\b/.test(String(encoders?.stdout ?? ''))
   } catch {
     return false
@@ -247,6 +249,7 @@ export function normalizePackagedFiles(files) {
 async function sendCallback(job, status, environment, fetcher) {
   const timestamp = String(Date.now())
   const body = JSON.stringify({
+    attempt: job.attempt,
     callbackId: `worker:${job.processingJobId}:${job.attempt}:${status}`,
     outputPrefix: job.outputPrefix,
     processingJobId: job.processingJobId,
@@ -255,18 +258,15 @@ async function sendCallback(job, status, environment, fetcher) {
   const signature = createHmac('sha256', job.callbackSecret)
     .update(`${timestamp}.${body}`)
     .digest('base64url')
-  const response = await fetcher(
-    callbackURL(job, environment),
-    {
-      body,
-      headers: {
-        'content-type': 'application/json',
-        'x-hrizon-signature': signature,
-        'x-hrizon-timestamp': timestamp,
-      },
-      method: 'POST',
+  const response = await fetcher(callbackURL(job, environment), {
+    body,
+    headers: {
+      'content-type': 'application/json',
+      'x-hrizon-signature': signature,
+      'x-hrizon-timestamp': timestamp,
     },
-  )
+    method: 'POST',
+  })
   if (!response.ok) throw new Error('Application callback was rejected.')
 }
 

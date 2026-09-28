@@ -1,0 +1,46 @@
+name: wecloud
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - /srv/wecloud/config/internal.env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: ${WECLOUD_WEB_IMAGE:?Set WECLOUD_WEB_IMAGE to an immutable image tag}
+    restart: unless-stopped
+    env_file:
+      - /srv/wecloud/config/internal.env
+      - /srv/wecloud/config/providers.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3000:3000'
+
+  proxy:
+    profiles: ['public']
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - /srv/wecloud/config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

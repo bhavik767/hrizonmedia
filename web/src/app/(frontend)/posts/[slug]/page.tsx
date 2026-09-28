@@ -20,7 +20,7 @@ import { getCachedGlobal } from '@/utilities/getGlobals'
 import { buildPostSchema } from '@/utilities/schema'
 import { StructuredData } from '@/utilities/schema/StructuredData'
 
-// Railway provides Payload's database and secret at runtime, not while the image is built.
+// Deployment secrets are injected at runtime, not while the image is built.
 export const dynamic = 'force-dynamic'
 
 export async function generateStaticParams() {

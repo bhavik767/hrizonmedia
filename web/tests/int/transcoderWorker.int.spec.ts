@@ -68,7 +68,8 @@ function workerDependencies({
   }
   const execFile = vi.fn(async (_executable: string, args: string[]) => {
     if (args[0] === '--query-gpu=name') return { stdout: gpuAvailable ? 'GPU 0' : '' }
-    if (args.includes('-encoders')) return { stdout: ' V..... h264_nvenc NVIDIA NVENC H.264 encoder' }
+    if (args.includes('-encoders'))
+      return { stdout: ' V..... h264_nvenc NVIDIA NVENC H.264 encoder' }
     if (args.includes('h264_nvenc') && gpuEncodingFailure) throw gpuEncodingFailure
     if (args.includes('-frames:v')) {
       await writeFile(args.at(-1)!, 'thumbnail')
@@ -94,11 +95,12 @@ function workerDependencies({
     ])
     return { stdout: '' }
   })
+  const fetch = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({ ok: callbackOK }))
   return {
     client,
     commands,
     execFile,
-    fetch: vi.fn(async () => ({ ok: callbackOK })),
+    fetch,
     publication,
     environment: {
       APPLICATION_ORIGIN: job.callbackOrigin,
@@ -142,12 +144,18 @@ describe('Salad transcoder worker contract', () => {
   it('falls back from a recoverable GPU encoding failure without changing the Processing Job ladder', async () => {
     const diagnostics = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     const gpuFallback = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    const dependencies = workerDependencies({ gpuEncodingFailure: Object.assign(new Error('gpu busy'), { code: 1 }) })
+    const dependencies = workerDependencies({
+      gpuEncodingFailure: Object.assign(new Error('gpu busy'), { code: 1 }),
+    })
 
     try {
       await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ ready: true })
-      const gpuCommands = dependencies.execFile.mock.calls.filter(([, args]) => args.includes('h264_nvenc'))
-      const cpuCommands = dependencies.execFile.mock.calls.filter(([, args]) => args.includes('libx264'))
+      const gpuCommands = dependencies.execFile.mock.calls.filter(([, args]) =>
+        args.includes('h264_nvenc'),
+      )
+      const cpuCommands = dependencies.execFile.mock.calls.filter(([, args]) =>
+        args.includes('libx264'),
+      )
       expect(gpuCommands).toHaveLength(1)
       expect(cpuCommands).toHaveLength(job.renditions.length)
       expect(cpuCommands.map(([, args]) => args.at(-1))).toEqual([
@@ -165,8 +173,16 @@ describe('Salad transcoder worker contract', () => {
       expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"validation"')
       expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"attempt_upload"')
       expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"canonical_publication"')
-      expect(diagnostics.mock.calls.flat().join('\n')).not.toContain(dependencies.environment.DOVERUNNER_ENC_TOKEN)
+      expect(diagnostics.mock.calls.flat().join('\n')).not.toContain(
+        dependencies.environment.DOVERUNNER_ENC_TOKEN,
+      )
       expect(gpuFallback.mock.calls.flat().join('\n')).not.toContain(job.callbackSecret)
+      expect(JSON.parse(String(dependencies.fetch.mock.calls.at(-1)?.[1]?.body))).toMatchObject({
+        attempt: job.attempt,
+        callbackId: `worker:${job.processingJobId}:${job.attempt}:ready`,
+        processingJobId: job.processingJobId,
+        status: 'ready',
+      })
     } finally {
       diagnostics.mockRestore()
       gpuFallback.mockRestore()
@@ -179,11 +195,15 @@ describe('Salad transcoder worker contract', () => {
 
     try {
       await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ ready: true })
-      expect(dependencies.execFile.mock.calls.some(([, args]) => args.includes('h264_nvenc'))).toBe(false)
-      expect(dependencies.execFile.mock.calls.filter(([, args]) => args.includes('libx264'))).toHaveLength(
-        job.renditions.length,
+      expect(dependencies.execFile.mock.calls.some(([, args]) => args.includes('h264_nvenc'))).toBe(
+        false,
       )
-      expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining('transcoder_gpu_unavailable'))
+      expect(
+        dependencies.execFile.mock.calls.filter(([, args]) => args.includes('libx264')),
+      ).toHaveLength(job.renditions.length)
+      expect(diagnostics).toHaveBeenCalledWith(
+        expect.stringContaining('transcoder_gpu_unavailable'),
+      )
     } finally {
       diagnostics.mockRestore()
     }
@@ -205,15 +225,22 @@ describe('Salad transcoder worker contract', () => {
     const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     const dependencies = workerDependencies({
-      gpuEncodingFailure: Object.assign(new Error('timed out'), { code: 'ETIMEDOUT', killed: true, signal: 'SIGTERM' }),
+      gpuEncodingFailure: Object.assign(new Error('timed out'), {
+        code: 'ETIMEDOUT',
+        killed: true,
+        signal: 'SIGTERM',
+      }),
     })
 
     try {
       await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
-      expect(dependencies.execFile.mock.calls.some(([, args]) => args.includes('libx264'))).toBe(false)
+      expect(dependencies.execFile.mock.calls.some(([, args]) => args.includes('libx264'))).toBe(
+        false,
+      )
       expect(
         dependencies.commands.some(
-          (command) => command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+          (command) =>
+            command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
         ),
       ).toBe(true)
       expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining('"stage":"encoding"'))
@@ -232,11 +259,15 @@ describe('Salad transcoder worker contract', () => {
     const callbackDependencies = workerDependencies({ callbackOK: false, gpuAvailable: false })
 
     try {
-      await expect(processJob({ input: job }, failedDependencies)).resolves.toEqual({ failed: true })
+      await expect(processJob({ input: job }, failedDependencies)).resolves.toEqual({
+        failed: true,
+      })
       expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining('"stage":"source_download"'))
       expect(diagnostics.mock.calls.flat().join('\n')).not.toContain(job.callbackSecret)
 
-      await expect(processJob({ input: job }, callbackDependencies)).resolves.toEqual({ ready: true })
+      await expect(processJob({ input: job }, callbackDependencies)).resolves.toEqual({
+        ready: true,
+      })
       expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining('"stage":"ready_callback"'))
     } finally {
       diagnostics.mockRestore()
