@@ -10,6 +10,8 @@ dist/
 .env
 .env.local
 .env.*.local
+/id_ed25519
+/id_ed25519.pub
 
 # Local SQLite database. Disposable dev artefact (see web/SETUP-NOTES.md); it
 # also holds real admin password hashes, so it stays out of the repo.
