@@ -18,11 +18,16 @@ import {
 import { InvalidTranscodeMetadataError, PermanentTranscodeError } from './providers/errors'
 import { getMediaProviders } from './providers'
 import { logMediaDiagnostic } from './diagnostics'
-import type { Rendition, SourceMedia, TranscodeProvider } from './providers/contracts'
+import type {
+  Rendition,
+  SourceMedia,
+  StorageProvider,
+  TranscodeProvider,
+} from './providers/contracts'
 
 const DISPATCH_DEADLINE_MS = 30_000
 const LEASE_DURATION_MS = 30_000
-const PROCESSING_TIMEOUT_MS = 15 * 60 * 1000
+const PROCESSING_OVERHEAD_MS = 15 * 60 * 1000
 const MAX_ATTEMPTS = 3
 const RETRY_BASE_DELAY_MS = 1_000
 
@@ -32,6 +37,7 @@ const FAILURE_MESSAGE =
 export interface ProcessingOptions {
   now?: Date
   provider?: TranscodeProvider
+  storage?: StorageProvider
   workerId?: string
 }
 
@@ -235,6 +241,158 @@ async function recoverExpiredJobs(payload: Payload, now: Date, where: Where) {
   }
 }
 
+type TransactionDatabase = { execute: (query: unknown) => Promise<unknown> }
+
+async function inTransaction<T>(
+  payload: Payload,
+  operation: (transaction: TransactionDatabase) => Promise<T>,
+): Promise<T> {
+  const transactionID = await payload.db.beginTransaction()
+  if (transactionID === null) throw new Error('Processing recovery requires transactions.')
+  try {
+    const transaction = payload.db.sessions?.[String(transactionID)]?.db as
+      | TransactionDatabase
+      | undefined
+    if (!transaction) throw new Error('Unable to start the processing recovery transaction.')
+    const result = await operation(transaction)
+    await payload.db.commitTransaction(transactionID)
+    return result
+  } catch (error) {
+    await payload.db.rollbackTransaction(transactionID)
+    throw error
+  }
+}
+
+async function supersedeExpiredAttempts(payload: Payload, now: Date) {
+  const expired = await payload.find({
+    collection: 'processing-jobs',
+    depth: 0,
+    limit: 100,
+    overrideAccess: true,
+    where: {
+      and: [
+        { status: { equals: 'processing' } },
+        { processingDeadlineAt: { less_than_equal: now.toISOString() } },
+      ],
+    },
+  })
+  for (const job of expired.docs) {
+    const transition = await inTransaction(payload, async (transaction) =>
+      (await transaction.execute(sql`
+        UPDATE processing_jobs
+        SET status = 'cancelling',
+            failure_code = 'processing_timeout',
+            lease_token = NULL,
+            leased_until = NULL,
+            updated_at = ${now}
+        WHERE id = ${job.id}
+          AND status = 'processing'
+          AND attempts = ${job.attempts}
+          AND processing_deadline_at <= ${now}
+        RETURNING id
+      `)) as { rows: Array<{ id?: unknown }> },
+    )
+    if (transition.rows[0]?.id) logMediaDiagnostic('error', 'processing_stalled', job.id)
+  }
+}
+
+async function reconcileCancelledAttempts(
+  payload: Payload,
+  now: Date,
+  provider: TranscodeProvider,
+  storage: StorageProvider,
+  workerId: string,
+) {
+  const cancelling = await payload.find({
+    collection: 'processing-jobs',
+    depth: 0,
+    limit: 100,
+    overrideAccess: true,
+    where: { status: { equals: 'cancelling' } },
+  })
+  for (const job of cancelling.docs) {
+    const leaseToken = `${workerId}:cancel:${randomUUID()}`
+    const leasedUntil = new Date(now.getTime() + LEASE_DURATION_MS)
+    const claim = await inTransaction(payload, async (transaction) =>
+      (await transaction.execute(sql`
+        UPDATE processing_jobs
+        SET lease_token = ${leaseToken},
+            leased_until = ${leasedUntil},
+            updated_at = ${now}
+        WHERE id = ${job.id}
+          AND status = 'cancelling'
+          AND (lease_token IS NULL OR leased_until <= ${now})
+        RETURNING id
+      `)) as { rows: Array<{ id?: unknown }> },
+    )
+    if (!claim.rows[0]?.id) continue
+    try {
+      await provider.cancelAttempt({
+        attempt: job.attempts,
+        processingJobId: job.processingJobId as ProcessingJobId,
+        providerJobId: job.providerJobId as ProviderJobId,
+      })
+      await storage.deletePrefix(`transcode-attempts/${job.processingJobId}/${job.attempts}/`)
+      await storage.deletePrefix(processingOutputPrefix(job.processingJobId as ProcessingJobId))
+    } catch {
+      await inTransaction(payload, async (transaction) =>
+        transaction.execute(sql`
+          UPDATE processing_jobs
+          SET lease_token = NULL,
+              leased_until = NULL,
+              updated_at = ${now}
+          WHERE id = ${job.id}
+            AND status = 'cancelling'
+            AND lease_token = ${leaseToken}
+        `),
+      )
+      logMediaDiagnostic('error', 'processing_cancellation_pending', job.id)
+      continue
+    }
+
+    const finalAttempt = job.attempts >= MAX_ATTEMPTS
+    const reconciled = await inTransaction(payload, async (transaction) => {
+      const clearedAttemptState = sql`
+        provider_job_id = NULL,
+        processing_deadline_at = NULL,
+        started_at = NULL,
+        lease_token = NULL,
+        leased_until = NULL,
+        updated_at = ${now}
+      `
+      return (await transaction.execute(
+        finalAttempt
+          ? sql`
+              UPDATE processing_jobs
+              SET status = 'failed',
+                  failed_at = ${now},
+                  failure_code = 'processing_timeout',
+                  failure_message = ${FAILURE_MESSAGE},
+                  ${clearedAttemptState}
+              WHERE id = ${job.id}
+                AND status = 'cancelling'
+                AND attempts = ${job.attempts}
+                AND lease_token = ${leaseToken}
+              RETURNING id
+            `
+          : sql`
+              UPDATE processing_jobs
+              SET status = 'queued',
+                  next_attempt_at = ${now},
+                  ${clearedAttemptState}
+              WHERE id = ${job.id}
+                AND status = 'cancelling'
+                AND attempts = ${job.attempts}
+                AND lease_token = ${leaseToken}
+              RETURNING id
+            `,
+      )) as { rows: Array<{ id?: unknown }> }
+    })
+    if (!reconciled.rows[0]?.id) continue
+    await setProcessingAssetStatus(payload, job, finalAttempt ? 'failed' : 'queued', now)
+  }
+}
+
 async function dispatchQueuedJobs(
   payload: Payload,
   now: Date,
@@ -281,7 +439,7 @@ async function dispatchQueuedJobs(
           AND (
             SELECT count(*)
             FROM processing_jobs
-            WHERE status IN ('dispatching', 'processing')
+            WHERE status IN ('dispatching', 'processing', 'cancelling')
           ) < ${providerConcurrency}
         RETURNING id
       `)) as { rows: Array<{ id?: unknown }> }
@@ -322,7 +480,11 @@ async function dispatchQueuedJobs(
           dispatchedAt: now.toISOString(),
           leaseToken: null,
           leasedUntil: null,
-          processingDeadlineAt: new Date(now.getTime() + PROCESSING_TIMEOUT_MS).toISOString(),
+          processingDeadlineAt: new Date(
+            now.getTime() +
+              PROCESSING_OVERHEAD_MS +
+              job.sourceDurationSeconds * 2 * 1000,
+          ).toISOString(),
           providerJobId,
           startedAt: now.toISOString(),
           status: 'processing',
@@ -397,7 +559,10 @@ export async function runProcessingCycle(
   options: ProcessingOptions = {},
 ): Promise<void> {
   const now = options.now ?? new Date()
-  const provider = options.provider ?? getMediaProviders().transcode
+  const configuredProviders = options.provider && options.storage ? null : getMediaProviders()
+  const provider = options.provider ?? configuredProviders!.transcode
+  const storage = options.storage ?? configuredProviders!.storage
+  const workerId = options.workerId ?? `worker-${process.pid}`
   const controls = await getOperationalControls(payload)
   if (controls.killSwitchEnabled) return
   await recoverExpiredJobs(payload, now, {
@@ -406,25 +571,14 @@ export async function runProcessingCycle(
       { leasedUntil: { less_than_equal: now.toISOString() } },
     ],
   })
+  await supersedeExpiredAttempts(payload, now)
+  await reconcileCancelledAttempts(payload, now, provider, storage, workerId)
   await dispatchQueuedJobs(
     payload,
     now,
     provider,
-    options.workerId ?? `worker-${process.pid}`,
+    workerId,
     controls.providerConcurrency,
   )
   await pollProcessingJobs(payload, now, provider)
-  await recoverExpiredJobs(payload, now, {
-    and: [
-      { status: { equals: 'processing' } },
-      { processingDeadlineAt: { less_than_equal: now.toISOString() } },
-    ],
-  })
-  await dispatchQueuedJobs(
-    payload,
-    now,
-    provider,
-    options.workerId ?? `worker-${process.pid}`,
-    controls.providerConcurrency,
-  )
 }

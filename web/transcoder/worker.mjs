@@ -267,7 +267,9 @@ async function sendCallback(job, status, environment, fetcher) {
     },
     method: 'POST',
   })
-  if (!response.ok) throw new Error('Application callback was rejected.')
+  if (response.ok) return 'accepted'
+  if (response.status === 404 || response.status === 409) return 'stale'
+  throw new Error('Application callback was rejected.')
 }
 
 export function verifyDashProtection(manifestText) {
@@ -277,6 +279,25 @@ export function verifyDashProtection(manifestText) {
   if (!new RegExp(PLAYREADY_DASH_SYSTEM_ID, 'i').test(manifestText)) {
     throw new Error('DoveRunner manifest is not PlayReady encrypted.')
   }
+}
+
+async function isAttemptCancelled(client, bucket, job) {
+  return (
+    (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) ||
+    (await exists(
+      client,
+      bucket,
+      `transcode-control/${job.processingJobId}/attempt-${job.attempt}.superseded`,
+    ))
+  )
+}
+
+async function removeCanonicalPublication(client, bucket, job, deliveryFiles, completionKey) {
+  const keys = deliveryFiles.map((file) => `${job.outputPrefix}${file.relative}`)
+  if (completionKey) keys.push(completionKey)
+  await mapWithConcurrency(keys, STORAGE_PUBLICATION_CONCURRENCY, async (key) => {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  })
 }
 
 export async function processJob(value, dependencies = {}) {
@@ -295,10 +316,9 @@ export async function processJob(value, dependencies = {}) {
   }
   const controlPrefix = `transcode-control/${job.processingJobId}/attempt-${job.attempt}`
   const completionKey = `${job.outputPrefix}completion.json`
+  if (await isAttemptCancelled(client, bucket, job)) return { cancelled: true }
   if (await exists(client, bucket, completionKey)) return { deduplicated: true }
   if (await exists(client, bucket, `${controlPrefix}.failed`)) return { failed: true }
-  if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`))
-    return { cancelled: true }
   try {
     await client.send(
       new PutObjectCommand({
@@ -379,9 +399,6 @@ export async function processJob(value, dependencies = {}) {
       throw new Error('DoveRunner HLS manifest is invalid.')
     }
     logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
-    if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) {
-      return { cancelled: true }
-    }
     const attemptPrefix = `transcode-attempts/${job.processingJobId}/${job.attempt}/`
     stage = 'attempt_upload'
     logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
@@ -405,6 +422,7 @@ export async function processJob(value, dependencies = {}) {
       )
     })
     logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
+    if (await isAttemptCancelled(client, bucket, job)) return { cancelled: true }
     stage = 'canonical_publication'
     logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
     await mapWithConcurrency(deliveryFiles, STORAGE_PUBLICATION_CONCURRENCY, async (file) => {
@@ -417,12 +435,8 @@ export async function processJob(value, dependencies = {}) {
       )
     })
     logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
-    if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) {
-      await mapWithConcurrency(deliveryFiles, STORAGE_PUBLICATION_CONCURRENCY, async (file) => {
-        await client.send(
-          new DeleteObjectCommand({ Bucket: bucket, Key: `${job.outputPrefix}${file.relative}` }),
-        )
-      })
+    if (await isAttemptCancelled(client, bucket, job)) {
+      await removeCanonicalPublication(client, bucket, job, deliveryFiles)
       return { cancelled: true }
     }
     await client.send(
@@ -438,8 +452,15 @@ export async function processJob(value, dependencies = {}) {
         Key: completionKey,
       }),
     )
+    if (await isAttemptCancelled(client, bucket, job)) {
+      await removeCanonicalPublication(client, bucket, job, deliveryFiles, completionKey)
+      return { cancelled: true }
+    }
     try {
-      await sendCallback(job, 'ready', environment, fetcher)
+      if ((await sendCallback(job, 'ready', environment, fetcher)) === 'stale') {
+        await removeCanonicalPublication(client, bucket, job, deliveryFiles, completionKey)
+        return { cancelled: true }
+      }
     } catch {
       // The application poller verifies completion.json and final outputs, so a
       // temporary callback outage must not discard an otherwise complete package.

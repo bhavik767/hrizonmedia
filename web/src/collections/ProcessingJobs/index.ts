@@ -32,7 +32,7 @@ export const ProcessingJobs: CollectionConfig = {
     {
       name: 'status',
       type: 'select',
-      options: ['queued', 'dispatching', 'processing', 'ready', 'failed'],
+      options: ['queued', 'dispatching', 'processing', 'cancelling', 'ready', 'failed'],
       required: true,
     },
     { name: 'queuedAt', type: 'date', required: true },

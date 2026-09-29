@@ -317,6 +317,8 @@ export const fakeStorageProvider: StorageProvider & {
 export const fakeTranscodeProvider: TranscodeProvider = {
   producesPlayReadyPackage: true,
 
+  async cancelAttempt() {},
+
   async deleteOutputs() {},
 
   async queue({ idempotencyKey, mediaAssetId, objectKey, renditions }) {

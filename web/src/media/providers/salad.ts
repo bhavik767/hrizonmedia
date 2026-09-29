@@ -1,6 +1,6 @@
 import 'server-only'
 
-import type { ProviderJobId } from '../identifiers'
+import type { ProcessingJobId, ProviderJobId } from '../identifiers'
 import type { OutputVerification, Rendition, TranscodeProvider } from './contracts'
 import {
   InvalidTranscodeMetadataError,
@@ -41,6 +41,7 @@ interface SaladJob {
 
 interface SaladDependencies {
   fetch?: typeof globalThis.fetch
+  supersedeAttempt(processingJobId: ProcessingJobId, attempt: number): Promise<void>
   tombstone(processingJobId: string): Promise<void>
   verifyOutputs(input: OutputVerification): Promise<void>
 }
@@ -211,6 +212,25 @@ async function requestJob(fetcher: typeof globalThis.fetch, url: string, init: R
   }
 }
 
+async function cancelNativeJob(
+  fetcher: typeof globalThis.fetch,
+  url: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  const response = await fetcher(url, {
+    headers,
+    method: 'DELETE',
+    signal: AbortSignal.timeout(10_000),
+  }).catch((error) => {
+    throw new TransientTranscodeError('SaladCloud cancellation failed.', { cause: error })
+  })
+  if (response.ok || response.status === 404) return
+  if (response.status === 429 || response.status >= 500) {
+    throw new TransientTranscodeError('SaladCloud cancellation is temporarily unavailable.')
+  }
+  throw new PermanentTranscodeError('SaladCloud rejected job cancellation.')
+}
+
 export function createSaladTranscodeProvider(
   configuration: SaladTranscodeConfiguration,
   dependencies: SaladDependencies,
@@ -229,21 +249,15 @@ export function createSaladTranscodeProvider(
 
     verifyOutputs: dependencies.verifyOutputs,
 
+    async cancelAttempt({ attempt, processingJobId, providerJobId: id }) {
+      await dependencies.supersedeAttempt(processingJobId, attempt)
+      await cancelNativeJob(fetcher, `${queueURL}/${nativeJobId(id)}`, headers)
+    },
+
     async deleteOutputs({ processingJobId, providerJobId: id }) {
       if (processingJobId) await dependencies.tombstone(processingJobId)
       if (!id) return
-      const response = await fetcher(`${queueURL}/${nativeJobId(id)}`, {
-        headers,
-        method: 'DELETE',
-        signal: AbortSignal.timeout(10_000),
-      }).catch((error) => {
-        throw new TransientTranscodeError('SaladCloud cancellation failed.', { cause: error })
-      })
-      if (response.ok || response.status === 404) return
-      if (response.status === 429 || response.status >= 500) {
-        throw new TransientTranscodeError('SaladCloud cancellation is temporarily unavailable.')
-      }
-      throw new PermanentTranscodeError('SaladCloud rejected job cancellation.')
+      await cancelNativeJob(fetcher, `${queueURL}/${nativeJobId(id)}`, headers)
     },
 
     async queue(input) {

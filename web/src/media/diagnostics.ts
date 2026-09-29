@@ -8,6 +8,7 @@ type DiagnosticEvent =
   | 'processing_dispatch_invalid'
   | 'processing_dispatch_rejected'
   | 'processing_dispatch_unavailable'
+  | 'processing_cancellation_pending'
   | 'media_cleanup_pending'
   | 'source_cleanup_pending'
   | 'lifecycle_audit_pending'
