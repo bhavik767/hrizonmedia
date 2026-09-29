@@ -21,7 +21,12 @@ import type { CompletedPart } from './multipart'
 import type { MediaProviders, StorageProvider } from './providers/contracts'
 import { InvalidMediaError, MultipartUploadError } from './providers/errors'
 import { getMediaProviders } from './providers'
-import { newProcessingJobData, runProcessingCycle, type ProcessingOptions } from './processing'
+import {
+  adaptiveRenditions,
+  newProcessingJobData,
+  runProcessingCycle,
+  type ProcessingOptions,
+} from './processing'
 import type {
   MediaAssetDetail,
   MediaAssetStatus,
@@ -993,6 +998,11 @@ export async function retryVisibleAssetProcessing(
       nextAttemptAt: now.toISOString(),
       processingJobId: newProcessingJobId(),
       providerJobId: null,
+      renditions: adaptiveRenditions({
+        durationSeconds: job.sourceDurationSeconds,
+        height: job.sourceHeight,
+        width: job.sourceWidth,
+      }),
       status: 'queued',
     },
     id: job.id,

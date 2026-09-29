@@ -2,11 +2,11 @@ import { notFound } from 'next/navigation'
 
 import { DashboardShell } from '../DashboardShell'
 import { getDashboardData } from '../dashboardData'
-import { ComingSoonPage as ComingSoonPanel, isDemoModule } from '../ComingSoonPage'
+import { ComingSoonPage as ComingSoonPanel, isDashboardModule } from '../ComingSoonPage'
 
 export default async function ComingSoonPage({ params }: { params: Promise<{ area: string }> }) {
   const { area } = await params
-  if (!isDemoModule(area)) notFound()
+  if (!isDashboardModule(area)) notFound()
 
   await getDashboardData()
 

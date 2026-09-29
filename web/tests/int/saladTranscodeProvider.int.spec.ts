@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import {
-  newMediaAssetId,
-  newProcessingJobId,
-  processingOutputPrefix,
-} from '@/media/identifiers'
+import { newMediaAssetId, newProcessingJobId, processingOutputPrefix } from '@/media/identifiers'
 import { createSaladTranscodeProvider } from '@/media/providers/salad'
-import { PermanentTranscodeError, TransientTranscodeError } from '@/media/providers/errors'
+import {
+  InvalidTranscodeMetadataError,
+  PermanentTranscodeError,
+  TransientTranscodeError,
+} from '@/media/providers/errors'
 
 const nativeJobId = '3c90c3cc-0d44-4b50-8888-8dd25736052a'
 const source = { durationSeconds: 600, height: 1080, width: 1920 }
@@ -88,17 +88,20 @@ describe('SaladCloud transcode provider', () => {
     const { transcode } = provider(fetch as typeof globalThis.fetch)
     const processingJobId = newProcessingJobId()
 
-    await expect(
-      transcode.queue({
-        attempt: 1,
-        idempotencyKey: processingJobId,
-        mediaAssetId: newMediaAssetId(),
-        objectKey: '../private/source.mp4',
-        outputPrefix: `outputs/${processingJobId}/../escape/`,
-        renditions,
-        source,
-      }),
-    ).rejects.toBeInstanceOf(PermanentTranscodeError)
+    const queued = transcode.queue({
+      attempt: 1,
+      idempotencyKey: processingJobId,
+      mediaAssetId: newMediaAssetId(),
+      objectKey: '../private/source.mp4',
+      outputPrefix: `outputs/${processingJobId}/../escape/`,
+      renditions,
+      source,
+    })
+    await expect(queued).rejects.toBeInstanceOf(InvalidTranscodeMetadataError)
+    await expect(queued).rejects.toMatchObject({
+      name: 'InvalidTranscodeMetadataError',
+      reason: 'object_key',
+    })
     expect(fetch).not.toHaveBeenCalled()
   })
 
