@@ -17,7 +17,12 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 import type { ProcessingJobId } from '../identifiers'
-import { MULTIPART_PART_SIZE_BYTES, type CompletedPart } from '../multipart'
+import {
+  expectedMultipartPartSize,
+  MULTIPART_PART_SIZE_BYTES,
+  multipartPartCount,
+  type CompletedPart,
+} from '../multipart'
 import type { MediaProbe, Rendition, StorageProvider } from './contracts'
 import { probeS3Object } from './ffprobe'
 import { InvalidMediaError, MultipartUploadError } from './errors'
@@ -439,11 +444,8 @@ export function createS3StorageProvider(
       if (descriptor.uploadSessionId !== input.uploadSessionId) {
         throw new MultipartUploadError('Multipart upload does not belong to this session.')
       }
-      const totalParts = Math.ceil(descriptor.size / MULTIPART_PART_SIZE_BYTES)
-      const expectedSize =
-        input.partNumber === totalParts
-          ? descriptor.size - MULTIPART_PART_SIZE_BYTES * (totalParts - 1)
-          : MULTIPART_PART_SIZE_BYTES
+      const totalParts = multipartPartCount(descriptor.size)
+      const expectedSize = expectedMultipartPartSize(descriptor.size, input.partNumber)
       if (
         !input.checksumSHA256 ||
         !/^[0-9a-f]{64}$/.test(input.checksumSHA256) ||

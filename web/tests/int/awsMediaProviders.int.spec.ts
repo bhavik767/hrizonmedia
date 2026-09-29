@@ -420,6 +420,57 @@ describe('S3 storage provider', () => {
     expect(send.mock.calls[3]![0]).toBeInstanceOf(HeadObjectCommand)
   })
 
+  it('completes a maximum-size 2 GiB source as 128 full parts', async () => {
+    const uploadSessionId = newUploadSessionId()
+    const partSize = 16 * 1024 * 1024
+    const sourceSize = 2 * 1024 * 1024 * 1024
+    const checksumSHA256 = '44'.repeat(32)
+    const providerChecksum = Buffer.from(checksumSHA256, 'hex').toString('base64')
+    const parts = Array.from({ length: 128 }, (_, index) => ({
+      checksumSHA256,
+      etag: `etag-${index + 1}`,
+      partNumber: index + 1,
+      size: partSize,
+    }))
+    const { client, send } = commandSender([
+      { UploadId: 'native-upload-id' },
+      {
+        IsTruncated: false,
+        Parts: parts.map((part) => ({
+          ChecksumSHA256: providerChecksum,
+          ETag: `"${part.etag}"`,
+          PartNumber: part.partNumber,
+          Size: part.size,
+        })),
+      },
+      {},
+      { ChecksumSHA256: providerChecksum, ContentLength: sourceSize, ContentType: 'video/mp4' },
+    ])
+    const provider = createS3StorageProvider(
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
+      { client, presign: vi.fn(), probe: vi.fn() },
+    )
+    const initiated = await provider.initiateMultipart({
+      metadata: { ...metadata, size: sourceSize },
+      uploadSessionId,
+    })
+
+    await expect(
+      provider.completeMultipart({
+        parts,
+        providerUploadData: initiated.providerUploadData,
+        providerUploadId: initiated.providerUploadId,
+      }),
+    ).resolves.toEqual({ objectKey: `sources/${uploadSessionId}/source.mp4` })
+    const completion = send.mock.calls[2]![0] as CompleteMultipartUploadCommand
+    expect(completion.input.MultipartUpload?.Parts).toHaveLength(128)
+  })
+
   it('deletes every object under one validated processing output prefix', async () => {
     const processingJobId = newProcessingJobId()
     const prefix = `outputs/${processingJobId}/`

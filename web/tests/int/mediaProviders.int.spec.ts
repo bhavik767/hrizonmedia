@@ -12,6 +12,28 @@ import {
 import { InvalidMediaError, MultipartUploadError } from '@/media/providers/errors'
 import { mkvFixture, mp4Fixture } from '../helpers/mediaFixtures'
 
+async function receiveSignedPart(
+  initiated: Awaited<ReturnType<typeof fakeStorageProvider.initiateMultipart>>,
+  uploadSessionId: ReturnType<typeof newUploadSessionId>,
+  bytes: Uint8Array,
+  partNumber: number,
+) {
+  const checksumSHA256 = createHash('sha256').update(bytes).digest('hex')
+  await fakeStorageProvider.createPartUploadTarget({
+    checksumSHA256,
+    partNumber,
+    providerUploadId: initiated.providerUploadId,
+    size: bytes.byteLength,
+    uploadSessionId,
+  })
+  return fakeStorageProvider.receivePart({
+    bytes,
+    checksumSHA256,
+    partNumber,
+    providerUploadId: initiated.providerUploadId,
+  })
+}
+
 describe('deterministic media providers', () => {
   it('advertises 16 MiB parts and validates full and final part targets', async () => {
     resetFakeMediaStorage()
@@ -78,6 +100,66 @@ describe('deterministic media providers', () => {
     ).rejects.toBeInstanceOf(MultipartUploadError)
   })
 
+  it('rejects a proxied part without a signed size and checksum target', async () => {
+    resetFakeMediaStorage()
+    const bytes = new Uint8Array([1])
+    const initiated = await fakeStorageProvider.initiateMultipart({
+      metadata: {
+        fileFingerprint: 'lesson.mp4:1:1234',
+        fileName: 'lesson.mp4',
+        mimeType: 'video/mp4',
+        size: bytes.byteLength,
+      },
+      uploadSessionId: newUploadSessionId(),
+    })
+
+    await expect(
+      fakeStorageProvider.receivePart({
+        bytes,
+        checksumSHA256: createHash('sha256').update(bytes).digest('hex'),
+        partNumber: 1,
+        providerUploadId: initiated.providerUploadId,
+      }),
+    ).rejects.toBeInstanceOf(MultipartUploadError)
+  })
+
+  it('rejects completion when the final source bytes are missing', async () => {
+    resetFakeMediaStorage()
+    const partSize = 16 * 1024 * 1024
+    const bytes = new Uint8Array(partSize)
+    const checksumSHA256 = createHash('sha256').update(bytes).digest('hex')
+    const uploadSessionId = newUploadSessionId()
+    const initiated = await fakeStorageProvider.initiateMultipart({
+      metadata: {
+        fileFingerprint: `lesson.mp4:${partSize + 1}:1234`,
+        fileName: 'lesson.mp4',
+        mimeType: 'video/mp4',
+        size: partSize + 1,
+      },
+      uploadSessionId,
+    })
+    await fakeStorageProvider.createPartUploadTarget({
+      checksumSHA256,
+      partNumber: 1,
+      providerUploadId: initiated.providerUploadId,
+      size: bytes.byteLength,
+      uploadSessionId,
+    })
+    const first = await fakeStorageProvider.receivePart({
+      bytes,
+      checksumSHA256,
+      partNumber: 1,
+      providerUploadId: initiated.providerUploadId,
+    })
+
+    await expect(
+      fakeStorageProvider.completeMultipart({
+        parts: [first],
+        providerUploadId: initiated.providerUploadId,
+      }),
+    ).rejects.toBeInstanceOf(MultipartUploadError)
+  })
+
   it('reconstructs multipart uploads and probes the completed object server-side', async () => {
     resetFakeMediaStorage()
     const bytes = mp4Fixture(90, 16 * 1024 * 1024 + 1)
@@ -91,16 +173,18 @@ describe('deterministic media providers', () => {
       },
       uploadSessionId,
     })
-    const first = await fakeStorageProvider.receivePart({
-      bytes: bytes.subarray(0, initiated.partSize),
-      partNumber: 1,
-      providerUploadId: initiated.providerUploadId,
-    })
-    const second = await fakeStorageProvider.receivePart({
-      bytes: bytes.subarray(initiated.partSize),
-      partNumber: 2,
-      providerUploadId: initiated.providerUploadId,
-    })
+    const first = await receiveSignedPart(
+      initiated,
+      uploadSessionId,
+      bytes.subarray(0, initiated.partSize),
+      1,
+    )
+    const second = await receiveSignedPart(
+      initiated,
+      uploadSessionId,
+      bytes.subarray(initiated.partSize),
+      2,
+    )
 
     const stored = await fakeStorageProvider.completeMultipart({
       parts: [first, second],
@@ -129,16 +213,8 @@ describe('deterministic media providers', () => {
       uploadSessionId,
     })
     const [first, second] = await Promise.all([
-      fakeStorageProvider.receivePart({
-        bytes: bytes.subarray(0, initiated.partSize),
-        partNumber: 1,
-        providerUploadId: initiated.providerUploadId,
-      }),
-      fakeStorageProvider.receivePart({
-        bytes: bytes.subarray(initiated.partSize),
-        partNumber: 2,
-        providerUploadId: initiated.providerUploadId,
-      }),
+      receiveSignedPart(initiated, uploadSessionId, bytes.subarray(0, initiated.partSize), 1),
+      receiveSignedPart(initiated, uploadSessionId, bytes.subarray(initiated.partSize), 2),
     ])
 
     await expect(
@@ -183,20 +259,17 @@ describe('deterministic media providers', () => {
   it('probes MKV duration independently of client metadata', async () => {
     resetFakeMediaStorage()
     const bytes = mkvFixture(125)
+    const uploadSessionId = newUploadSessionId()
     const initiated = await fakeStorageProvider.initiateMultipart({
       metadata: {
         fileFingerprint: 'lesson.mkv:18:1234',
         fileName: 'lesson.mkv',
         mimeType: 'video/x-matroska',
-        size: 1,
+        size: bytes.length,
       },
-      uploadSessionId: newUploadSessionId(),
+      uploadSessionId,
     })
-    const part = await fakeStorageProvider.receivePart({
-      bytes,
-      partNumber: 1,
-      providerUploadId: initiated.providerUploadId,
-    })
+    const part = await receiveSignedPart(initiated, uploadSessionId, bytes, 1)
     const stored = await fakeStorageProvider.completeMultipart({
       parts: [part],
       providerUploadId: initiated.providerUploadId,
@@ -230,11 +303,12 @@ describe('deterministic media providers', () => {
       offset += initiated.partSize, partNumber += 1
     ) {
       parts.push(
-        await fakeStorageProvider.receivePart({
-          bytes: bytes.subarray(offset, offset + initiated.partSize),
+        await receiveSignedPart(
+          initiated,
+          uploadSessionId,
+          bytes.subarray(offset, offset + initiated.partSize),
           partNumber,
-          providerUploadId: initiated.providerUploadId,
-        }),
+        ),
       )
     }
     const stored = await fakeStorageProvider.completeMultipart({
@@ -273,6 +347,7 @@ describe('deterministic media providers', () => {
       InvalidMediaError,
     )
 
+    const uploadSessionId = newUploadSessionId()
     const initiated = await fakeStorageProvider.initiateMultipart({
       metadata: {
         fileFingerprint: 'fake.mp4:11:1234',
@@ -280,13 +355,14 @@ describe('deterministic media providers', () => {
         mimeType: 'video/mp4',
         size: 11,
       },
-      uploadSessionId: newUploadSessionId(),
+      uploadSessionId,
     })
-    const part = await fakeStorageProvider.receivePart({
-      bytes: new TextEncoder().encode('not a video'),
-      partNumber: 1,
-      providerUploadId: initiated.providerUploadId,
-    })
+    const part = await receiveSignedPart(
+      initiated,
+      uploadSessionId,
+      new TextEncoder().encode('not a video'),
+      1,
+    )
     const stored = await fakeStorageProvider.completeMultipart({
       parts: [part],
       providerUploadId: initiated.providerUploadId,

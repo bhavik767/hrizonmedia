@@ -98,7 +98,12 @@ async function controlMultipartUpload(
     partSizes.set(partNumber, route.request().postDataBuffer()?.byteLength ?? 0)
     activeTransfers += 1
     maximumConcurrentTransfers = Math.max(maximumConcurrentTransfers, activeTransfers)
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await new Promise((resolve) =>
+      setTimeout(
+        resolve,
+        interruptTransfers && partNumber === options.interruptPartNumber ? 200 : 100,
+      ),
+    )
     activeTransfers -= 1
     if (interruptTransfers && partNumber === options.interruptPartNumber) {
       await route.abort('connectionfailed')
@@ -471,7 +476,7 @@ test.describe('Media Asset tracer bullet', () => {
 
     await signIn(page, testInvitee)
     await uploadVideo(page, {
-      buffer: mp4Fixture(60, partSize * 4 + 1),
+      buffer: mp4Fixture(60, partSize * 128),
       mimeType: 'video/mp4',
       name: 'parallel-lesson.mp4',
     })
@@ -480,17 +485,17 @@ test.describe('Media Asset tracer bullet', () => {
       page.getByRole('article', { name: 'parallel-lesson.mp4' }).getByText('ready'),
     ).toBeVisible({ timeout: 45_000 })
     expect(upload.maximumConcurrentTransfers()).toBe(3)
-    expect(
-      [...upload.partSizes.entries()]
-        .sort(([left], [right]) => left - right)
-        .map(([, size]) => size),
-    ).toEqual([partSize, partSize, partSize, partSize, 1])
+    const orderedPartSizes = [...upload.partSizes.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, size]) => size)
+    expect(orderedPartSizes).toHaveLength(128)
+    expect(orderedPartSizes.every((size) => size === partSize)).toBe(true)
   })
 
   test('resumes completed parts after reload when the same file is reselected', async ({
     page,
   }) => {
-    const partSize = 1024
+    const partSize = 16 * 1024 * 1024
     const upload = await controlMultipartUpload(page, { interruptPartNumber: 2, partSize })
 
     const file = {
@@ -505,6 +510,7 @@ test.describe('Media Asset tracer bullet', () => {
       { timeout: 45_000 },
     )
     expect(upload.partRequests.get(1)).toBe(1)
+    expect(upload.partRequests.get(3)).toBe(1)
 
     upload.resume()
     await page.reload()
@@ -514,6 +520,7 @@ test.describe('Media Asset tracer bullet', () => {
       page.getByRole('article', { name: 'resume-lesson.mp4' }).getByText('ready'),
     ).toBeVisible({ timeout: 45_000 })
     expect(upload.partRequests.get(1)).toBe(1)
+    expect(upload.partRequests.get(3)).toBe(1)
   })
 
   test('rejects a changed file before combining it with completed parts', async ({ page }) => {

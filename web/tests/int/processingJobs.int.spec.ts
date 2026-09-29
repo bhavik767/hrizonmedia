@@ -1,5 +1,5 @@
 import { getPayload, type Payload } from 'payload'
-import { createHmac } from 'node:crypto'
+import { createHash, createHmac } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { newProcessingJobId, processingOutputPrefix } from '@/media/identifiers'
@@ -8,6 +8,7 @@ import {
   createUploadSession,
   getVisibleAsset,
   receiveUploadPart,
+  renewUploadPart,
   retryVisibleAssetProcessing,
 } from '@/media/library'
 import {
@@ -81,19 +82,34 @@ async function upload(file = fixture(), provider: TranscodeProvider = fakeTransc
     },
     providers,
   )
-  const part = await receiveUploadPart(
-    payload,
-    uploader,
-    session.uploadSessionId,
-    1,
-    file.bytes,
-    providers,
-  )
+  const part = await receiveSignedUploadPart(session, file.bytes, providers)
   await completeUpload(payload, uploader, session.uploadSessionId, [part], providers, {
     now: start,
     provider,
   })
   return session
+}
+
+async function receiveSignedUploadPart(
+  session: Awaited<ReturnType<typeof createUploadSession>>,
+  bytes: Uint8Array,
+  providers: ReturnType<typeof getFakeProviders>,
+) {
+  const checksumSHA256 = createHash('sha256').update(bytes).digest('hex')
+  await renewUploadPart(
+    payload,
+    uploader,
+    session.uploadSessionId,
+    1,
+    {
+      checksumSHA256,
+      size: bytes.byteLength,
+    },
+    providers,
+  )
+  return receiveUploadPart(payload, uploader, session.uploadSessionId, 1, bytes, providers, {
+    checksumSHA256,
+  })
 }
 
 describe('reliable Processing Jobs', () => {
@@ -232,14 +248,7 @@ describe('reliable Processing Jobs', () => {
       },
       providers,
     )
-    const part = await receiveUploadPart(
-      payload,
-      uploader,
-      session.uploadSessionId,
-      1,
-      file.bytes,
-      providers,
-    )
+    const part = await receiveSignedUploadPart(session, file.bytes, providers)
     const assets = await payload.find({
       collection: 'media-assets',
       overrideAccess: true,
