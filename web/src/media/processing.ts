@@ -352,7 +352,7 @@ async function reconcileCancelledAttempts(
 
     const finalAttempt = job.attempts >= MAX_ATTEMPTS
     const reconciled = await inTransaction(payload, async (transaction) => {
-      const common = sql`
+      const clearedAttemptState = sql`
         provider_job_id = NULL,
         processing_deadline_at = NULL,
         started_at = NULL,
@@ -368,7 +368,7 @@ async function reconcileCancelledAttempts(
                   failed_at = ${now},
                   failure_code = 'processing_timeout',
                   failure_message = ${FAILURE_MESSAGE},
-                  ${common}
+                  ${clearedAttemptState}
               WHERE id = ${job.id}
                 AND status = 'cancelling'
                 AND attempts = ${job.attempts}
@@ -379,7 +379,7 @@ async function reconcileCancelledAttempts(
               UPDATE processing_jobs
               SET status = 'queued',
                   next_attempt_at = ${now},
-                  ${common}
+                  ${clearedAttemptState}
               WHERE id = ${job.id}
                 AND status = 'cancelling'
                 AND attempts = ${job.attempts}

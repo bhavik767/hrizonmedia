@@ -16,6 +16,7 @@ import {
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
+import type { ProcessingJobId } from '../identifiers'
 import type { CompletedPart } from '../multipart'
 import type { MediaProbe, Rendition, StorageProvider } from './contracts'
 import { probeS3Object } from './ffprobe'
@@ -264,7 +265,7 @@ export function createS3AttemptSupersessionMarker(
   dependencies: Pick<S3Dependencies, 'client'> = {},
 ) {
   const client = dependencies.client ?? createS3Client(configuration)
-  return async (processingJobId: string, attempt: number): Promise<void> => {
+  return async (processingJobId: ProcessingJobId, attempt: number): Promise<void> => {
     if (
       !/^processing_[0-9a-f-]{36}$/.test(processingJobId) ||
       !Number.isInteger(attempt) ||

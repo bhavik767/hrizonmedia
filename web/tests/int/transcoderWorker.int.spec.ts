@@ -31,6 +31,7 @@ const job = {
 type WorkerCommand = { constructor: { name: string }; input?: { Key?: string } }
 type WorkerDependenciesOptions = {
   callbackOK?: boolean
+  callbackStatus?: number
   gpuAvailable?: boolean
   gpuEncodingFailure?: Error
   sourceFailure?: Error
@@ -39,6 +40,7 @@ type WorkerDependenciesOptions = {
 
 function workerDependencies({
   callbackOK = true,
+  callbackStatus,
   gpuAvailable = true,
   gpuEncodingFailure,
   sourceFailure,
@@ -105,7 +107,10 @@ function workerDependencies({
     ])
     return { stdout: '' }
   })
-  const fetch = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({ ok: callbackOK }))
+  const fetch = vi.fn(async (_url: string | URL, _init?: RequestInit) => {
+    const status = callbackStatus ?? (callbackOK ? 204 : 500)
+    return { ok: status >= 200 && status < 300, status }
+  })
   return {
     client,
     commands,
@@ -181,6 +186,43 @@ describe('Salad transcoder worker contract', () => {
           command.input?.Key === `${job.outputPrefix}completion.json`,
       ),
     ).toBe(false)
+  })
+
+  it('removes a completion marker when superseded immediately after it is written', async () => {
+    const dependencies = workerDependencies({ supersededAtCheck: 4 })
+
+    await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ cancelled: true })
+
+    expect(
+      dependencies.commands.some(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `${job.outputPrefix}completion.json`,
+      ),
+    ).toBe(true)
+    expect(
+      dependencies.commands.some(
+        (command) =>
+          command.constructor.name === 'DeleteObjectCommand' &&
+          command.input?.Key === `${job.outputPrefix}completion.json`,
+      ),
+    ).toBe(true)
+    expect(dependencies.fetch).not.toHaveBeenCalled()
+  })
+
+  it('removes its publication when the application rejects a stale ready callback', async () => {
+    const dependencies = workerDependencies({ callbackStatus: 409 })
+
+    await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ cancelled: true })
+
+    expect(dependencies.fetch).toHaveBeenCalledOnce()
+    expect(
+      dependencies.commands.some(
+        (command) =>
+          command.constructor.name === 'DeleteObjectCommand' &&
+          command.input?.Key === `${job.outputPrefix}completion.json`,
+      ),
+    ).toBe(true)
   })
 
   it('accepts the server-owned ladder and builds H.264/AAC commands without upscaling', () => {

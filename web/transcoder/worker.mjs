@@ -267,7 +267,9 @@ async function sendCallback(job, status, environment, fetcher) {
     },
     method: 'POST',
   })
-  if (!response.ok) throw new Error('Application callback was rejected.')
+  if (response.ok) return 'accepted'
+  if (response.status === 404 || response.status === 409) return 'stale'
+  throw new Error('Application callback was rejected.')
 }
 
 export function verifyDashProtection(manifestText) {
@@ -288,6 +290,14 @@ async function isAttemptCancelled(client, bucket, job) {
       `transcode-control/${job.processingJobId}/attempt-${job.attempt}.superseded`,
     ))
   )
+}
+
+async function removeCanonicalPublication(client, bucket, job, deliveryFiles, completionKey) {
+  const keys = deliveryFiles.map((file) => `${job.outputPrefix}${file.relative}`)
+  if (completionKey) keys.push(completionKey)
+  await mapWithConcurrency(keys, STORAGE_PUBLICATION_CONCURRENCY, async (key) => {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  })
 }
 
 export async function processJob(value, dependencies = {}) {
@@ -426,11 +436,7 @@ export async function processJob(value, dependencies = {}) {
     })
     logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
     if (await isAttemptCancelled(client, bucket, job)) {
-      await mapWithConcurrency(deliveryFiles, STORAGE_PUBLICATION_CONCURRENCY, async (file) => {
-        await client.send(
-          new DeleteObjectCommand({ Bucket: bucket, Key: `${job.outputPrefix}${file.relative}` }),
-        )
-      })
+      await removeCanonicalPublication(client, bucket, job, deliveryFiles)
       return { cancelled: true }
     }
     await client.send(
@@ -446,8 +452,15 @@ export async function processJob(value, dependencies = {}) {
         Key: completionKey,
       }),
     )
+    if (await isAttemptCancelled(client, bucket, job)) {
+      await removeCanonicalPublication(client, bucket, job, deliveryFiles, completionKey)
+      return { cancelled: true }
+    }
     try {
-      await sendCallback(job, 'ready', environment, fetcher)
+      if ((await sendCallback(job, 'ready', environment, fetcher)) === 'stale') {
+        await removeCanonicalPublication(client, bucket, job, deliveryFiles, completionKey)
+        return { cancelled: true }
+      }
     } catch {
       // The application poller verifies completion.json and final outputs, so a
       // temporary callback outage must not discard an otherwise complete package.
