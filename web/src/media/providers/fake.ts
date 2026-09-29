@@ -3,7 +3,11 @@ import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 
 import type { ProviderJobId, ProviderUploadId } from '../identifiers'
-import type { CompletedPart } from '../multipart'
+import {
+  expectedMultipartPartSize,
+  MULTIPART_PART_SIZE_BYTES,
+  type CompletedPart,
+} from '../multipart'
 import type { UploadMetadata } from '../types'
 import type {
   DeliveryProvider,
@@ -15,7 +19,6 @@ import type {
 } from './contracts'
 import { InvalidMediaError, MultipartUploadError } from './errors'
 
-const FAKE_PART_SIZE = 5 * 1024 * 1024
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
 const MKV_SIGNATURE = Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3])
 const MVHD_SIGNATURE = new TextEncoder().encode('mvhd')
@@ -191,6 +194,9 @@ export const fakeStorageProvider: StorageProvider & {
       throw new MultipartUploadError('The completed upload omitted one or more stored parts.')
     }
     const object = concatParts(bytes)
+    if (object.byteLength !== upload.metadata.size) {
+      throw new MultipartUploadError('The completed object size does not match the upload.')
+    }
     const objectKey = `fake-private/${upload.uploadSessionId}/${encodeURIComponent(upload.metadata.fileName)}`
     state.objects.set(objectKey, object)
     upload.objectKey = objectKey
@@ -208,19 +214,13 @@ export const fakeStorageProvider: StorageProvider & {
     if (upload.uploadSessionId !== uploadSessionId) {
       throw new MultipartUploadError('Multipart upload does not belong to this session.')
     }
-    const totalParts = Math.ceil(upload.metadata.size / FAKE_PART_SIZE)
-    const expectedSize =
-      partNumber === totalParts
-        ? upload.metadata.size - FAKE_PART_SIZE * (totalParts - 1)
-        : FAKE_PART_SIZE
+    const expectedSize = expectedMultipartPartSize(upload.metadata.size, partNumber)
     if (
       !checksumSHA256 ||
       !/^[0-9a-f]{64}$/.test(checksumSHA256) ||
       !Number.isSafeInteger(size) ||
       size !== expectedSize ||
-      !Number.isSafeInteger(partNumber) ||
-      partNumber < 1 ||
-      partNumber > totalParts
+      expectedSize === null
     ) {
       throw new MultipartUploadError('Upload part metadata is invalid.')
     }
@@ -253,7 +253,7 @@ export const fakeStorageProvider: StorageProvider & {
       partTargets: new Map(),
       uploadSessionId,
     })
-    return { partSize: FAKE_PART_SIZE, providerUploadId }
+    return { partSize: MULTIPART_PART_SIZE_BYTES, providerUploadId }
   },
 
   async listParts(providerUploadId) {
@@ -291,20 +291,21 @@ export const fakeStorageProvider: StorageProvider & {
   },
 
   async receivePart({ bytes, checksumSHA256, partNumber, providerUploadId }) {
-    if (!Number.isSafeInteger(partNumber) || partNumber < 1) {
+    const upload = getUpload(providerUploadId)
+    const expectedSize = expectedMultipartPartSize(upload.metadata.size, partNumber)
+    if (expectedSize === null) {
       throw new MultipartUploadError('Part number must be a positive integer.')
     }
-    if (bytes.byteLength === 0 || bytes.byteLength > FAKE_PART_SIZE) {
-      throw new MultipartUploadError(`Each part must contain at most ${FAKE_PART_SIZE} bytes.`)
+    if (bytes.byteLength !== expectedSize) {
+      throw new MultipartUploadError(`The upload part must contain ${expectedSize} bytes.`)
     }
-    const upload = getUpload(providerUploadId)
     if (upload.objectKey) throw new MultipartUploadError('Multipart upload is already complete.')
     const target = upload.partTargets.get(partNumber)
     if (
-      target &&
-      (target.size !== bytes.byteLength ||
-        target.checksumSHA256 !== checksumSHA256 ||
-        target.checksumSHA256 !== etag(bytes))
+      !target ||
+      target.size !== bytes.byteLength ||
+      target.checksumSHA256 !== checksumSHA256 ||
+      target.checksumSHA256 !== etag(bytes)
     ) {
       throw new MultipartUploadError('Upload part does not match its signed target.')
     }

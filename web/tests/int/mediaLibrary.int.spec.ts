@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import { getPayload, type Payload } from 'payload'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
@@ -51,16 +53,35 @@ async function uploadAllParts(
     offset += session.partSize, partNumber += 1
   ) {
     parts.push(
-      await receiveUploadPart(
-        payload,
-        firstUploader,
-        session.uploadSessionId,
-        partNumber,
+      await uploadSessionPart(
+        session,
         bytes.subarray(offset, offset + session.partSize),
+        partNumber,
       ),
     )
   }
   return parts
+}
+
+async function uploadSessionPart(
+  session: Awaited<ReturnType<typeof createUploadSession>>,
+  bytes: Uint8Array,
+  partNumber: number,
+) {
+  const checksumSHA256 = createHash('sha256').update(bytes).digest('hex')
+  await renewUploadPart(payload, firstUploader, session.uploadSessionId, partNumber, {
+    checksumSHA256,
+    size: bytes.byteLength,
+  })
+  return receiveUploadPart(
+    payload,
+    firstUploader,
+    session.uploadSessionId,
+    partNumber,
+    bytes,
+    undefined,
+    { checksumSHA256 },
+  )
 }
 
 async function cleanMediaLibrary() {
@@ -225,13 +246,7 @@ describe('Media Asset library persistence', () => {
   it('resumes with completed parts but rejects a mismatched file', async () => {
     const fixture = mp4Fixture()
     const session = await createUploadSession(payload, firstUploader, metadataFor(fixture))
-    await receiveUploadPart(
-      payload,
-      firstUploader,
-      session.uploadSessionId,
-      1,
-      fixture.subarray(0, session.partSize),
-    )
+    await uploadSessionPart(session, fixture.subarray(0, session.partSize), 1)
 
     await expect(
       resumeUploadSession(
@@ -256,16 +271,12 @@ describe('Media Asset library persistence', () => {
     }
   })
 
-  it('replaces advisory size metadata with the verified completed object size', async () => {
+  it('rejects source bytes that do not match the Upload Session size', async () => {
     const fixture = mp4Fixture()
     const advisory = { ...metadataFor(fixture), size: 1 }
     const session = await createUploadSession(payload, firstUploader, advisory)
-    const parts = await uploadAllParts(session, fixture)
-    await completeUpload(payload, firstUploader, session.uploadSessionId, parts)
 
-    await expect(
-      getVisibleAsset(payload, firstUploader, session.asset.mediaAssetId),
-    ).resolves.toMatchObject({ size: fixture.length })
+    await expect(uploadAllParts(session, fixture)).rejects.toMatchObject({ status: 400 })
   })
 
   it('accepts an MKV when the browser omits advisory MIME metadata', async () => {

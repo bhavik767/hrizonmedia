@@ -26,6 +26,118 @@ async function uploadVideo(page: Page, file: { buffer: Buffer; mimeType: string;
   await page.getByRole('button', { name: 'Start Upload' }).click()
 }
 
+async function controlMultipartUpload(
+  page: Page,
+  options: { interruptPartNumber?: number; partSize: number },
+) {
+  let activeTransfers = 0
+  let interruptTransfers = Boolean(options.interruptPartNumber)
+  let maximumConcurrentTransfers = 0
+  let uploadMetadata: { fileName: string; size: number } | null = null
+  const completedParts = new Map<
+    number,
+    { checksumSHA256: string; etag: string; partNumber: number; size: number }
+  >()
+  const partMetadata = new Map<number, { checksumSHA256: string; size: number }>()
+  const partRequests = new Map<number, number>()
+  const partSizes = new Map<number, number>()
+
+  const sessionResponse = () => {
+    if (!uploadMetadata) throw new Error('Upload metadata was not received.')
+    return {
+      asset: {
+        createdAt: new Date().toISOString(),
+        fileName: uploadMetadata.fileName,
+        mediaAssetId: 'asset_00000000-0000-0000-0000-000000000147',
+        size: uploadMetadata.size,
+        status: 'uploading',
+      },
+      completeURL: '/controlled-upload/complete',
+      completedParts: [...completedParts.values()],
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      partSize: options.partSize,
+      partTargetURL: '/controlled-upload/parts/{partNumber}/target',
+      uploadSessionId: 'upload_00000000-0000-0000-0000-000000000147',
+    }
+  }
+
+  await page.route(/\/api\/demo\/uploads$/, async (route) => {
+    uploadMetadata = route.request().postDataJSON() as { fileName: string; size: number }
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(sessionResponse()),
+    })
+  })
+  await page.route(
+    /\/api\/demo\/uploads\/upload_00000000-0000-0000-0000-000000000147\?/,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify(sessionResponse()),
+      })
+    },
+  )
+  await page.route(/\/controlled-upload\/parts\/(\d+)\/target$/, async (route) => {
+    const partNumber = Number(route.request().url().split('/').at(-2))
+    partMetadata.set(
+      partNumber,
+      route.request().postDataJSON() as { checksumSHA256: string; size: number },
+    )
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        headers: {},
+        uploadURL: `/controlled-upload/parts/${partNumber}/content`,
+      }),
+    })
+  })
+  await page.route(/\/controlled-upload\/parts\/(\d+)\/content$/, async (route) => {
+    const partNumber = Number(route.request().url().split('/').at(-2))
+    const metadata = partMetadata.get(partNumber)!
+    partRequests.set(partNumber, (partRequests.get(partNumber) ?? 0) + 1)
+    partSizes.set(partNumber, route.request().postDataBuffer()?.byteLength ?? 0)
+    activeTransfers += 1
+    maximumConcurrentTransfers = Math.max(maximumConcurrentTransfers, activeTransfers)
+    await new Promise((resolve) =>
+      setTimeout(
+        resolve,
+        interruptTransfers && partNumber === options.interruptPartNumber ? 200 : 100,
+      ),
+    )
+    activeTransfers -= 1
+    if (interruptTransfers && partNumber === options.interruptPartNumber) {
+      await route.abort('connectionfailed')
+      return
+    }
+    const completed = {
+      checksumSHA256: metadata.checksumSHA256,
+      etag: `etag-${partNumber}`,
+      partNumber,
+      size: metadata.size,
+    }
+    completedParts.set(partNumber, completed)
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(completed) })
+  })
+  await page.route(/\/controlled-upload\/complete$/, async (route) => {
+    const session = sessionResponse()
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        asset: { ...session.asset, durationSeconds: 60, status: 'ready' },
+      }),
+    })
+  })
+
+  return {
+    maximumConcurrentTransfers: () => maximumConcurrentTransfers,
+    partRequests,
+    partSizes,
+    resume: () => {
+      interruptTransfers = false
+    },
+  }
+}
+
 test.describe('Media Asset tracer bullet', () => {
   test.beforeEach(async ({ context }) => {
     await context.clearCookies()
@@ -346,7 +458,7 @@ test.describe('Media Asset tracer bullet', () => {
 
     await signIn(page, testInvitee)
     await uploadVideo(page, {
-      buffer: mp4Fixture(60, 5 * 1024 * 1024 + 1),
+      buffer: mp4Fixture(60, 16 * 1024 * 1024 + 1),
       mimeType: 'video/mp4',
       name: 'retry-lesson.mp4',
     })
@@ -359,19 +471,12 @@ test.describe('Media Asset tracer bullet', () => {
   })
 
   test('limits direct multipart transfers to three concurrent parts', async ({ page }) => {
-    let activeTransfers = 0
-    let maximumConcurrentTransfers = 0
-    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/\d+\/content$/, async (route) => {
-      activeTransfers += 1
-      maximumConcurrentTransfers = Math.max(maximumConcurrentTransfers, activeTransfers)
-      await new Promise((resolve) => setTimeout(resolve, 100))
-      await route.continue()
-      activeTransfers -= 1
-    })
+    const partSize = 1024
+    const upload = await controlMultipartUpload(page, { partSize })
 
     await signIn(page, testInvitee)
     await uploadVideo(page, {
-      buffer: mp4Fixture(60, 15 * 1024 * 1024 + 1),
+      buffer: mp4Fixture(60, partSize * 128),
       mimeType: 'video/mp4',
       name: 'parallel-lesson.mp4',
     })
@@ -379,26 +484,22 @@ test.describe('Media Asset tracer bullet', () => {
     await expect(
       page.getByRole('article', { name: 'parallel-lesson.mp4' }).getByText('ready'),
     ).toBeVisible({ timeout: 45_000 })
-    expect(maximumConcurrentTransfers).toBe(3)
+    expect(upload.maximumConcurrentTransfers()).toBe(3)
+    const orderedPartSizes = [...upload.partSizes.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([, size]) => size)
+    expect(orderedPartSizes).toHaveLength(128)
+    expect(orderedPartSizes.every((size) => size === partSize)).toBe(true)
   })
 
   test('resumes completed parts after reload when the same file is reselected', async ({
     page,
   }) => {
-    const partRequests = new Map<string, number>()
-    let interruptSecondPart = true
-    await page.route(/\/api\/demo\/uploads\/upload_.+\/parts\/(\d+)\/content$/, async (route) => {
-      const partNumber = route.request().url().split('/').at(-2)!
-      partRequests.set(partNumber, (partRequests.get(partNumber) || 0) + 1)
-      if (partNumber === '2' && interruptSecondPart) {
-        await route.abort('connectionfailed')
-        return
-      }
-      await route.continue()
-    })
+    const partSize = 16 * 1024 * 1024
+    const upload = await controlMultipartUpload(page, { interruptPartNumber: 2, partSize })
 
     const file = {
-      buffer: mp4Fixture(60, 5 * 1024 * 1024 + 1),
+      buffer: mp4Fixture(60, partSize * 2 + 1),
       mimeType: 'video/mp4',
       name: 'resume-lesson.mp4',
     }
@@ -408,16 +509,18 @@ test.describe('Media Asset tracer bullet', () => {
       'Reselect this file to resume',
       { timeout: 45_000 },
     )
-    expect(partRequests.get('1')).toBe(1)
+    expect(upload.partRequests.get(1)).toBe(1)
+    expect(upload.partRequests.get(3)).toBe(1)
 
-    interruptSecondPart = false
+    upload.resume()
     await page.reload()
     await uploadVideo(page, file)
 
     await expect(
       page.getByRole('article', { name: 'resume-lesson.mp4' }).getByText('ready'),
     ).toBeVisible({ timeout: 45_000 })
-    expect(partRequests.get('1')).toBe(1)
+    expect(upload.partRequests.get(1)).toBe(1)
+    expect(upload.partRequests.get(3)).toBe(1)
   })
 
   test('rejects a changed file before combining it with completed parts', async ({ page }) => {
@@ -430,7 +533,7 @@ test.describe('Media Asset tracer bullet', () => {
       await route.continue()
     })
 
-    const original = mp4Fixture(60, 5 * 1024 * 1024 + 1)
+    const original = mp4Fixture(60, 16 * 1024 * 1024 + 1)
     const changed = Buffer.from(original)
     changed[1024 * 1024] = 1
     const file = { buffer: original, mimeType: 'video/mp4', name: 'changed-lesson.mp4' }
