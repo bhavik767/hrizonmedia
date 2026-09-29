@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { mkdir, writeFile } from 'node:fs/promises'
 
 import {
+  encodingTimeoutMs,
   ffmpegArguments,
+  isWorkerReady,
   mapWithConcurrency,
   normalizePackagedFiles,
   packagerArguments,
@@ -27,12 +29,30 @@ const job = {
   ],
   source: { durationSeconds: 600, height: 720, width: 1280 },
 }
+type TestRendition = (typeof job.renditions)[number]
+const renditionLadderCases: Array<[string, TestRendition[]]> = [
+  ['two', job.renditions],
+  [
+    'three',
+    [...job.renditions, { audioCodec: 'aac', height: 480, videoCodec: 'h264', width: 854 }],
+  ],
+  [
+    'four',
+    [
+      ...job.renditions,
+      { audioCodec: 'aac', height: 480, videoCodec: 'h264', width: 854 },
+      { audioCodec: 'aac', height: 1080, videoCodec: 'h264', width: 1920 },
+    ],
+  ],
+]
 
 type WorkerCommand = { constructor: { name: string }; input?: { Key?: string } }
 type WorkerDependenciesOptions = {
   callbackOK?: boolean
   callbackStatus?: number
+  encodingMode?: 'cpu' | 'nvenc'
   gpuAvailable?: boolean
+  gpuEncoderAvailable?: boolean
   gpuEncodingFailure?: Error
   sourceFailure?: Error
   supersededAtCheck?: number
@@ -41,7 +61,9 @@ type WorkerDependenciesOptions = {
 function workerDependencies({
   callbackOK = true,
   callbackStatus,
+  encodingMode = 'cpu',
   gpuAvailable = true,
+  gpuEncoderAvailable = true,
   gpuEncodingFailure,
   sourceFailure,
   supersededAtCheck,
@@ -81,14 +103,17 @@ function workerDependencies({
   const execFile = vi.fn(async (_executable: string, args: string[]) => {
     if (args[0] === '--query-gpu=name') return { stdout: gpuAvailable ? 'GPU 0' : '' }
     if (args.includes('-encoders'))
-      return { stdout: ' V..... h264_nvenc NVIDIA NVENC H.264 encoder' }
+      return {
+        stdout: gpuEncoderAvailable ? ' V..... h264_nvenc NVIDIA NVENC H.264 encoder' : '',
+      }
     if (args.includes('h264_nvenc') && gpuEncodingFailure) throw gpuEncodingFailure
     if (args.includes('-frames:v')) {
       await writeFile(args.at(-1)!, 'thumbnail')
       return { stdout: '' }
     }
     if (args.includes('libx264') || args.includes('h264_nvenc')) {
-      await writeFile(args.at(-1)!, 'clear video')
+      const outputs = args.filter((argument) => /[\\/]clear[\\/]\d+p\.mp4$/.test(argument))
+      await Promise.all(outputs.map((output) => writeFile(output, 'clear video')))
       return { stdout: '' }
     }
     const packagedDirectory = args[args.indexOf('-o') + 1]!
@@ -120,6 +145,7 @@ function workerDependencies({
     environment: {
       APPLICATION_ORIGIN: job.callbackOrigin,
       DOVERUNNER_ENC_TOKEN: 'never-log-this-encryption-token',
+      TRANSCODER_ENCODING_MODE: encodingMode,
       VIDEO_S3_BUCKET: 'private-video-bucket',
       VIDEO_S3_REGION: 'ap-south-1',
     },
@@ -135,9 +161,7 @@ describe('Salad transcoder worker contract', () => {
     expect(dependencies.execFile).not.toHaveBeenCalled()
     expect(dependencies.fetch).not.toHaveBeenCalled()
     expect(
-      dependencies.commands.some(
-        (command) => command.constructor.name === 'GetObjectCommand',
-      ),
+      dependencies.commands.some((command) => command.constructor.name === 'GetObjectCommand'),
     ).toBe(false)
   })
 
@@ -147,9 +171,7 @@ describe('Salad transcoder worker contract', () => {
     await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ cancelled: true })
 
     expect(
-      dependencies.commands.some(
-        (command) => command.constructor.name === 'CopyObjectCommand',
-      ),
+      dependencies.commands.some((command) => command.constructor.name === 'CopyObjectCommand'),
     ).toBe(false)
     expect(dependencies.fetch).not.toHaveBeenCalled()
     expect(
@@ -225,18 +247,79 @@ describe('Salad transcoder worker contract', () => {
     ).toBe(true)
   })
 
-  it('accepts the server-owned ladder and builds H.264/AAC commands without upscaling', () => {
-    expect(validateJob({ input: job })).toEqual(job)
-    const commands = ffmpegArguments(job, '/work/source.mp4', '/work/clear')
-    expect(commands).toHaveLength(2)
-    expect(commands[0]).toEqual(expect.arrayContaining(['scale=640:360', 'libx264', 'aac']))
-    expect(commands[1]).toEqual(expect.arrayContaining(['scale=1280:720', 'libx264', 'aac']))
+  it.each(renditionLadderCases)(
+    'builds one CPU FFmpeg command for a %s-Rendition ladder',
+    (_label, renditions) => {
+      const ladderJob = {
+        ...job,
+        renditions,
+        source: { ...job.source, height: 1080, width: 1920 },
+      }
+
+      expect(validateJob({ input: ladderJob })).toEqual(ladderJob)
+      const command = ffmpegArguments(ladderJob, '/work/source.mp4', '/work/clear', 'cpu')
+
+      expect(command.filter((argument) => argument === '-i')).toHaveLength(1)
+      expect(command).toEqual(expect.arrayContaining(['-filter_complex', 'libx264', 'aac']))
+      expect(command[command.indexOf('-filter_complex') + 1]).toContain(
+        `split=${renditions.length}`,
+      )
+      for (const { height, width } of renditions) {
+        expect(command[command.indexOf('-filter_complex') + 1]).toContain(
+          `scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
+        )
+        expect(command.map((argument) => argument.replaceAll('\\', '/'))).toContain(
+          `/work/clear/${height}p.mp4`,
+        )
+      }
+      expect(command.filter((argument) => argument === '0:a:0?')).toHaveLength(renditions.length)
+    },
+  )
+
+  it.each(renditionLadderCases)(
+    'executes and packages a %s-Rendition ladder as one process',
+    async (_label, renditions) => {
+      const dependencies = workerDependencies({ encodingMode: 'cpu' })
+      const ladderJob = {
+        ...job,
+        renditions,
+        source: { ...job.source, height: 1080, width: 1920 },
+      }
+      const diagnostics = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+
+      try {
+        await expect(processJob({ input: ladderJob }, dependencies)).resolves.toEqual({
+          ready: true,
+        })
+        expect(
+          dependencies.execFile.mock.calls.filter(([, args]) => args.includes('libx264')),
+        ).toHaveLength(1)
+        const packagerCalls = dependencies.execFile.mock.calls.filter(([, args]) =>
+          args.includes('--enc_token'),
+        )
+        expect(packagerCalls).toHaveLength(1)
+        for (const { height } of renditions) {
+          expect(packagerCalls[0]![1].some((argument) => argument.endsWith(`${height}p.mp4`))).toBe(
+            true,
+          )
+        }
+      } finally {
+        diagnostics.mockRestore()
+      }
+    },
+  )
+
+  it('uses NVENC for every output only when NVENC mode is explicitly selected', () => {
+    const command = ffmpegArguments(job, '/work/source.mp4', '/work/clear', 'nvenc')
+
+    expect(command.filter((argument) => argument === 'h264_nvenc')).toHaveLength(
+      job.renditions.length,
+    )
+    expect(command).not.toContain('libx264')
   })
 
-  it('uses the approved NVENC strategy only after GPU capability selection', () => {
-    expect(ffmpegArguments(job, '/work/source.mp4', '/work/clear', 'gpu')[0]).toEqual(
-      expect.arrayContaining(['scale=640:360', 'h264_nvenc', 'p4', 'aac']),
-    )
+  it('keeps the encoding timeout inside the attempt deadline with bounded post-encode time', () => {
+    expect(encodingTimeoutMs(job)).toBe(25 * 60 * 1000)
   })
 
   it('bounds concurrent publication work', async () => {
@@ -254,15 +337,16 @@ describe('Salad transcoder worker contract', () => {
     expect(peak).toBe(2)
   })
 
-  it('falls back from a recoverable GPU encoding failure without changing the Processing Job ladder', async () => {
+  it('fails an NVENC attempt without invoking CPU encoding', async () => {
     const diagnostics = vi.spyOn(console, 'info').mockImplementation(() => undefined)
-    const gpuFallback = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const failures = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const dependencies = workerDependencies({
+      encodingMode: 'nvenc',
       gpuEncodingFailure: Object.assign(new Error('gpu busy'), { code: 1 }),
     })
 
     try {
-      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ ready: true })
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
       const gpuCommands = dependencies.execFile.mock.calls.filter(([, args]) =>
         args.includes('h264_nvenc'),
       )
@@ -270,41 +354,33 @@ describe('Salad transcoder worker contract', () => {
         args.includes('libx264'),
       )
       expect(gpuCommands).toHaveLength(1)
-      expect(cpuCommands).toHaveLength(job.renditions.length)
-      expect(cpuCommands.map(([, args]) => args.at(-1))).toEqual([
-        expect.stringMatching(/360p\.mp4$/),
-        expect.stringMatching(/720p\.mp4$/),
-      ])
+      expect(cpuCommands).toHaveLength(0)
       expect(
         dependencies.commands
+          .filter((command) => command.constructor.name === 'PutObjectCommand')
           .map((command) => command.input?.Key)
           .filter((key) => typeof key === 'string'),
-      ).toContain(`${job.outputPrefix}completion.json`)
-      expect(gpuFallback).toHaveBeenCalledWith(expect.stringContaining('transcoder_gpu_fallback'))
+      ).not.toContain(`${job.outputPrefix}completion.json`)
       expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"source_download"')
-      expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"packaging"')
-      expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"validation"')
-      expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"attempt_upload"')
-      expect(diagnostics.mock.calls.flat().join('\n')).toContain('"stage":"canonical_publication"')
       expect(diagnostics.mock.calls.flat().join('\n')).not.toContain(
         dependencies.environment.DOVERUNNER_ENC_TOKEN,
       )
-      expect(gpuFallback.mock.calls.flat().join('\n')).not.toContain(job.callbackSecret)
+      expect(failures.mock.calls.flat().join('\n')).not.toContain(job.callbackSecret)
       expect(JSON.parse(String(dependencies.fetch.mock.calls.at(-1)?.[1]?.body))).toMatchObject({
         attempt: job.attempt,
-        callbackId: `worker:${job.processingJobId}:${job.attempt}:ready`,
+        callbackId: `worker:${job.processingJobId}:${job.attempt}:failed`,
         processingJobId: job.processingJobId,
-        status: 'ready',
+        status: 'failed',
       })
     } finally {
       diagnostics.mockRestore()
-      gpuFallback.mockRestore()
+      failures.mockRestore()
     }
   })
 
-  it('uses the CPU strategy when the Processing Job finds no compatible GPU', async () => {
+  it('uses one multi-output CPU process only when CPU mode is explicitly selected', async () => {
     const diagnostics = vi.spyOn(console, 'info').mockImplementation(() => undefined)
-    const dependencies = workerDependencies({ gpuAvailable: false })
+    const dependencies = workerDependencies({ encodingMode: 'cpu', gpuAvailable: false })
 
     try {
       await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ ready: true })
@@ -313,18 +389,63 @@ describe('Salad transcoder worker contract', () => {
       )
       expect(
         dependencies.execFile.mock.calls.filter(([, args]) => args.includes('libx264')),
-      ).toHaveLength(job.renditions.length)
-      expect(diagnostics).toHaveBeenCalledWith(
-        expect.stringContaining('transcoder_gpu_unavailable'),
+      ).toHaveLength(1)
+      expect(dependencies.execFile.mock.calls.some(([, args]) => args.includes('-encoders'))).toBe(
+        false,
       )
     } finally {
       diagnostics.mockRestore()
     }
   })
 
+  it.each([
+    ['NVIDIA device discovery fails', false, true],
+    ['h264_nvenc is unavailable', true, false],
+  ])('keeps NVENC readiness unsuccessful when %s', async (_reason, gpu, encoder) => {
+    const dependencies = workerDependencies({
+      encodingMode: 'nvenc',
+      gpuAvailable: gpu,
+      gpuEncoderAvailable: encoder,
+    })
+
+    await expect(isWorkerReady(dependencies.environment, dependencies.execFile)).resolves.toBe(
+      false,
+    )
+  })
+
+  it('reports NVENC readiness only after device and encoder validation pass', async () => {
+    const dependencies = workerDependencies({ encodingMode: 'nvenc' })
+
+    await expect(isWorkerReady(dependencies.environment, dependencies.execFile)).resolves.toBe(true)
+  })
+
+  it('fails an NVENC attempt safely when required GPU capability is missing', async () => {
+    const failures = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const dependencies = workerDependencies({ encodingMode: 'nvenc', gpuAvailable: false })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      expect(dependencies.execFile.mock.calls.some(([, args]) => args.includes('libx264'))).toBe(
+        false,
+      )
+      expect(
+        dependencies.commands.some(
+          (command) =>
+            command.constructor.name === 'PutObjectCommand' &&
+            command.input?.Key ===
+              `transcode-control/${job.processingJobId}/attempt-${job.attempt}.failed`,
+        ),
+      ).toBe(true)
+    } finally {
+      failures.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
   it('limits attempt upload concurrency during Processing Job publication', async () => {
     const diagnostics = vi.spyOn(console, 'info').mockImplementation(() => undefined)
-    const dependencies = workerDependencies({ gpuAvailable: false })
+    const dependencies = workerDependencies({ encodingMode: 'cpu' })
 
     try {
       await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ ready: true })
@@ -338,6 +459,7 @@ describe('Salad transcoder worker contract', () => {
     const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     const dependencies = workerDependencies({
+      encodingMode: 'nvenc',
       gpuEncodingFailure: Object.assign(new Error('timed out'), {
         code: 'ETIMEDOUT',
         killed: true,
@@ -369,7 +491,7 @@ describe('Salad transcoder worker contract', () => {
     const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     const sourceFailure = new Error(`unavailable ${job.callbackSecret}`)
     const failedDependencies = workerDependencies({ sourceFailure })
-    const callbackDependencies = workerDependencies({ callbackOK: false, gpuAvailable: false })
+    const callbackDependencies = workerDependencies({ callbackOK: false, encodingMode: 'cpu' })
 
     try {
       await expect(processJob({ input: job }, failedDependencies)).resolves.toEqual({
@@ -467,7 +589,7 @@ describe('Salad transcoder worker contract', () => {
     const execFile = vi.fn()
     const server = startServer({
       client,
-      environment: { PORT: '0' },
+      environment: { PORT: '0', TRANSCODER_ENCODING_MODE: 'cpu' },
       execFile,
     })
 

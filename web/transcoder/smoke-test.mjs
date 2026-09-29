@@ -25,7 +25,10 @@ async function waitForQueueWorker() {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try {
       await docker([
-        'exec', containerId, '/bin/sh', '-ec',
+        'exec',
+        containerId,
+        '/bin/sh',
+        '-ec',
         "grep -aql 'salad-http-job-queue-worker' /proc/[0-9]*/cmdline >/dev/null",
       ])
       return
@@ -38,14 +41,43 @@ async function waitForQueueWorker() {
 }
 
 try {
-  await docker(['build', '--platform', 'linux/amd64', '--pull=false', '-f', 'transcoder/Dockerfile', '-t', image, '.'], {
-    stdio: 'inherit',
-  })
+  await docker(
+    [
+      'build',
+      '--platform',
+      'linux/amd64',
+      '--pull=false',
+      '-f',
+      'transcoder/Dockerfile',
+      '-t',
+      image,
+      '.',
+    ],
+    {
+      stdio: 'inherit',
+    },
+  )
   await docker([
-    'run', '--rm', '--entrypoint', '/bin/sh', image, '-ec',
+    'run',
+    '--rm',
+    '--entrypoint',
+    '/bin/sh',
+    image,
+    '-ec',
     'test -x "$FFMPEG_BIN" && "$FFMPEG_BIN" -version >/dev/null && test -x "$DOVERUNNER_PACKAGER_BIN" && "$DOVERUNNER_PACKAGER_BIN" --help >/dev/null',
   ])
-  const { stdout } = await docker(['run', '--detach', '--rm', '-e', 'PORT=8080', '-p', '127.0.0.1:0:8080', image])
+  const { stdout } = await docker([
+    'run',
+    '--detach',
+    '--rm',
+    '-e',
+    'PORT=8080',
+    '-e',
+    'TRANSCODER_ENCODING_MODE=cpu',
+    '-p',
+    '127.0.0.1:0:8080',
+    image,
+  ])
   containerId = stdout.trim()
   const { stdout: portOutput } = await docker(['port', containerId, '8080/tcp'])
   const port = portOutput.trim().match(/:(\d+)$/)?.[1]

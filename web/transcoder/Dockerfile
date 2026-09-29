@@ -37,6 +37,7 @@ ARG DEBIAN_SNAPSHOT=20260924T000000Z
 
 ENV NODE_ENV=production \
     PORT=8080 \
+    TRANSCODER_ENCODING_MODE=nvenc \
     FFMPEG_BIN=/usr/bin/ffmpeg \
     DOVERUNNER_PACKAGER_BIN=/opt/pallycon/bin/Ubuntu/x86_64/doverunner-drm-packager
 
