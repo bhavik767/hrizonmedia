@@ -18,6 +18,8 @@ import {
 } from '@aws-sdk/client-s3'
 import { NodeHttpHandler } from '@smithy/node-http-handler'
 
+import { attemptSupersessionMarkerKey } from '../src/media/transcode-control.mjs'
+
 const execFile = promisify(execFileCallback)
 const PROCESSING_ID = /^processing_[0-9a-f-]{36}$/
 const SOURCE_KEY = /^sources\/upload_[0-9a-f-]{36}\/source\.(?:mp4|mkv)$/
@@ -312,11 +314,7 @@ export function verifyDashProtection(manifestText) {
 async function isAttemptCancelled(client, bucket, job) {
   return (
     (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) ||
-    (await exists(
-      client,
-      bucket,
-      `transcode-control/${job.processingJobId}/attempt-${job.attempt}.superseded`,
-    ))
+    (await exists(client, bucket, attemptSupersessionMarkerKey(job.processingJobId, job.attempt)))
   )
 }
 

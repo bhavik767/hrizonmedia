@@ -80,6 +80,7 @@ RUN npm install --omit=dev --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
 
 COPY transcoder/ ./transcoder/
+COPY src/media/transcode-control.mjs ./src/media/transcode-control.mjs
 COPY --from=queue-worker /out/salad-http-job-queue-worker /usr/local/bin/salad-http-job-queue-worker
 COPY transcoder/entrypoint.sh /usr/local/bin/hrizon-transcoder-entrypoint
 

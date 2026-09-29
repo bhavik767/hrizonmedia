@@ -248,12 +248,12 @@ async function inTransaction<T>(
   operation: (transaction: TransactionDatabase) => Promise<T>,
 ): Promise<T> {
   const transactionID = await payload.db.beginTransaction()
-  if (transactionID === null) throw new Error('Processing recovery requires transactions.')
+  if (transactionID === null) throw new Error('Processing Jobs require transactions.')
   try {
     const transaction = payload.db.sessions?.[String(transactionID)]?.db as
       | TransactionDatabase
       | undefined
-    if (!transaction) throw new Error('Unable to start the processing recovery transaction.')
+    if (!transaction) throw new Error('Unable to start the Processing Job transaction.')
     const result = await operation(transaction)
     await payload.db.commitTransaction(transactionID)
     return result
@@ -418,15 +418,9 @@ async function dispatchQueuedJobs(
     if (dispatched >= providerConcurrency) return
     const leaseToken = `${workerId}:${randomUUID()}`
     const leasedUntil = new Date(now.getTime() + LEASE_DURATION_MS)
-    const transactionID = await payload.db.beginTransaction()
-    if (transactionID === null) throw new Error('Provider concurrency requires transactions.')
-    let claim: { rows: Array<{ id?: unknown }> }
-    try {
-      const transaction = payload.db.sessions?.[String(transactionID)]?.db as
-        { execute: (query: unknown) => Promise<unknown> } | undefined
-      if (!transaction) throw new Error('Unable to start the provider concurrency transaction.')
+    const claim = await inTransaction(payload, async (transaction) => {
       await transaction.execute(sql`SELECT pg_advisory_xact_lock(394039)`)
-      claim = (await transaction.execute(sql`
+      return (await transaction.execute(sql`
         UPDATE processing_jobs
         SET status = 'dispatching',
             attempts = attempts + 1,
@@ -443,11 +437,7 @@ async function dispatchQueuedJobs(
           ) < ${providerConcurrency}
         RETURNING id
       `)) as { rows: Array<{ id?: unknown }> }
-      await payload.db.commitTransaction(transactionID)
-    } catch (error) {
-      await payload.db.rollbackTransaction(transactionID)
-      throw error
-    }
+    })
     const claimedID = claim.rows[0]?.id
     if (!claimedID) continue
     dispatched += 1

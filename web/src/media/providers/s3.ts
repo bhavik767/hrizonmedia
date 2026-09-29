@@ -17,6 +17,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 import type { ProcessingJobId } from '../identifiers'
+import { attemptSupersessionMarkerKey } from '../transcode-control.mjs'
 import {
   expectedMultipartPartSize,
   MULTIPART_PART_SIZE_BYTES,
@@ -283,7 +284,7 @@ export function createS3AttemptSupersessionMarker(
         Body: '{}',
         Bucket: configuration.bucket,
         ContentType: 'application/json',
-        Key: `transcode-control/${processingJobId}/attempt-${attempt}.superseded`,
+        Key: attemptSupersessionMarkerKey(processingJobId, attempt),
       }),
     )
   }
