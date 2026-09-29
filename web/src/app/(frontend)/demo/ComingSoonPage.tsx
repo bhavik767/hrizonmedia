@@ -131,13 +131,13 @@ const moduleDetails = {
   },
 } as const
 
-export type DemoModule = keyof typeof moduleDetails
+export type DashboardModule = keyof typeof moduleDetails
 
-export function isDemoModule(value: string): value is DemoModule {
+export function isDashboardModule(value: string): value is DashboardModule {
   return value in moduleDetails
 }
 
-export function ComingSoonPage({ module }: { module: DemoModule }) {
+export function ComingSoonPage({ module }: { module: DashboardModule }) {
   const details = moduleDetails[module]
   const Icon: ComponentType<{ 'aria-hidden'?: boolean; size?: number; strokeWidth?: number }> =
     details.icon
