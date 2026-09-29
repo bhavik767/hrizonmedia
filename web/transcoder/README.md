@@ -4,6 +4,9 @@ Run `node transcoder/worker.mjs` in the Salad Job Queue container and configure 
 queue connection to `POST /jobs` on `$PORT` (health check: `GET /health`). The image
 must provide FFmpeg and the licensed DoveRunner CLI packager; override their paths
 with `FFMPEG_BIN` and `DOVERUNNER_PACKAGER_BIN` when they are not on `PATH`.
+Encoding mode is mandatory: use `TRANSCODER_ENCODING_MODE=nvenc` for Salad GPU
+workers and select `TRANSCODER_ENCODING_MODE=cpu` deliberately for local development
+or deterministic tests. The worker never falls back from NVENC to CPU.
 
 Build `transcoder/Dockerfile` from the `web/` directory. It pins the Linux/amd64 base
 image digests, snapshot date, Salad queue worker, DoveRunner packager, vetted FFmpeg
@@ -18,12 +21,12 @@ image or expose them through Salad job input.
 
 The worker validates the server-owned source/output paths and attempt budget,
 acquires an S3 conditional lease for that attempt, transcodes the approved H.264/AAC
-ladder without upscaling, packages DASH/CENC for Widevine and HLS/CBCS for FairPlay with the distinct DRM Content ID,
-uploads to an attempt prefix, promotes verified files to the canonical prefix, and
-writes `completion.json` last. Deletion tombstones are checked before compute and
-again before publication. A handled processing failure sends an authenticated
-`failed` callback and returns 2xx to suppress Salad's extra delivery retries; the
-application alone owns the three-attempt budget.
+ladder in one FFmpeg process without upscaling, packages DASH/CENC for Widevine and
+HLS/CBCS for FairPlay with the distinct DRM Content ID, uploads to an attempt prefix,
+promotes verified files to the canonical prefix, and writes `completion.json` last.
+Deletion tombstones are checked before compute and again before publication. A handled
+processing failure sends an authenticated `failed` callback and returns 2xx to suppress
+Salad's extra delivery retries; the application alone owns the three-attempt budget.
 
 Before enabling the staging Demo, run a ten-minute 1080p fixture and retain
 credential-free timestamps proving dispatch within 30 seconds and readiness within
@@ -45,7 +48,9 @@ work. Bootstrap staging with this sequence instead:
    processing.
 2. Wait for one instance to report `running`, `started: true`, and `ready: true`.
    Image download and allocation may take several minutes and are separate from the
-   parent group's lifecycle status.
+   parent group's lifecycle status. Keep the readiness probe on `GET /health`: in
+   NVENC mode it returns success only after both NVIDIA device discovery and FFmpeg's
+   `h264_nvenc` encoder check pass.
 3. Submit a credential-free sentinel job whose deliberately invalid input is rejected
    by `validateJob`. It must leave `pending`; `failed` proves Salad routed the request
    to this worker without touching S3, DoveRunner, or the application database.

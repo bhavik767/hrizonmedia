@@ -24,6 +24,8 @@ const SOURCE_KEY = /^sources\/upload_[0-9a-f-]{36}\/source\.(?:mp4|mkv)$/
 const PLAYREADY_DASH_SYSTEM_ID = '9a04f079-9840-4286-ab92-e65be0885f95'
 const WIDEVINE_DASH_SYSTEM_ID = 'edef8ba9-79d6-4ace-a3c8-27dcd51d21ed'
 const GPU_PROBE_TIMEOUT_MS = 10_000
+const ENCODING_OVERHEAD_MS = 5 * 60 * 1000
+const ENCODING_MODES = new Set(['cpu', 'nvenc'])
 const STORAGE_CONNECTION_TIMEOUT_MS = 10_000
 const STORAGE_SOCKET_TIMEOUT_MS = 5 * 60 * 1000
 export const STORAGE_PUBLICATION_CONCURRENCY = 4
@@ -42,6 +44,10 @@ export function validateJob(value) {
     !Number.isInteger(job.attempt) ||
     job.attempt < 1 ||
     job.attempt > 3 ||
+    !Number.isFinite(job.source?.durationSeconds) ||
+    job.source.durationSeconds <= 0 ||
+    !Number.isInteger(job.source?.height) ||
+    !Number.isInteger(job.source?.width) ||
     !Array.isArray(job.renditions) ||
     job.renditions.length < 1 ||
     job.renditions.some(
@@ -51,6 +57,7 @@ export function validateJob(value) {
         ![240, 270, 360, 480, 720, 1080].includes(height) ||
         !Number.isInteger(width) ||
         width < 2 ||
+        width % 2 !== 0 ||
         height > job.source?.height ||
         width > job.source?.width,
     )
@@ -76,30 +83,57 @@ function callbackURL(job, environment) {
   return new URL('/api/internal/transcode/callback', job.callbackOrigin).toString()
 }
 
-export function ffmpegArguments(job, sourcePath, clearDirectory, strategy = 'cpu') {
+function requireEncodingMode(value, errorMessage) {
+  if (!ENCODING_MODES.has(value)) throw new Error(errorMessage)
+  return value
+}
+
+function encodingMode(environment) {
+  return requireEncodingMode(
+    environment.TRANSCODER_ENCODING_MODE,
+    'TRANSCODER_ENCODING_MODE must be either cpu or nvenc.',
+  )
+}
+
+export function encodingTimeoutMs(job) {
+  return ENCODING_OVERHEAD_MS + job.source.durationSeconds * 2 * 1000
+}
+
+export function ffmpegArguments(job, sourcePath, clearDirectory, mode) {
+  requireEncodingMode(mode, 'Encoding mode must be explicit.')
   const videoArguments =
-    strategy === 'gpu'
+    mode === 'nvenc'
       ? ['-c:v', 'h264_nvenc', '-preset', 'p4', '-cq', '23']
       : ['-c:v', 'libx264', '-preset', 'medium', '-crf', '22']
-  return job.renditions.map(({ height, width }) => [
+  const splitInputs = job.renditions.map((_, index) => `[v${index}]`).join('')
+  const filter = [
+    `[0:v:0]split=${job.renditions.length}${splitInputs}`,
+    ...job.renditions.map(
+      ({ height, width }, index) =>
+        `[v${index}]scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2[v${index}out]`,
+    ),
+  ].join(';')
+  return [
     '-y',
     '-i',
     sourcePath,
-    '-map',
-    '0:v:0',
-    '-map',
-    '0:a:0?',
-    '-vf',
-    `scale=${width}:${height}`,
-    ...videoArguments,
-    '-c:a',
-    'aac',
-    '-b:a',
-    '128k',
-    '-movflags',
-    '+faststart',
-    path.join(clearDirectory, `${height}p.mp4`),
-  ])
+    '-filter_complex',
+    filter,
+    ...job.renditions.flatMap(({ height }, index) => [
+      '-map',
+      `[v${index}out]`,
+      '-map',
+      '0:a:0?',
+      ...videoArguments,
+      '-c:a',
+      'aac',
+      '-b:a',
+      '128k',
+      '-movflags',
+      '+faststart',
+      path.join(clearDirectory, `${height}p.mp4`),
+    ]),
+  ]
 }
 
 export async function mapWithConcurrency(items, concurrency, operation) {
@@ -135,6 +169,15 @@ export async function supportsGpuEncoding(run, environment) {
   }
 }
 
+export async function isWorkerReady(environment, run) {
+  try {
+    const mode = encodingMode(environment)
+    return mode === 'cpu' || (await supportsGpuEncoding(run, environment))
+  } catch {
+    return false
+  }
+}
+
 function logWorkerDiagnostic(level, event, job, stage) {
   console[level](
     JSON.stringify({
@@ -148,33 +191,18 @@ function logWorkerDiagnostic(level, event, job, stage) {
   )
 }
 
-function isRecoverableGpuFailure(error) {
-  return error?.code !== 'ETIMEDOUT' && !error?.killed && error?.signal !== 'SIGTERM'
-}
-
 async function encodeRenditions(job, sourcePath, clearDirectory, environment, run) {
   const executable = environment.FFMPEG_BIN ?? 'ffmpeg'
-  const encode = async (strategy) => {
-    for (const args of ffmpegArguments(job, sourcePath, clearDirectory, strategy)) {
-      await run(executable, args, { timeout: 12 * 60 * 1000 })
-    }
+  const mode = encodingMode(environment)
+  if (mode === 'nvenc' && !(await supportsGpuEncoding(run, environment))) {
+    throw new Error('Required NVIDIA NVENC capability is unavailable.')
   }
-  if (await supportsGpuEncoding(run, environment)) {
-    logWorkerDiagnostic('info', 'transcoder_stage_started', job, 'gpu_encoding')
-    try {
-      await encode('gpu')
-      logWorkerDiagnostic('info', 'transcoder_stage_completed', job, 'gpu_encoding')
-      return
-    } catch (error) {
-      if (!isRecoverableGpuFailure(error)) throw error
-      logWorkerDiagnostic('error', 'transcoder_gpu_fallback', job, 'gpu_encoding')
-    }
-  } else {
-    logWorkerDiagnostic('info', 'transcoder_gpu_unavailable', job, 'capability_selection')
-  }
-  logWorkerDiagnostic('info', 'transcoder_stage_started', job, 'cpu_encoding')
-  await encode('cpu')
-  logWorkerDiagnostic('info', 'transcoder_stage_completed', job, 'cpu_encoding')
+  const stage = mode === 'nvenc' ? 'nvenc_encoding' : 'cpu_encoding'
+  logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
+  await run(executable, ffmpegArguments(job, sourcePath, clearDirectory, mode), {
+    timeout: encodingTimeoutMs(job),
+  })
+  logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
 }
 
 function createStorageClient(environment) {
@@ -494,7 +522,13 @@ export async function processJob(value, dependencies = {}) {
 export function startServer(dependencies = {}) {
   const environment = dependencies.environment ?? process.env
   return createServer(async (request, response) => {
-    if (request.method === 'GET' && request.url === '/health') return response.end('ok')
+    if (request.method === 'GET' && request.url === '/health') {
+      if (await isWorkerReady(environment, dependencies.execFile ?? execFile)) {
+        return response.end('ok')
+      }
+      response.writeHead(503).end()
+      return
+    }
     if (request.method !== 'POST' || request.url !== '/jobs') {
       response.writeHead(404).end()
       return
