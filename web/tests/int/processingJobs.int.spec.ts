@@ -15,7 +15,7 @@ import {
   getFakeProviders,
   resetFakeMediaStorage,
 } from '@/media/providers/fake'
-import { PermanentTranscodeError, TransientTranscodeError } from '@/media/providers/errors'
+import { InvalidTranscodeMetadataError, TransientTranscodeError } from '@/media/providers/errors'
 import type { TranscodeProvider } from '@/media/providers/contracts'
 import { adaptiveRenditions, newProcessingJobData, runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
@@ -465,6 +465,12 @@ describe('reliable Processing Jobs', () => {
       overrideAccess: true,
       where: {},
     })
+    await payload.update({
+      collection: 'processing-jobs',
+      data: { renditions: [] },
+      id: originalJob.docs[0]!.id,
+      overrideAccess: true,
+    })
 
     const operator = await payload.create({
       collection: 'members',
@@ -477,13 +483,17 @@ describe('reliable Processing Jobs', () => {
       overrideAccess: true,
     })
     await createTestPlatformAdministrator(payload, operator)
+    const retryProvider = {
+      ...fakeTranscodeProvider,
+      queue: vi.fn(fakeTranscodeProvider.queue),
+    }
     const retried = await retryVisibleAssetProcessing(
       payload,
       operator,
       session.asset.mediaAssetId,
       {
         now: at('2026-09-14T12:00:07.000Z'),
-        provider: fakeTranscodeProvider,
+        provider: retryProvider,
       },
     )
     expect(retried.status).toBe('processing')
@@ -495,6 +505,11 @@ describe('reliable Processing Jobs', () => {
       where: {},
     })
     expect(retriedJob.docs[0]!.processingJobId).not.toBe(originalJob.docs[0]!.processingJobId)
+    expect(retryProvider.queue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        renditions: adaptiveRenditions({ durationSeconds: 2, height: 1080, width: 1920 }),
+      }),
+    )
   })
 
   it('recovers an expired processing timeout without stranding or duplicating the job', async () => {
@@ -537,10 +552,11 @@ describe('reliable Processing Jobs', () => {
   })
 
   it('does not offer manual retry after a permanent failure without its source', async () => {
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const provider: TranscodeProvider = {
       ...fakeTranscodeProvider,
       queue: async () => {
-        throw new PermanentTranscodeError('unsafe provider detail')
+        throw new InvalidTranscodeMetadataError('renditions')
       },
     }
     const session = await upload(fixture(), provider)
@@ -558,9 +574,14 @@ describe('reliable Processing Jobs', () => {
 
     const detail = await getVisibleAsset(payload, uploader, session.asset.mediaAssetId)
     expect(detail.canRetry).toBe(false)
+    expect(diagnostic).toHaveBeenCalledWith(expect.stringContaining('processing_dispatch_invalid'))
+    expect(diagnostic).toHaveBeenCalledWith(
+      expect.stringContaining('"metadataReason":"renditions"'),
+    )
     await expect(
       retryVisibleAssetProcessing(payload, uploader, session.asset.mediaAssetId, { now: start }),
     ).rejects.toMatchObject({ status: 409 })
+    diagnostic.mockRestore()
   })
 
   it('accepts a signed idempotent processing callback and records it', async () => {

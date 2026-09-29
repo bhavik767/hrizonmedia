@@ -15,7 +15,7 @@ import {
   type ProcessingJobId,
   type ProviderJobId,
 } from './identifiers'
-import { PermanentTranscodeError } from './providers/errors'
+import { InvalidTranscodeMetadataError, PermanentTranscodeError } from './providers/errors'
 import { getMediaProviders } from './providers'
 import { logMediaDiagnostic } from './diagnostics'
 import type { Rendition, SourceMedia, TranscodeProvider } from './providers/contracts'
@@ -334,8 +334,17 @@ async function dispatchQueuedJobs(
     } catch (error) {
       const attemptedJob = { ...job, attempts: candidate.attempts + 1 }
       if (error instanceof PermanentTranscodeError) {
+        logMediaDiagnostic(
+          'error',
+          error instanceof InvalidTranscodeMetadataError
+            ? 'processing_dispatch_invalid'
+            : 'processing_dispatch_rejected',
+          job.id,
+          error instanceof InvalidTranscodeMetadataError ? error.reason : undefined,
+        )
         await failProcessingJob(payload, attemptedJob, now, 'provider_rejected')
       } else {
+        logMediaDiagnostic('error', 'processing_dispatch_unavailable', job.id)
         await scheduleRetry(payload, attemptedJob, now, 'provider_unavailable')
       }
     }

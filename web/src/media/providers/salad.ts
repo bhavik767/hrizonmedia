@@ -2,7 +2,11 @@ import 'server-only'
 
 import type { ProviderJobId } from '../identifiers'
 import type { OutputVerification, Rendition, TranscodeProvider } from './contracts'
-import { PermanentTranscodeError, TransientTranscodeError } from './errors'
+import {
+  InvalidTranscodeMetadataError,
+  PermanentTranscodeError,
+  TransientTranscodeError,
+} from './errors'
 
 const SALAD_API_ORIGIN = 'https://api.salad.com/api/public'
 const NATIVE_JOB_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -73,7 +77,10 @@ function expectedRenditions(source: SaladJobInput['source']): Rendition[] {
       audioCodec: 'aac' as const,
       height: height as Rendition['height'],
       videoCodec: 'h264' as const,
-      width: Math.round((source.width * Math.min(height / source.height, standardWidth / source.width, 1)) / 2) * 2,
+      width:
+        Math.round(
+          (source.width * Math.min(height / source.height, standardWidth / source.width, 1)) / 2,
+        ) * 2,
     }))
 }
 
@@ -83,14 +90,10 @@ function matchesExpectedRenditions(actual: Rendition[], expected: Rendition[]): 
     actual.every((rendition, index) => {
       const expectedRendition = expected[index]
       if (!expectedRendition) return false
-      const keys = Object.keys(rendition)
+      const fields = Object.keys(expectedRendition) as Array<keyof Rendition>
       return (
-        keys.length === 4 &&
-        keys.every((key) => ['audioCodec', 'height', 'videoCodec', 'width'].includes(key)) &&
-        rendition.audioCodec === expectedRendition.audioCodec &&
-        rendition.height === expectedRendition.height &&
-        rendition.videoCodec === expectedRendition.videoCodec &&
-        rendition.width === expectedRendition.width
+        Object.keys(rendition).length === fields.length &&
+        fields.every((field) => rendition[field] === expectedRendition[field])
       )
     })
   )
@@ -113,22 +116,32 @@ function validatedInput(
   try {
     canonicalCallbackOrigin = new URL(callbackOrigin).origin
   } catch {
-    throw new PermanentTranscodeError('Transcode callback origin is invalid.')
+    throw new InvalidTranscodeMetadataError('callback_origin')
   }
-  if (
-    canonicalCallbackOrigin !== callbackOrigin ||
-    callbackSecret.length < 32 ||
-    !PROCESSING_JOB_ID.test(input.idempotencyKey) ||
-    !Number.isInteger(input.attempt) ||
-    input.attempt < 1 ||
-    input.attempt > 3 ||
-    !MEDIA_ASSET_ID.test(input.mediaAssetId) ||
-    !SOURCE_OBJECT_KEY.test(input.objectKey) ||
-    input.outputPrefix !== `outputs/${input.idempotencyKey}/` ||
-    !validSource ||
-    !matchesExpectedRenditions(input.renditions, expected)
-  ) {
-    throw new PermanentTranscodeError('Transcode job metadata is invalid.')
+  if (canonicalCallbackOrigin !== callbackOrigin) {
+    throw new InvalidTranscodeMetadataError('callback_origin')
+  }
+  if (callbackSecret.length < 32) {
+    throw new InvalidTranscodeMetadataError('callback_secret')
+  }
+  if (!PROCESSING_JOB_ID.test(input.idempotencyKey)) {
+    throw new InvalidTranscodeMetadataError('idempotency_key')
+  }
+  if (!Number.isInteger(input.attempt) || input.attempt < 1 || input.attempt > 3) {
+    throw new InvalidTranscodeMetadataError('attempt')
+  }
+  if (!MEDIA_ASSET_ID.test(input.mediaAssetId)) {
+    throw new InvalidTranscodeMetadataError('media_asset_id')
+  }
+  if (!SOURCE_OBJECT_KEY.test(input.objectKey)) {
+    throw new InvalidTranscodeMetadataError('object_key')
+  }
+  if (input.outputPrefix !== `outputs/${input.idempotencyKey}/`) {
+    throw new InvalidTranscodeMetadataError('output_prefix')
+  }
+  if (!validSource) throw new InvalidTranscodeMetadataError('source')
+  if (!matchesExpectedRenditions(input.renditions, expected)) {
+    throw new InvalidTranscodeMetadataError('renditions')
   }
   return {
     attempt: input.attempt,
@@ -192,7 +205,9 @@ async function requestJob(fetcher: typeof globalThis.fetch, url: string, init: R
     return readJob(await response.json())
   } catch (error) {
     if (error instanceof PermanentTranscodeError) throw error
-    throw new PermanentTranscodeError('SaladCloud returned an invalid job response.', { cause: error })
+    throw new PermanentTranscodeError('SaladCloud returned an invalid job response.', {
+      cause: error,
+    })
   }
 }
 
@@ -270,7 +285,9 @@ export function createSaladTranscodeProvider(
         })
       } catch (error) {
         if (error instanceof PermanentTranscodeError) throw error
-        throw new TransientTranscodeError('Canonical transcoder outputs are not ready.', { cause: error })
+        throw new TransientTranscodeError('Canonical transcoder outputs are not ready.', {
+          cause: error,
+        })
       }
       return 'ready'
     },
