@@ -75,7 +75,7 @@ describe('Demo mutation security', () => {
       new Request(
         'http://localhost:3000/api/demo/uploads/upload_00000000-0000-0000-0000-000000000000/parts/1/content',
         {
-          body: new Uint8Array(5 * 1024 * 1024 + 1),
+          body: new Uint8Array(16 * 1024 * 1024 + 1),
           headers: { origin: 'http://localhost:3000' },
           method: 'PUT',
         },
@@ -121,11 +121,11 @@ describe('Demo mutation security', () => {
 
   it('accepts the completion manifest size required for a supported 2 GB upload', async () => {
     const uploadSessionId = 'upload_00000000-0000-0000-0000-000000000000'
-    const parts = Array.from({ length: 410 }, (_, index) => ({
+    const parts = Array.from({ length: 128 }, (_, index) => ({
       checksumSHA256: 'a'.repeat(64),
       etag: 'b'.repeat(64),
       partNumber: index + 1,
-      size: 5 * 1024 * 1024,
+      size: 16 * 1024 * 1024,
     }))
     const response = await completeUpload(
       new Request(`http://localhost:3000/api/demo/uploads/${uploadSessionId}/complete`, {
@@ -138,12 +138,54 @@ describe('Demo mutation security', () => {
     expect(response.status).toBe(404)
   })
 
+  it('rejects a 129-part completion manifest', async () => {
+    const uploadSessionId = 'upload_00000000-0000-0000-0000-000000000000'
+    const parts = Array.from({ length: 129 }, (_, index) => ({
+      checksumSHA256: 'a'.repeat(64),
+      etag: 'b'.repeat(64),
+      partNumber: index + 1,
+      size: 16 * 1024 * 1024,
+    }))
+    const response = await completeUpload(
+      new Request(`http://localhost:3000/api/demo/uploads/${uploadSessionId}/complete`, {
+        body: JSON.stringify({ parts }),
+        headers: { 'content-type': 'application/json', origin: 'http://localhost:3000' },
+        method: 'POST',
+      }),
+      { params: Promise.resolve({ uploadSessionId }) },
+    )
+    expect(response.status).toBe(400)
+  })
+
+  it.each([
+    ['a gap', [1, 3]],
+    ['a duplicate', [1, 1]],
+    ['out-of-order parts', [2, 1]],
+  ])('rejects a completion manifest containing %s', async (_case, partNumbers) => {
+    const uploadSessionId = 'upload_00000000-0000-0000-0000-000000000000'
+    const parts = partNumbers.map((partNumber) => ({
+      checksumSHA256: 'a'.repeat(64),
+      etag: `etag-${partNumber}`,
+      partNumber,
+      size: 16 * 1024 * 1024,
+    }))
+    const response = await completeUpload(
+      new Request(`http://localhost:3000/api/demo/uploads/${uploadSessionId}/complete`, {
+        body: JSON.stringify({ parts }),
+        headers: { 'content-type': 'application/json', origin: 'http://localhost:3000' },
+        method: 'POST',
+      }),
+      { params: Promise.resolve({ uploadSessionId }) },
+    )
+    expect(response.status).toBe(400)
+  })
+
   it('cancels an oversized chunked upload instead of consuming the entire stream', async () => {
     const cancel = vi.fn()
     let chunks = 0
     const stream = new ReadableStream({
       pull(controller) {
-        if (chunks++ < 4) controller.enqueue(new Uint8Array(3 * 1024 * 1024))
+        if (chunks++ < 100) controller.enqueue(new Uint8Array(3 * 1024 * 1024))
         else controller.close()
       },
       cancel,
@@ -160,6 +202,7 @@ describe('Demo mutation security', () => {
     )
     expect(response.status).toBe(413)
     expect(cancel).toHaveBeenCalledOnce()
+    expect(chunks).toBeLessThan(100)
   })
 
   it('rejects a JSON null mutation as validation rather than a server error', async () => {

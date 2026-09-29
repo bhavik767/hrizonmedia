@@ -13,9 +13,74 @@ import { InvalidMediaError, MultipartUploadError } from '@/media/providers/error
 import { mkvFixture, mp4Fixture } from '../helpers/mediaFixtures'
 
 describe('deterministic media providers', () => {
+  it('advertises 16 MiB parts and validates full and final part targets', async () => {
+    resetFakeMediaStorage()
+    const partSize = 16 * 1024 * 1024
+    const uploadSessionId = newUploadSessionId()
+    const initiated = await fakeStorageProvider.initiateMultipart({
+      metadata: {
+        fileFingerprint: `lesson.mp4:${partSize + 1}:1234`,
+        fileName: 'lesson.mp4',
+        mimeType: 'video/mp4',
+        size: partSize + 1,
+      },
+      uploadSessionId,
+    })
+
+    expect(initiated.partSize).toBe(partSize)
+    await expect(
+      fakeStorageProvider.createPartUploadTarget({
+        checksumSHA256: 'a'.repeat(64),
+        partNumber: 1,
+        providerUploadId: initiated.providerUploadId,
+        size: partSize,
+        uploadSessionId,
+      }),
+    ).resolves.toMatchObject({ uploadURL: expect.any(String) })
+    await expect(
+      fakeStorageProvider.createPartUploadTarget({
+        checksumSHA256: 'b'.repeat(64),
+        partNumber: 2,
+        providerUploadId: initiated.providerUploadId,
+        size: 1,
+        uploadSessionId,
+      }),
+    ).resolves.toMatchObject({ uploadURL: expect.any(String) })
+    await expect(
+      fakeStorageProvider.createPartUploadTarget({
+        checksumSHA256: 'c'.repeat(64),
+        partNumber: 1,
+        providerUploadId: initiated.providerUploadId,
+        size: partSize - 1,
+        uploadSessionId,
+      }),
+    ).rejects.toBeInstanceOf(MultipartUploadError)
+  })
+
+  it('rejects a part larger than 16 MiB', async () => {
+    resetFakeMediaStorage()
+    const initiated = await fakeStorageProvider.initiateMultipart({
+      metadata: {
+        fileFingerprint: 'lesson.mp4:16777217:1234',
+        fileName: 'lesson.mp4',
+        mimeType: 'video/mp4',
+        size: 16 * 1024 * 1024 + 1,
+      },
+      uploadSessionId: newUploadSessionId(),
+    })
+
+    await expect(
+      fakeStorageProvider.receivePart({
+        bytes: new Uint8Array(16 * 1024 * 1024 + 1),
+        partNumber: 1,
+        providerUploadId: initiated.providerUploadId,
+      }),
+    ).rejects.toBeInstanceOf(MultipartUploadError)
+  })
+
   it('reconstructs multipart uploads and probes the completed object server-side', async () => {
     resetFakeMediaStorage()
-    const bytes = mp4Fixture(90, 5 * 1024 * 1024 + 1)
+    const bytes = mp4Fixture(90, 16 * 1024 * 1024 + 1)
     const uploadSessionId = newUploadSessionId()
     const initiated = await fakeStorageProvider.initiateMultipart({
       metadata: {
@@ -52,7 +117,7 @@ describe('deterministic media providers', () => {
 
   it('accepts completion receipts in transfer-completion order after verifying every part', async () => {
     resetFakeMediaStorage()
-    const bytes = mp4Fixture(90, 5 * 1024 * 1024 + 1)
+    const bytes = mp4Fixture(90, 16 * 1024 * 1024 + 1)
     const uploadSessionId = newUploadSessionId()
     const initiated = await fakeStorageProvider.initiateMultipart({
       metadata: {

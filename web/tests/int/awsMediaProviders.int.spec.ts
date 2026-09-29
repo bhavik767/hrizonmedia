@@ -25,10 +25,10 @@ import {
 } from '@/media/providers/s3'
 
 const metadata = {
-  fileFingerprint: 'lesson.mp4:5242881:fingerprint',
+  fileFingerprint: 'lesson.mp4:16777217:fingerprint',
   fileName: 'lesson.mp4',
   mimeType: 'video/mp4' as const,
-  size: 5 * 1024 * 1024 + 1,
+  size: 16 * 1024 * 1024 + 1,
 }
 
 function commandSender(responses: unknown[]) {
@@ -264,6 +264,7 @@ describe('S3 storage provider', () => {
     )
 
     const initiated = await provider.initiateMultipart({ metadata, uploadSessionId })
+    expect(initiated.partSize).toBe(16 * 1024 * 1024)
     expect(initiated.providerUploadId).toMatch(/^provider_upload_[0-9a-f-]{36}$/)
     expect(initiated.providerUploadId).not.toContain('native-upload-id')
     expect(initiated.providerUploadData).toBeTruthy()
@@ -284,7 +285,7 @@ describe('S3 storage provider', () => {
       partNumber: 1,
       providerUploadData: initiated.providerUploadData,
       providerUploadId: initiated.providerUploadId,
-      size: 5 * 1024 * 1024,
+      size: 16 * 1024 * 1024,
       uploadSessionId,
     })
     const uploadPart = presign.mock.calls[0]![1] as UploadPartCommand
@@ -292,7 +293,7 @@ describe('S3 storage provider', () => {
     expect(uploadPart.input).toMatchObject({
       Bucket: 'private-bucket',
       ChecksumSHA256: Buffer.from(checksumSHA256, 'hex').toString('base64'),
-      ContentLength: 5 * 1024 * 1024,
+      ContentLength: 16 * 1024 * 1024,
       Key: `sources/${uploadSessionId}/source.mp4`,
       PartNumber: 1,
       UploadId: 'native-upload-id',
@@ -304,6 +305,28 @@ describe('S3 storage provider', () => {
     expect(presign.mock.calls[0]![2]?.unhoistableHeaders).toEqual(
       new Set(['x-amz-checksum-sha256']),
     )
+    await provider.createPartUploadTarget({
+      checksumSHA256,
+      partNumber: 2,
+      providerUploadData: initiated.providerUploadData,
+      providerUploadId: initiated.providerUploadId,
+      size: 1,
+      uploadSessionId,
+    })
+    expect((presign.mock.calls[1]![1] as UploadPartCommand).input).toMatchObject({
+      ContentLength: 1,
+      PartNumber: 2,
+    })
+    await expect(
+      provider.createPartUploadTarget({
+        checksumSHA256,
+        partNumber: 1,
+        providerUploadData: initiated.providerUploadData,
+        providerUploadId: initiated.providerUploadId,
+        size: 16 * 1024 * 1024 - 1,
+        uploadSessionId,
+      }),
+    ).rejects.toBeInstanceOf(MultipartUploadError)
   })
 
   it('exhausts part pagination and rejects completion receipts that differ from storage', async () => {

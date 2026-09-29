@@ -1,8 +1,7 @@
 import { parseUploadSessionId } from '@/media/identifiers'
 import { receiveUploadPart } from '@/media/library'
+import { MULTIPART_PART_SIZE_BYTES } from '@/media/multipart'
 import { readBoundedBody, withAuthenticatedMember } from '@/media/request'
-
-const MAX_UPLOAD_PART_BYTES = 5 * 1024 * 1024
 
 function checksumFromHeader(request: Request): string | undefined {
   const value = request.headers.get('x-amz-checksum-sha256')
@@ -29,7 +28,7 @@ export async function PUT(
       member,
       parsedID,
       parsedPartNumber,
-      await readBoundedBody(request, MAX_UPLOAD_PART_BYTES),
+      await readBoundedBody(request, MULTIPART_PART_SIZE_BYTES),
       undefined,
       { checksumSHA256: checksumFromHeader(request) },
     )

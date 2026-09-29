@@ -3,7 +3,7 @@ import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 
 import type { ProviderJobId, ProviderUploadId } from '../identifiers'
-import type { CompletedPart } from '../multipart'
+import { MULTIPART_PART_SIZE_BYTES, type CompletedPart } from '../multipart'
 import type { UploadMetadata } from '../types'
 import type {
   DeliveryProvider,
@@ -15,7 +15,6 @@ import type {
 } from './contracts'
 import { InvalidMediaError, MultipartUploadError } from './errors'
 
-const FAKE_PART_SIZE = 5 * 1024 * 1024
 const MP4_SIGNATURE = new TextEncoder().encode('ftyp')
 const MKV_SIGNATURE = Uint8Array.from([0x1a, 0x45, 0xdf, 0xa3])
 const MVHD_SIGNATURE = new TextEncoder().encode('mvhd')
@@ -208,11 +207,11 @@ export const fakeStorageProvider: StorageProvider & {
     if (upload.uploadSessionId !== uploadSessionId) {
       throw new MultipartUploadError('Multipart upload does not belong to this session.')
     }
-    const totalParts = Math.ceil(upload.metadata.size / FAKE_PART_SIZE)
+    const totalParts = Math.ceil(upload.metadata.size / MULTIPART_PART_SIZE_BYTES)
     const expectedSize =
       partNumber === totalParts
-        ? upload.metadata.size - FAKE_PART_SIZE * (totalParts - 1)
-        : FAKE_PART_SIZE
+        ? upload.metadata.size - MULTIPART_PART_SIZE_BYTES * (totalParts - 1)
+        : MULTIPART_PART_SIZE_BYTES
     if (
       !checksumSHA256 ||
       !/^[0-9a-f]{64}$/.test(checksumSHA256) ||
@@ -253,7 +252,7 @@ export const fakeStorageProvider: StorageProvider & {
       partTargets: new Map(),
       uploadSessionId,
     })
-    return { partSize: FAKE_PART_SIZE, providerUploadId }
+    return { partSize: MULTIPART_PART_SIZE_BYTES, providerUploadId }
   },
 
   async listParts(providerUploadId) {
@@ -294,8 +293,10 @@ export const fakeStorageProvider: StorageProvider & {
     if (!Number.isSafeInteger(partNumber) || partNumber < 1) {
       throw new MultipartUploadError('Part number must be a positive integer.')
     }
-    if (bytes.byteLength === 0 || bytes.byteLength > FAKE_PART_SIZE) {
-      throw new MultipartUploadError(`Each part must contain at most ${FAKE_PART_SIZE} bytes.`)
+    if (bytes.byteLength === 0 || bytes.byteLength > MULTIPART_PART_SIZE_BYTES) {
+      throw new MultipartUploadError(
+        `Each part must contain at most ${MULTIPART_PART_SIZE_BYTES} bytes.`,
+      )
     }
     const upload = getUpload(providerUploadId)
     if (upload.objectKey) throw new MultipartUploadError('Multipart upload is already complete.')

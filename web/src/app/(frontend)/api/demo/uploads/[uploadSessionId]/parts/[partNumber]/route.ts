@@ -1,5 +1,6 @@
 import { parseUploadSessionId } from '@/media/identifiers'
 import { renewUploadPart } from '@/media/library'
+import { MULTIPART_PART_SIZE_BYTES } from '@/media/multipart'
 import { parseJSONBody, withAuthenticatedMember } from '@/media/request'
 
 export async function POST(
@@ -22,7 +23,7 @@ export async function POST(
         !/^[0-9a-f]{64}$/.test(part.checksumSHA256) ||
         !Number.isSafeInteger(part.size) ||
         part.size! <= 0 ||
-        part.size! > 5 * 1024 * 1024
+        part.size! > MULTIPART_PART_SIZE_BYTES
       ) {
         return Response.json({ error: 'Upload part metadata is invalid.' }, { status: 400 })
       }

@@ -49,8 +49,8 @@ Payload's per-identity login lockout. These limits assume one staging applicatio
 process; multiple replicas need a shared limiter before production enablement.
 
 JSON mutation bodies default to 16 KiB; completion manifests allow 128 KiB and up
-to 410 validated parts for the supported 2 GiB upload limit. Proxied fake upload
-parts are capped at 5 MiB and licence challenges at 64 KiB. Readers cancel streams
+to 128 validated parts for the supported 2 GiB upload limit. Proxied fake upload
+parts are capped at 16 MiB and licence challenges at 64 KiB. Readers cancel streams
 as soon as their limit is crossed, including undeclared/chunked requests.
 
 Unexpected failures and storage-validation errors expose fixed messages, not raw

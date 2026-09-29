@@ -17,7 +17,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 import type { ProcessingJobId } from '../identifiers'
-import type { CompletedPart } from '../multipart'
+import { MULTIPART_PART_SIZE_BYTES, type CompletedPart } from '../multipart'
 import type { MediaProbe, Rendition, StorageProvider } from './contracts'
 import { probeS3Object } from './ffprobe'
 import { InvalidMediaError, MultipartUploadError } from './errors'
@@ -29,7 +29,6 @@ import {
   validateSourceKey,
 } from './s3-upload-state'
 
-const PART_SIZE = 5 * 1024 * 1024
 const MAX_PARTS = 10_000
 
 export interface S3Configuration {
@@ -440,9 +439,11 @@ export function createS3StorageProvider(
       if (descriptor.uploadSessionId !== input.uploadSessionId) {
         throw new MultipartUploadError('Multipart upload does not belong to this session.')
       }
-      const totalParts = Math.ceil(descriptor.size / PART_SIZE)
+      const totalParts = Math.ceil(descriptor.size / MULTIPART_PART_SIZE_BYTES)
       const expectedSize =
-        input.partNumber === totalParts ? descriptor.size - PART_SIZE * (totalParts - 1) : PART_SIZE
+        input.partNumber === totalParts
+          ? descriptor.size - MULTIPART_PART_SIZE_BYTES * (totalParts - 1)
+          : MULTIPART_PART_SIZE_BYTES
       if (
         !input.checksumSHA256 ||
         !/^[0-9a-f]{64}$/.test(input.checksumSHA256) ||
@@ -534,7 +535,7 @@ export function createS3StorageProvider(
         uploadSessionId,
       })
       return {
-        partSize: PART_SIZE,
+        partSize: MULTIPART_PART_SIZE_BYTES,
         ...uploadState,
       }
     },
