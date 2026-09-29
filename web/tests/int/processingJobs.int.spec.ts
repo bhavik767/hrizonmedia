@@ -11,6 +11,7 @@ import {
   retryVisibleAssetProcessing,
 } from '@/media/library'
 import {
+  fakeStorageProvider,
   fakeTranscodeProvider,
   getFakeProviders,
   resetFakeMediaStorage,
@@ -138,6 +139,22 @@ describe('reliable Processing Jobs', () => {
     expect(detail.status).toBe('processing')
     expect(detail.renditions?.map(({ height }) => height)).toEqual([360, 480, 720])
     expect(at(detail.dispatchedAt!).getTime() - start.getTime()).toBeLessThanOrEqual(30_000)
+  })
+
+  it('sets the attempt deadline from fixed overhead plus twice the persisted source duration', async () => {
+    await upload(fixture('1920x1080:600'))
+
+    const jobs = await payload.find({
+      collection: 'processing-jobs',
+      limit: 1,
+      overrideAccess: true,
+      where: {},
+    })
+
+    expect(jobs.docs[0]).toMatchObject({
+      processingDeadlineAt: at('2026-09-14T12:35:00.000Z').toISOString(),
+      sourceDurationSeconds: 600,
+    })
   })
 
   it('preserves aspect ratio for narrow sources without upscaling', async () => {
@@ -512,8 +529,16 @@ describe('reliable Processing Jobs', () => {
     )
   })
 
-  it('recovers an expired processing timeout without stranding or duplicating the job', async () => {
-    const session = await upload()
+  it('keeps an expired attempt cancellation-pending until reconciliation then dispatches once', async () => {
+    const queue = vi.fn(fakeTranscodeProvider.queue)
+    const cancelAttempt = vi
+      .fn<TranscodeProvider['cancelAttempt']>()
+      .mockRejectedValueOnce(new TransientTranscodeError('provider body must stay private'))
+      .mockResolvedValue(undefined)
+    const provider = { ...fakeTranscodeProvider, cancelAttempt, queue }
+    const deletePrefix = vi.fn(fakeStorageProvider.deletePrefix)
+    const storage = { ...fakeStorageProvider, deletePrefix }
+    const session = await upload(fixture(), provider)
     const jobs = await payload.find({
       collection: 'processing-jobs',
       overrideAccess: true,
@@ -526,7 +551,62 @@ describe('reliable Processing Jobs', () => {
       overrideAccess: true,
     })
 
-    await runProcessingCycle(payload, { now: at('2026-09-14T12:00:02.000Z') })
+    await runProcessingCycle(payload, {
+      now: at('2026-09-14T12:00:02.000Z'),
+      provider,
+      storage,
+    })
+
+    await expect(
+      payload.findByID({
+        collection: 'processing-jobs',
+        id: jobs.docs[0]!.id,
+        overrideAccess: true,
+      }),
+    ).resolves.toMatchObject({
+      attempts: 1,
+      providerJobId: jobs.docs[0]!.providerJobId,
+      status: 'cancelling',
+    })
+    expect(cancelAttempt).toHaveBeenCalledWith({
+      attempt: 1,
+      processingJobId: jobs.docs[0]!.processingJobId,
+      providerJobId: jobs.docs[0]!.providerJobId,
+    })
+    expect(queue).toHaveBeenCalledOnce()
+    expect(deletePrefix).not.toHaveBeenCalled()
+
+    const secret = 'callback-test-secret'
+    const callbackBody = JSON.stringify({
+      attempt: 1,
+      callbackId: `worker:${jobs.docs[0]!.processingJobId}:1:ready-after-timeout`,
+      outputPrefix: processingOutputPrefix(jobs.docs[0]!.processingJobId),
+      processingJobId: jobs.docs[0]!.processingJobId,
+      status: 'ready',
+    })
+    const timestamp = String(Date.now())
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    const lateCallback = () =>
+      processingCallback(
+        new Request('http://localhost/api/internal/transcode/callback', {
+          body: callbackBody,
+          headers: {
+            'content-type': 'application/json',
+            'x-hrizon-signature': createHmac('sha256', secret)
+              .update(`${timestamp}.${callbackBody}`)
+              .digest('base64url'),
+            'x-hrizon-timestamp': timestamp,
+          },
+          method: 'POST',
+        }),
+      )
+    expect((await lateCallback()).status).toBe(409)
+
+    await runProcessingCycle(payload, {
+      now: at('2026-09-14T12:00:03.000Z'),
+      provider,
+      storage,
+    })
 
     const after = await payload.findByID({
       collection: 'processing-jobs',
@@ -536,9 +616,147 @@ describe('reliable Processing Jobs', () => {
     expect(after.attempts).toBe(2)
     expect(after.processingJobId).toBe(jobs.docs[0]!.processingJobId)
     expect(after.status).toBe('processing')
+    expect(queue).toHaveBeenCalledTimes(2)
+    expect(deletePrefix).toHaveBeenCalledWith(
+      `transcode-attempts/${jobs.docs[0]!.processingJobId}/1/`,
+    )
+    expect(deletePrefix).toHaveBeenCalledWith(processingOutputPrefix(jobs.docs[0]!.processingJobId))
+    expect((await lateCallback()).status).toBe(409)
     await expect(
       getVisibleAsset(payload, uploader, session.asset.mediaAssetId),
     ).resolves.toBeTruthy()
+    vi.unstubAllEnvs()
+  })
+
+  it('resumes cancellation reconciliation from persisted state after an application restart', async () => {
+    const cancelAttempt = vi.fn(fakeTranscodeProvider.cancelAttempt)
+    const queue = vi.fn(fakeTranscodeProvider.queue)
+    const provider = { ...fakeTranscodeProvider, cancelAttempt, queue }
+    await upload(fixture(), provider)
+    const job = (
+      await payload.find({ collection: 'processing-jobs', limit: 1, overrideAccess: true, where: {} })
+    ).docs[0]!
+    await payload.update({
+      collection: 'processing-jobs',
+      data: {
+        leasedUntil: at('2026-09-14T12:00:01.000Z').toISOString(),
+        leaseToken: 'stopped-reconciler:cancel',
+        status: 'cancelling',
+      },
+      id: job.id,
+      overrideAccess: true,
+    })
+
+    await runProcessingCycle(payload, {
+      now: at('2026-09-14T12:00:02.000Z'),
+      provider,
+      storage: fakeStorageProvider,
+    })
+
+    expect(cancelAttempt).toHaveBeenCalledWith({
+      attempt: 1,
+      processingJobId: job.processingJobId,
+      providerJobId: job.providerJobId,
+    })
+    expect(queue).toHaveBeenCalledTimes(2)
+    await expect(
+      payload.findByID({ collection: 'processing-jobs', id: job.id, overrideAccess: true }),
+    ).resolves.toMatchObject({ attempts: 2, status: 'processing' })
+  })
+
+  it('dispatches exactly one replacement when processing cycles reconcile concurrently', async () => {
+    let signalCancellationStarted!: () => void
+    const cancellationStarted = new Promise<void>((resolve) => {
+      signalCancellationStarted = resolve
+    })
+    let releaseCancellation!: () => void
+    const cancellationCanFinish = new Promise<void>((resolve) => {
+      releaseCancellation = resolve
+    })
+    const cancelAttempt = vi.fn(async () => {
+      signalCancellationStarted()
+      await cancellationCanFinish
+    })
+    const queue = vi.fn(fakeTranscodeProvider.queue)
+    const provider = { ...fakeTranscodeProvider, cancelAttempt, queue }
+    await upload(fixture(), provider)
+    const job = (
+      await payload.find({ collection: 'processing-jobs', limit: 1, overrideAccess: true, where: {} })
+    ).docs[0]!
+    await payload.update({
+      collection: 'processing-jobs',
+      data: { status: 'cancelling' },
+      id: job.id,
+      overrideAccess: true,
+    })
+
+    const cycles = Promise.all([
+      runProcessingCycle(payload, {
+        now: at('2026-09-14T12:00:02.000Z'),
+        provider,
+        storage: fakeStorageProvider,
+        workerId: 'reconciler-one',
+      }),
+      runProcessingCycle(payload, {
+        now: at('2026-09-14T12:00:02.000Z'),
+        provider,
+        storage: fakeStorageProvider,
+        workerId: 'reconciler-two',
+      }),
+    ])
+    await cancellationStarted
+    releaseCancellation()
+    await cycles
+
+    expect(cancelAttempt).toHaveBeenCalledOnce()
+    expect(queue).toHaveBeenCalledTimes(2)
+    await expect(
+      payload.findByID({ collection: 'processing-jobs', id: job.id, overrideAccess: true }),
+    ).resolves.toMatchObject({ attempts: 2, status: 'processing' })
+  })
+
+  it('cancels a timed-out third attempt and fails without dispatching a fourth', async () => {
+    const cancelAttempt = vi.fn(fakeTranscodeProvider.cancelAttempt)
+    const queue = vi.fn(fakeTranscodeProvider.queue)
+    const provider = { ...fakeTranscodeProvider, cancelAttempt, queue }
+    const session = await upload(fixture(), provider)
+    const job = (
+      await payload.find({ collection: 'processing-jobs', limit: 1, overrideAccess: true, where: {} })
+    ).docs[0]!
+    await payload.update({
+      collection: 'processing-jobs',
+      data: {
+        attempts: 3,
+        processingDeadlineAt: at('2026-09-14T12:00:01.000Z').toISOString(),
+      },
+      id: job.id,
+      overrideAccess: true,
+    })
+
+    await runProcessingCycle(payload, {
+      now: at('2026-09-14T12:00:02.000Z'),
+      provider,
+      storage: fakeStorageProvider,
+    })
+
+    expect(cancelAttempt).toHaveBeenCalledWith({
+      attempt: 3,
+      processingJobId: job.processingJobId,
+      providerJobId: job.providerJobId,
+    })
+    expect(queue).toHaveBeenCalledOnce()
+    await expect(
+      payload.findByID({ collection: 'processing-jobs', id: job.id, overrideAccess: true }),
+    ).resolves.toMatchObject({
+      attempts: 3,
+      failureMessage:
+        'Processing could not be completed. You can retry while the source is available.',
+      providerJobId: null,
+      status: 'failed',
+    })
+    await expect(
+      getVisibleAsset(payload, uploader, session.asset.mediaAssetId),
+    ).resolves.toMatchObject({ status: 'failed' })
   })
 
   it('measures a ten-minute 1080p asset becoming ready within fifteen minutes', async () => {

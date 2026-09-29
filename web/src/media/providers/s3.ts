@@ -259,6 +259,31 @@ export function createS3TranscodeTombstone(
   }
 }
 
+export function createS3AttemptSupersessionMarker(
+  configuration: S3Configuration,
+  dependencies: Pick<S3Dependencies, 'client'> = {},
+) {
+  const client = dependencies.client ?? createS3Client(configuration)
+  return async (processingJobId: string, attempt: number): Promise<void> => {
+    if (
+      !/^processing_[0-9a-f-]{36}$/.test(processingJobId) ||
+      !Number.isInteger(attempt) ||
+      attempt < 1 ||
+      attempt > 3
+    ) {
+      throw new Error('Processing Job attempt is invalid.')
+    }
+    await client.send(
+      new PutObjectCommand({
+        Body: '{}',
+        Bucket: configuration.bucket,
+        ContentType: 'application/json',
+        Key: `transcode-control/${processingJobId}/attempt-${attempt}.superseded`,
+      }),
+    )
+  }
+}
+
 function normalizeETag(value: string | undefined): string {
   return value?.replace(/^"|"$/g, '') ?? ''
 }

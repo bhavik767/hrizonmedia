@@ -34,6 +34,7 @@ type WorkerDependenciesOptions = {
   gpuAvailable?: boolean
   gpuEncodingFailure?: Error
   sourceFailure?: Error
+  supersededAtCheck?: number
 }
 
 function workerDependencies({
@@ -41,13 +42,22 @@ function workerDependencies({
   gpuAvailable = true,
   gpuEncodingFailure,
   sourceFailure,
+  supersededAtCheck,
 }: WorkerDependenciesOptions = {}) {
   const commands: WorkerCommand[] = []
   const publication = { active: 0, peak: 0 }
+  let supersessionChecks = 0
   const client = {
     send: vi.fn(async (command: WorkerCommand) => {
       commands.push(command)
       if (command.constructor.name === 'HeadObjectCommand') {
+        if (
+          command.input?.Key ===
+          `transcode-control/${job.processingJobId}/attempt-${job.attempt}.superseded`
+        ) {
+          supersessionChecks += 1
+          if (supersessionChecks >= (supersededAtCheck ?? Number.POSITIVE_INFINITY)) return {}
+        }
         throw Object.assign(new Error('missing'), { $metadata: { httpStatusCode: 404 } })
       }
       if (command.constructor.name === 'GetObjectCommand') {
@@ -112,6 +122,67 @@ function workerDependencies({
 }
 
 describe('Salad transcoder worker contract', () => {
+  it('does no expensive work when its Processing Job attempt is already superseded', async () => {
+    const dependencies = workerDependencies({ supersededAtCheck: 1 })
+
+    await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ cancelled: true })
+
+    expect(dependencies.execFile).not.toHaveBeenCalled()
+    expect(dependencies.fetch).not.toHaveBeenCalled()
+    expect(
+      dependencies.commands.some(
+        (command) => command.constructor.name === 'GetObjectCommand',
+      ),
+    ).toBe(false)
+  })
+
+  it('publishes no canonical output when superseded before publication', async () => {
+    const dependencies = workerDependencies({ supersededAtCheck: 2 })
+
+    await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ cancelled: true })
+
+    expect(
+      dependencies.commands.some(
+        (command) => command.constructor.name === 'CopyObjectCommand',
+      ),
+    ).toBe(false)
+    expect(dependencies.fetch).not.toHaveBeenCalled()
+    expect(
+      dependencies.commands.some(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `${job.outputPrefix}completion.json`,
+      ),
+    ).toBe(false)
+  })
+
+  it('removes canonical files copied before supersession and sends no ready callback', async () => {
+    const dependencies = workerDependencies({ supersededAtCheck: 3 })
+
+    await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ cancelled: true })
+
+    const copied = dependencies.commands.filter(
+      (command) => command.constructor.name === 'CopyObjectCommand',
+    )
+    const removed = dependencies.commands.filter(
+      (command) =>
+        command.constructor.name === 'DeleteObjectCommand' &&
+        command.input?.Key?.startsWith(job.outputPrefix),
+    )
+    expect(copied.length).toBeGreaterThan(0)
+    expect(removed.map((command) => command.input?.Key)).toEqual(
+      copied.map((command) => command.input?.Key),
+    )
+    expect(dependencies.fetch).not.toHaveBeenCalled()
+    expect(
+      dependencies.commands.some(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `${job.outputPrefix}completion.json`,
+      ),
+    ).toBe(false)
+  })
+
   it('accepts the server-owned ladder and builds H.264/AAC commands without upscaling', () => {
     expect(validateJob({ input: job })).toEqual(job)
     const commands = ffmpegArguments(job, '/work/source.mp4', '/work/clear')

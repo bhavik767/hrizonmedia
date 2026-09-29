@@ -9,6 +9,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
+  PutObjectCommand,
   UploadPartCommand,
 } from '@aws-sdk/client-s3'
 import { describe, expect, it, vi } from 'vitest'
@@ -17,7 +18,11 @@ import { newMediaAssetId, newProcessingJobId, newUploadSessionId } from '@/media
 import { createCloudFrontDeliveryProvider } from '@/media/providers/cloudfront'
 import { MultipartUploadError } from '@/media/providers/errors'
 import { getMediaProviders } from '@/media/providers'
-import { createS3OutputVerifier, createS3StorageProvider } from '@/media/providers/s3'
+import {
+  createS3AttemptSupersessionMarker,
+  createS3OutputVerifier,
+  createS3StorageProvider,
+} from '@/media/providers/s3'
 
 const metadata = {
   fileFingerprint: 'lesson.mp4:5242881:fingerprint',
@@ -32,6 +37,31 @@ function commandSender(responses: unknown[]) {
 }
 
 describe('S3 storage provider', () => {
+  it('writes an attempt-scoped supersession marker', async () => {
+    const processingJobId = newProcessingJobId()
+    const { client, send } = commandSender([{}])
+    const supersedeAttempt = createS3AttemptSupersessionMarker(
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
+      { client },
+    )
+
+    await supersedeAttempt(processingJobId, 2)
+
+    const marker = send.mock.calls[0]![0] as PutObjectCommand
+    expect(marker).toBeInstanceOf(PutObjectCommand)
+    expect(marker.input).toMatchObject({
+      Body: '{}',
+      Bucket: 'private-bucket',
+      ContentType: 'application/json',
+      Key: `transcode-control/${processingJobId}/attempt-2.superseded`,
+    })
+  })
+
   it('accepts canonical outputs only when the worker completion marker matches every rendition', async () => {
     const processingJobId = newProcessingJobId()
     const outputPrefix = `outputs/${processingJobId}/`

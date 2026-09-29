@@ -279,6 +279,17 @@ export function verifyDashProtection(manifestText) {
   }
 }
 
+async function isAttemptCancelled(client, bucket, job) {
+  return (
+    (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) ||
+    (await exists(
+      client,
+      bucket,
+      `transcode-control/${job.processingJobId}/attempt-${job.attempt}.superseded`,
+    ))
+  )
+}
+
 export async function processJob(value, dependencies = {}) {
   const job = validateJob(value)
   const environment = dependencies.environment ?? process.env
@@ -295,10 +306,9 @@ export async function processJob(value, dependencies = {}) {
   }
   const controlPrefix = `transcode-control/${job.processingJobId}/attempt-${job.attempt}`
   const completionKey = `${job.outputPrefix}completion.json`
+  if (await isAttemptCancelled(client, bucket, job)) return { cancelled: true }
   if (await exists(client, bucket, completionKey)) return { deduplicated: true }
   if (await exists(client, bucket, `${controlPrefix}.failed`)) return { failed: true }
-  if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`))
-    return { cancelled: true }
   try {
     await client.send(
       new PutObjectCommand({
@@ -379,9 +389,6 @@ export async function processJob(value, dependencies = {}) {
       throw new Error('DoveRunner HLS manifest is invalid.')
     }
     logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
-    if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) {
-      return { cancelled: true }
-    }
     const attemptPrefix = `transcode-attempts/${job.processingJobId}/${job.attempt}/`
     stage = 'attempt_upload'
     logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
@@ -405,6 +412,7 @@ export async function processJob(value, dependencies = {}) {
       )
     })
     logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
+    if (await isAttemptCancelled(client, bucket, job)) return { cancelled: true }
     stage = 'canonical_publication'
     logWorkerDiagnostic('info', 'transcoder_stage_started', job, stage)
     await mapWithConcurrency(deliveryFiles, STORAGE_PUBLICATION_CONCURRENCY, async (file) => {
@@ -417,7 +425,7 @@ export async function processJob(value, dependencies = {}) {
       )
     })
     logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
-    if (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) {
+    if (await isAttemptCancelled(client, bucket, job)) {
       await mapWithConcurrency(deliveryFiles, STORAGE_PUBLICATION_CONCURRENCY, async (file) => {
         await client.send(
           new DeleteObjectCommand({ Bucket: bucket, Key: `${job.outputPrefix}${file.relative}` }),

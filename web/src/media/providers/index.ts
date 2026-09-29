@@ -7,6 +7,7 @@ import { createCloudFrontDeliveryProvider } from './cloudfront'
 import { createDoveRunnerDrmProvider } from './doverunner'
 import { getFakeProviders } from './fake'
 import {
+  createS3AttemptSupersessionMarker,
   createS3OutputVerifier,
   createS3StorageProvider,
   createS3TranscodeTombstone,
@@ -46,6 +47,7 @@ export function getMediaProviders(environment: NodeJS.ProcessEnv = process.env):
         webhookURL: configuration.saladWebhookURL,
       },
       {
+        supersedeAttempt: createS3AttemptSupersessionMarker(s3Configuration),
         tombstone: createS3TranscodeTombstone(s3Configuration),
         verifyOutputs: createS3OutputVerifier(s3Configuration),
       },

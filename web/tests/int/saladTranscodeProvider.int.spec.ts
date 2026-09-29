@@ -17,7 +17,11 @@ const renditions = [
   { audioCodec: 'aac' as const, height: 1080 as const, videoCodec: 'h264' as const, width: 1920 },
 ]
 
-function provider(fetch: typeof globalThis.fetch, verifyOutputs = vi.fn(async () => undefined)) {
+function provider(
+  fetch: typeof globalThis.fetch,
+  verifyOutputs = vi.fn(async (): Promise<void> => undefined),
+  supersedeAttempt = vi.fn(async (): Promise<void> => undefined),
+) {
   return {
     transcode: createSaladTranscodeProvider(
       {
@@ -29,8 +33,9 @@ function provider(fetch: typeof globalThis.fetch, verifyOutputs = vi.fn(async ()
         callbackSecret: 'callback-secret-with-at-least-thirty-two-characters',
         webhookURL: 'https://staging.example.test/api/internal/salad/webhook',
       },
-      { fetch, tombstone: vi.fn(async () => undefined), verifyOutputs },
+      { fetch, supersedeAttempt, tombstone: vi.fn(async () => undefined), verifyOutputs },
     ),
+    supersedeAttempt,
     verifyOutputs,
   }
 }
@@ -214,5 +219,68 @@ describe('SaladCloud transcode provider', () => {
       expect.stringContaining(`/jobs/${nativeJobId}`),
       expect.objectContaining({ method: 'DELETE' }),
     )
+  })
+
+  it.each([202, 404])(
+    'supersedes attempt output before reconciling a Salad cancellation response (%s)',
+    async (status) => {
+      const order: string[] = []
+      const fetch = vi.fn(async () => {
+        order.push('provider')
+        return new Response(null, { status })
+      })
+      const supersedeAttempt = vi.fn(async () => {
+        order.push('marker')
+      })
+      const { transcode } = provider(fetch, undefined, supersedeAttempt)
+      const processingJobId = newProcessingJobId()
+
+      await expect(
+        transcode.cancelAttempt({
+          attempt: 2,
+          processingJobId,
+          providerJobId: `provider_job_${nativeJobId}`,
+        }),
+      ).resolves.toBeUndefined()
+
+      expect(supersedeAttempt).toHaveBeenCalledWith(processingJobId, 2)
+      expect(order).toEqual(['marker', 'provider'])
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining(`/jobs/${nativeJobId}`),
+        expect.objectContaining({ method: 'DELETE' }),
+      )
+    },
+  )
+
+  it.each([429, 500])('keeps retryable Salad cancellation responses pending (%s)', async (status) => {
+    const fetch = vi.fn(async () => new Response('private provider body', { status }))
+    const supersedeAttempt = vi.fn(async () => undefined)
+    const { transcode } = provider(fetch, undefined, supersedeAttempt)
+
+    await expect(
+      transcode.cancelAttempt({
+        attempt: 1,
+        processingJobId: newProcessingJobId(),
+        providerJobId: `provider_job_${nativeJobId}`,
+      }),
+    ).rejects.toBeInstanceOf(TransientTranscodeError)
+    expect(supersedeAttempt).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a network cancellation failure pending after writing supersession', async () => {
+    const fetch = vi.fn(async () => {
+      throw new Error('network response with credentials')
+    })
+    const supersedeAttempt = vi.fn(async () => undefined)
+    const { transcode } = provider(fetch as typeof globalThis.fetch, undefined, supersedeAttempt)
+
+    await expect(
+      transcode.cancelAttempt({
+        attempt: 1,
+        processingJobId: newProcessingJobId(),
+        providerJobId: `provider_job_${nativeJobId}`,
+      }),
+    ).rejects.toBeInstanceOf(TransientTranscodeError)
+    expect(supersedeAttempt).toHaveBeenCalledOnce()
   })
 })

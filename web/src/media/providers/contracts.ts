@@ -82,6 +82,11 @@ export interface StorageProvider {
 export interface TranscodeProvider {
   /** True only when this provider's ready result includes a verified PlayReady package. */
   producesPlayReadyPackage?: boolean
+  cancelAttempt(input: {
+    attempt: number
+    processingJobId: ProcessingJobId
+    providerJobId: ProviderJobId
+  }): Promise<void>
   deleteOutputs(input: {
     mediaAssetId: MediaAssetId
     processingJobId?: ProcessingJobId

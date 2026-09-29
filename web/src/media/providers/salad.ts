@@ -41,6 +41,7 @@ interface SaladJob {
 
 interface SaladDependencies {
   fetch?: typeof globalThis.fetch
+  supersedeAttempt(processingJobId: string, attempt: number): Promise<void>
   tombstone(processingJobId: string): Promise<void>
   verifyOutputs(input: OutputVerification): Promise<void>
 }
@@ -228,6 +229,22 @@ export function createSaladTranscodeProvider(
     producesPlayReadyPackage: true,
 
     verifyOutputs: dependencies.verifyOutputs,
+
+    async cancelAttempt({ attempt, processingJobId, providerJobId: id }) {
+      await dependencies.supersedeAttempt(processingJobId, attempt)
+      const response = await fetcher(`${queueURL}/${nativeJobId(id)}`, {
+        headers,
+        method: 'DELETE',
+        signal: AbortSignal.timeout(10_000),
+      }).catch((error) => {
+        throw new TransientTranscodeError('SaladCloud cancellation failed.', { cause: error })
+      })
+      if (response.ok || response.status === 404) return
+      if (response.status === 429 || response.status >= 500) {
+        throw new TransientTranscodeError('SaladCloud cancellation is temporarily unavailable.')
+      }
+      throw new PermanentTranscodeError('SaladCloud rejected job cancellation.')
+    },
 
     async deleteOutputs({ processingJobId, providerJobId: id }) {
       if (processingJobId) await dependencies.tombstone(processingJobId)

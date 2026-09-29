@@ -1350,7 +1350,7 @@ export interface ProcessingJob {
   providerJobId?: string | null;
   asset: number | MediaAsset;
   owner: number | Member;
-  status: 'queued' | 'dispatching' | 'processing' | 'ready' | 'failed';
+  status: 'queued' | 'dispatching' | 'processing' | 'cancelling' | 'ready' | 'failed';
   queuedAt: string;
   dispatchBy: string;
   nextAttemptAt: string;

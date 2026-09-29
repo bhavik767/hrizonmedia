@@ -22,6 +22,7 @@ import * as migration_20260923_040000_issue93_tenancy_cutover from './20260923_0
 import * as migration_20260923_050000_issue107_media_folders from './20260923_050000_issue107_media_folders';
 import * as migration_20260924_000000_organisation_invitation_recipients from './20260924_000000_organisation_invitation_recipients';
 import * as migration_20260928_123000_media_folders_locked_documents_relation from './20260928_123000_media_folders_locked_documents_relation';
+import * as migration_20260929_120000_issue145_attempt_cancellation from './20260929_120000_issue145_attempt_cancellation';
 
 export const migrations = [
   {
@@ -143,5 +144,10 @@ export const migrations = [
     up: migration_20260928_123000_media_folders_locked_documents_relation.up,
     down: migration_20260928_123000_media_folders_locked_documents_relation.down,
     name: '20260928_123000_media_folders_locked_documents_relation',
+  },
+  {
+    up: migration_20260929_120000_issue145_attempt_cancellation.up,
+    down: migration_20260929_120000_issue145_attempt_cancellation.down,
+    name: '20260929_120000_issue145_attempt_cancellation',
   },
 ];
