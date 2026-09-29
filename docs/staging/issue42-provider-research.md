@@ -27,7 +27,7 @@ integration decisions derived from those sources, not provider promises.
 | DoveRunner packaging | Use the CLI packager's DASH path for the initial Chrome/Edge Widevine proof. Use the existing immutable `drm_${processingJobId}` as the unique packaging/licensing Content ID, deterministic alphanumeric scratch filenames, and at least twice the input size as scratch space. |
 | DoveRunner licensing | Use DoveRunner token-proxy integration, not direct client token delivery or the deprecated callback. `DrmProvider.acquireTemporaryLicence` receives the browser challenge after the backend has rechecked entitlement, creates a token for the exact Content ID, forwards token plus challenge to DoveRunner, and returns the raw licence bytes. Use `response_format=original`. |
 | Temporary streaming licence | Use policy v2 with `persistent:false` and `license_duration:0`. The five minutes limits when playback may start/acquire a licence; the issued nonpersistent streaming licence may finish the viewing session and cannot be retained for offline playback. |
-| Pilot capacity | Dedicated staging queue/group; one job at a time per replica; autoscaling minimum 0, maximum 2. Discover current eligible GPU classes, live availability and rate at provisioning time; benchmark the 15-minute readiness target instead of freezing a historical GPU/rate. |
+| Pilot capacity | Dedicated staging queue/group; one job at a time per replica; keep one warm replica for interactive uploads and raise provider/application limits together when parallel work is enabled. Discover current eligible hardware, live availability and rate at provisioning time; benchmark dispatch and readiness instead of freezing a historical rate. |
 
 ## AWS S3: multipart and trusted probing
 
@@ -201,9 +201,14 @@ before the application is ready. ([creating a Job Queue](https://docs.salad.com/
 
 ### Capacity and cost contract
 
-For staging set worker concurrency to one per replica and autoscaling minimum 0,
-maximum 2, so provider concurrency cannot exceed the app's two-job default.
-Scale-to-zero avoids idle compute but introduces cold starts. Salad documents
+For an interactive staging Demo, set worker concurrency to one per replica and keep
+at least one warm replica. The 29 September 2026 production incident measured a
+298-second queue wait from scale-to-zero for a 15-second Media Asset, versus 72
+seconds of actual worker processing; the live group was therefore changed to
+`min_replicas: 1`, `max_replicas: 1`. Increase both the provider and application
+limits together when parallel processing is required. Scale-to-zero remains suitable
+only for explicitly non-interactive environments that accept multi-minute cold
+starts. Salad documents
 both bounds and warns that downscaling can remove nodes that are still working,
 so graceful shutdown and leases/checkpoints are required. ([autoscaling
 settings](https://docs.salad.com/container-engine/reference/autoscaling/settings))

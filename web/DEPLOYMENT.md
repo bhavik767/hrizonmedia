@@ -54,8 +54,12 @@ stack that intentionally uses deterministic fake media providers.
 
 After deployment, confirm PostgreSQL, app, scheduler, and proxy are running,
 `/health` returns HTTP 200 locally and publicly, and the application logs show
-successful `media_cycle_completed` events. Exercise one upload through processing
-and playback before declaring a media change complete.
+successful `media_cycle_completed` events. Also read the Salad container group back
+through its API and require `replicas: 1`, `queue_autoscaler.min_replicas: 1`, and
+one instance reporting both `state: running` and `ready: true`. Exercise one upload
+through processing and playback before declaring a media change complete; its Salad
+job should enter `started` within 30 seconds of `created`. A zero-replica group is a
+failed readiness check even when the Hetzner application is healthy.
 
 To roll back, put the last known-good immutable tag in `deploy.env` and run the
 same `docker compose ... up -d` command. Do not delete the previous image until

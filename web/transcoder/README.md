@@ -38,17 +38,21 @@ instances, which provides no functional proof that the image, probes, or queue r
 work. Bootstrap staging with this sequence instead:
 
 1. Create the group through the public API with its `queue_connection`, queue
-   autoscaler, probes, and **one desired replica**. Keep the autoscaler's eventual
-   `min_replicas` at zero and `max_replicas` within the application concurrency limit.
+   autoscaler, probes, and **one desired replica**. Keep `min_replicas` at one for
+   the staging Demo and `max_replicas` within the application concurrency limit.
+   Scale-to-zero is not an acceptable interactive-upload baseline: the 29 September
+   2026 incident spent 298 seconds waiting for a worker before 72 seconds of actual
+   processing.
 2. Wait for one instance to report `running`, `started: true`, and `ready: true`.
    Image download and allocation may take several minutes and are separate from the
    parent group's lifecycle status.
 3. Submit a credential-free sentinel job whose deliberately invalid input is rejected
    by `validateJob`. It must leave `pending`; `failed` proves Salad routed the request
    to this worker without touching S3, DoveRunner, or the application database.
-4. Only after the sentinel is delivered may the group scale to zero. Then submit a
-   real fixture and prove that queue depth causes a cold worker to become ready and
-   process it.
+4. Leave one instance warm, submit a real fixture, and prove the job starts within
+   30 seconds. A deliberate scale-to-zero test may be run separately to measure cold
+   allocation, but restore and verify `replicas: 1`, `min_replicas: 1`, and one
+   `running`/`ready` instance before accepting uploads.
 
 Run the credential-free image proof before creating or updating a Salad group:
 
