@@ -283,6 +283,7 @@ async function sendCallback(job, status, environment, fetcher) {
     callbackId: `worker:${job.processingJobId}:${job.attempt}:${status}`,
     outputPrefix: job.outputPrefix,
     processingJobId: job.processingJobId,
+    ...(status === 'failed' ? { retryFailure: true } : {}),
     status,
   })
   const signature = createHmac('sha256', job.callbackSecret)

@@ -370,6 +370,7 @@ describe('Salad transcoder worker contract', () => {
         attempt: job.attempt,
         callbackId: `worker:${job.processingJobId}:${job.attempt}:failed`,
         processingJobId: job.processingJobId,
+        retryFailure: true,
         status: 'failed',
       })
     } finally {
