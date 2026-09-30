@@ -618,6 +618,40 @@ describe('Salad transcoder worker contract', () => {
     }
   })
 
+  it('persists only a redacted diagnostic for an otherwise unclassified packaging failure', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const opaqueValue = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    const packagingFailure = Object.assign(new Error('packaging failed'), {
+      code: 1,
+      stderr: `Packaging unexpectedly aborted never-log-this-encryption-token ${opaqueValue} https://example.invalid/private`,
+    })
+    const dependencies = workerDependencies({ packagingFailure })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      const marker = dependencies.commands.find(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+      )
+      const body = String(marker?.input?.Body)
+
+      expect(JSON.parse(body)).toMatchObject({
+        exitCode: 1,
+        providerDiagnostic: 'Packaging unexpectedly aborted <redacted> <redacted> <url>',
+        stage: 'packaging',
+        version: 1,
+      })
+      expect(body).not.toContain('never-log-this-encryption-token')
+      expect(body).not.toContain(opaqueValue)
+      expect(body).not.toContain('example.invalid')
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
   it('requests separately named DASH/CENC and HLS/CBCS delivery packages', () => {
     expect(
       packagerArguments(
