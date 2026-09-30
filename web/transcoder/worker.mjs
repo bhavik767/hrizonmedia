@@ -197,17 +197,17 @@ function logWorkerDiagnostic(level, event, job, stage) {
 }
 
 function failureMarker(error, stage) {
-  const stderr = String(error?.stderr ?? '')
-  const providerResponseCode = stderr.match(/response error code\s*:?\s*(\d+)/i)?.[1]
-  const providerOperation = stderr.match(/ERROR:\s*([A-Za-z0-9_]+\(\)) failed/i)?.[1]
+  const providerOutput = `${String(error?.stdout ?? '')}\n${String(error?.stderr ?? '')}`
+  const providerResponseCode = providerOutput.match(/response error code\s*:?\s*(\d+)/i)?.[1]
+  const providerOperation = providerOutput.match(/ERROR:\s*([A-Za-z0-9_]+\(\)) failed/i)?.[1]
   const exitCode = Number.isInteger(error?.code) ? error.code : undefined
-  const classification = /check siteid or package key/i.test(stderr)
+  const classification = /check siteid or package key/i.test(providerOutput)
     ? 'provider_credentials_rejected'
-    : /can not parse the enc token/i.test(stderr)
+    : /can not parse the enc token/i.test(providerOutput)
       ? 'provider_token_invalid'
-      : /unable to communicate with packageManager server via --enc_token/i.test(stderr)
+      : /unable to communicate with packageManager server via --enc_token/i.test(providerOutput)
         ? 'provider_kms_communication_failed'
-        : /cpix|kms/i.test(stderr)
+        : /cpix|kms/i.test(providerOutput)
           ? 'provider_kms_request_failed'
           : undefined
 

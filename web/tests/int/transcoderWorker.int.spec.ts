@@ -587,6 +587,37 @@ describe('Salad transcoder worker contract', () => {
     }
   })
 
+  it('classifies DoveRunner failures emitted on stdout without persisting provider output', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const packagingFailure = Object.assign(new Error('packaging failed'), {
+      code: 1,
+      stdout:
+        '*** CurlHttpError Exception ***\nERROR: Unable to communicate with packageManager server via --enc_token.\nhttps://example.invalid/private-path',
+    })
+    const dependencies = workerDependencies({ packagingFailure })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      const marker = dependencies.commands.find(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+      )
+
+      expect(JSON.parse(String(marker?.input?.Body))).toEqual({
+        classification: 'provider_kms_communication_failed',
+        exitCode: 1,
+        stage: 'packaging',
+        version: 1,
+      })
+      expect(String(marker?.input?.Body)).not.toContain('example.invalid')
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
   it('requests separately named DASH/CENC and HLS/CBCS delivery packages', () => {
     expect(
       packagerArguments(
