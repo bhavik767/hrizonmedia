@@ -220,9 +220,29 @@ function createStorageClient(environment) {
 }
 
 export function packagerArguments(job, clearFiles, packagedDirectory, encryptionToken) {
+  let credentialArguments = ['--enc_token', encryptionToken]
+  try {
+    const credentials = JSON.parse(Buffer.from(encryptionToken, 'base64').toString('utf8'))
+    if (
+      credentials &&
+      typeof credentials === 'object' &&
+      /^[A-Za-z0-9]{4}$/.test(credentials.site_id) &&
+      typeof credentials.access_key === 'string' &&
+      credentials.access_key.length > 0
+    ) {
+      credentialArguments = [
+        '--site_id',
+        credentials.site_id,
+        '--access_key',
+        credentials.access_key,
+      ]
+    }
+  } catch {
+    // Current CPIX encryption tokens are passed through unchanged. Older
+    // deployments store a base64-encoded site/access-key credential bundle.
+  }
   return [
-    '--enc_token',
-    encryptionToken,
+    ...credentialArguments,
     '--content_id',
     job.drmContentId,
     '--dash',

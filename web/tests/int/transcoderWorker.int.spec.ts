@@ -530,6 +530,8 @@ describe('Salad transcoder worker contract', () => {
       ),
     ).toEqual(
       expect.arrayContaining([
+        '--enc_token',
+        'enc-token',
         '--dash',
         '--hls',
         '--mpd_filename',
@@ -538,6 +540,31 @@ describe('Salad transcoder worker contract', () => {
         'master.m3u8',
       ]),
     )
+  })
+
+  it('uses a configured legacy DoveRunner credential bundle without treating it as an encryption token', () => {
+    const credentials = Buffer.from(
+      JSON.stringify({ access_key: 'legacy-access-key', site_id: 'GXIW' }),
+    ).toString('base64')
+    const arguments_ = packagerArguments(
+      job,
+      [{ absolute: '/work/clear/video-360.mp4' }],
+      '/work/packaged',
+      credentials,
+    )
+
+    expect(arguments_).toEqual(
+      expect.arrayContaining([
+        '--site_id',
+        'GXIW',
+        '--access_key',
+        'legacy-access-key',
+        '--dash',
+        '--hls',
+      ]),
+    )
+    expect(arguments_).not.toContain('--enc_token')
+    expect(arguments_).not.toContain(credentials)
   })
 
   it('normalizes DoveRunner v4 combined DASH and HLS output for delivery', () => {
