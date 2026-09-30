@@ -208,12 +208,13 @@ function safeProviderDiagnostic(providerOutput, encryptionToken) {
   for (const secret of secrets.filter((value) => typeof value === 'string' && value.length > 0)) {
     diagnostic = diagnostic.replaceAll(secret, '<redacted>')
   }
-  return diagnostic
+  const sanitized = diagnostic
     .replace(/https?:\/\/\S+/gi, '<url>')
     .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '<ip>')
     .replace(/\b[A-Za-z0-9+/=_-]{24,}\b/g, '<redacted>')
     .trim()
-    .slice(0, 2_000)
+  if (sanitized.length <= 4_000) return sanitized
+  return `${sanitized.slice(0, 2_000)}\n<diagnostic-truncated>\n${sanitized.slice(-2_000)}`
 }
 
 function failureMarker(error, stage, encryptionToken) {
