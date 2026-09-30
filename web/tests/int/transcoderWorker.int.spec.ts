@@ -544,7 +544,7 @@ describe('Salad transcoder worker contract', () => {
 
   it('uses a configured legacy DoveRunner credential bundle without treating it as an encryption token', () => {
     const credentials = Buffer.from(
-      JSON.stringify({ access_key: 'legacy-access-key', site_id: 'GXIW' }),
+      JSON.stringify({ access_key: '0123456789abcdef0123456789ABCDEF', site_id: 'GXIW' }),
     ).toString('base64')
     const arguments_ = packagerArguments(
       job,
@@ -558,13 +558,33 @@ describe('Salad transcoder worker contract', () => {
         '--site_id',
         'GXIW',
         '--access_key',
-        'legacy-access-key',
+        '0123456789abcdef0123456789ABCDEF',
         '--dash',
         '--hls',
       ]),
     )
     expect(arguments_).not.toContain('--enc_token')
     expect(arguments_).not.toContain(credentials)
+  })
+
+  it('passes a CPIX KMS token through even when its payload contains site and access keys', () => {
+    const kmsToken = Buffer.from(
+      JSON.stringify({
+        access_key: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
+        site_id: 'GXIW',
+      }),
+    ).toString('base64')
+
+    const arguments_ = packagerArguments(
+      job,
+      [{ absolute: '/work/clear/video-360.mp4' }],
+      '/work/packaged',
+      kmsToken,
+    )
+
+    expect(arguments_).toEqual(expect.arrayContaining(['--enc_token', kmsToken, '--dash', '--hls']))
+    expect(arguments_).not.toContain('--site_id')
+    expect(arguments_).not.toContain('--access_key')
   })
 
   it('normalizes DoveRunner v4 combined DASH and HLS output for delivery', () => {

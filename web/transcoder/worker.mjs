@@ -228,7 +228,7 @@ export function packagerArguments(job, clearFiles, packagedDirectory, encryption
       typeof credentials === 'object' &&
       /^[A-Za-z0-9]{4}$/.test(credentials.site_id) &&
       typeof credentials.access_key === 'string' &&
-      credentials.access_key.length > 0
+      /^[A-Za-z0-9]{32}$/.test(credentials.access_key)
     ) {
       credentialArguments = [
         '--site_id',
