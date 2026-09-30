@@ -98,7 +98,7 @@ function encodingMode(environment) {
 }
 
 export function encodingTimeoutMs(job) {
-  return ENCODING_OVERHEAD_MS + job.source.durationSeconds * 2 * 1000
+  return Math.ceil(ENCODING_OVERHEAD_MS + job.source.durationSeconds * 2 * 1000)
 }
 
 export function ffmpegArguments(job, sourcePath, clearDirectory, mode) {

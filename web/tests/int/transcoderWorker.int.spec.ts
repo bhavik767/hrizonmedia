@@ -322,6 +322,15 @@ describe('Salad transcoder worker contract', () => {
     expect(encodingTimeoutMs(job)).toBe(25 * 60 * 1000)
   })
 
+  it('returns an integer timeout for fractional source durations', () => {
+    const fractionalDurationJob = {
+      ...job,
+      source: { ...job.source, durationSeconds: 15.582132 },
+    }
+
+    expect(encodingTimeoutMs(fractionalDurationJob)).toBe(331_165)
+  })
+
   it('bounds concurrent publication work', async () => {
     let active = 0
     let peak = 0
