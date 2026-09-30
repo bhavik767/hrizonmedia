@@ -46,7 +46,7 @@ const renditionLadderCases: Array<[string, TestRendition[]]> = [
   ],
 ]
 
-type WorkerCommand = { constructor: { name: string }; input?: { Key?: string } }
+type WorkerCommand = { constructor: { name: string }; input?: { Body?: string; Key?: string } }
 type WorkerDependenciesOptions = {
   callbackOK?: boolean
   callbackStatus?: number
@@ -54,6 +54,7 @@ type WorkerDependenciesOptions = {
   gpuAvailable?: boolean
   gpuEncoderAvailable?: boolean
   gpuEncodingFailure?: Error
+  packagingFailure?: Error
   sourceFailure?: Error
   supersededAtCheck?: number
 }
@@ -65,6 +66,7 @@ function workerDependencies({
   gpuAvailable = true,
   gpuEncoderAvailable = true,
   gpuEncodingFailure,
+  packagingFailure,
   sourceFailure,
   supersededAtCheck,
 }: WorkerDependenciesOptions = {}) {
@@ -116,6 +118,7 @@ function workerDependencies({
       await Promise.all(outputs.map((output) => writeFile(output, 'clear video')))
       return { stdout: '' }
     }
+    if (packagingFailure) throw packagingFailure
     const packagedDirectory = args[args.indexOf('-o') + 1]!
     await mkdir(`${packagedDirectory}/video`, { recursive: true })
     await Promise.all([
@@ -514,6 +517,39 @@ describe('Salad transcoder worker contract', () => {
         ready: true,
       })
       expect(diagnostics).toHaveBeenCalledWith(expect.stringContaining('"stage":"ready_callback"'))
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
+  it('records a non-secret provider failure classification in the attempt marker', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const packagingFailure = Object.assign(new Error('packaging failed'), {
+      code: 210,
+      stderr:
+        'response error code: 1001\nmessage: Please check siteid or package key in console page.\nERROR: GetServerInfo() failed',
+    })
+    const dependencies = workerDependencies({ packagingFailure })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      const marker = dependencies.commands.find(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+      )
+
+      expect(JSON.parse(String(marker?.input?.Body))).toEqual({
+        classification: 'provider_credentials_rejected',
+        exitCode: 210,
+        providerOperation: 'GetServerInfo()',
+        providerResponseCode: 1001,
+        stage: 'packaging',
+        version: 1,
+      })
+      expect(String(marker?.input?.Body)).not.toContain(job.callbackSecret)
     } finally {
       diagnostics.mockRestore()
       progress.mockRestore()

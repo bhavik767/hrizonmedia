@@ -193,6 +193,27 @@ function logWorkerDiagnostic(level, event, job, stage) {
   )
 }
 
+function failureMarker(error, stage) {
+  const stderr = String(error?.stderr ?? '')
+  const providerResponseCode = stderr.match(/response error code\s*:?\s*(\d+)/i)?.[1]
+  const providerOperation = stderr.match(/ERROR:\s*([A-Za-z0-9_]+\(\)) failed/i)?.[1]
+  const exitCode = Number.isInteger(error?.code) ? error.code : undefined
+  const classification = /check siteid or package key/i.test(stderr)
+    ? 'provider_credentials_rejected'
+    : /cpix|kms/i.test(stderr)
+      ? 'provider_kms_request_failed'
+      : undefined
+
+  return JSON.stringify({
+    version: 1,
+    stage,
+    ...(exitCode === undefined ? {} : { exitCode }),
+    ...(providerResponseCode ? { providerResponseCode: Number(providerResponseCode) } : {}),
+    ...(providerOperation ? { providerOperation } : {}),
+    ...(classification ? { classification } : {}),
+  })
+}
+
 async function encodeRenditions(job, sourcePath, clearDirectory, environment, run) {
   const executable = environment.FFMPEG_BIN ?? 'ffmpeg'
   const mode = encodingMode(environment)
@@ -519,10 +540,15 @@ export async function processJob(value, dependencies = {}) {
       )
     })
     return { ready: true }
-  } catch {
+  } catch (error) {
     logWorkerDiagnostic('error', 'transcoder_stage_failed', job, stage)
     await client.send(
-      new PutObjectCommand({ Body: '{}', Bucket: bucket, Key: `${controlPrefix}.failed` }),
+      new PutObjectCommand({
+        Body: failureMarker(error, stage),
+        Bucket: bucket,
+        ContentType: 'application/json',
+        Key: `${controlPrefix}.failed`,
+      }),
     )
     try {
       await sendCallback(job, 'failed', environment, fetcher)
