@@ -75,7 +75,7 @@ describe('SaladCloud transcode provider', () => {
         attempt: 1,
         callbackOrigin: 'https://staging.example.test',
         callbackSecret: 'callback-secret-with-at-least-thirty-two-characters',
-        drmContentId: `drm_${processingJobId}`,
+        drmContentId: `drm${processingJobId.slice('processing_'.length).replaceAll('-', '')}`,
         mediaAssetId,
         objectKey: 'sources/upload_00000000-0000-4000-8000-000000000000/source.mp4',
         outputPrefix: processingOutputPrefix(processingJobId),

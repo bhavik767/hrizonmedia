@@ -18,7 +18,10 @@ import {
 } from '@aws-sdk/client-s3'
 import { NodeHttpHandler } from '@smithy/node-http-handler'
 
-import { attemptSupersessionMarkerKey } from '../src/media/transcode-control.mjs'
+import {
+  attemptSupersessionMarkerKey,
+  processingDrmContentId,
+} from '../src/media/transcode-control.mjs'
 
 const execFile = promisify(execFileCallback)
 const PROCESSING_ID = /^processing_[0-9a-f-]{36}$/
@@ -42,7 +45,7 @@ export function validateJob(value) {
     !PROCESSING_ID.test(job.processingJobId) ||
     job.outputPrefix !== `outputs/${job.processingJobId}/` ||
     !SOURCE_KEY.test(job.objectKey) ||
-    !/^drm_processing_[0-9a-f-]{36}$/.test(job.drmContentId) ||
+    job.drmContentId !== processingDrmContentId(job.processingJobId) ||
     !Number.isInteger(job.attempt) ||
     job.attempt < 1 ||
     job.attempt > 3 ||

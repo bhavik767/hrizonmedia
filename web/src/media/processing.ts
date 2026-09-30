@@ -24,6 +24,7 @@ import type {
   StorageProvider,
   TranscodeProvider,
 } from './providers/contracts'
+import { processingDrmContentId } from './transcode-control.mjs'
 
 const DISPATCH_DEADLINE_MS = 30_000
 const LEASE_DURATION_MS = 30_000
@@ -130,7 +131,7 @@ export async function setProcessingAssetStatus(
   const playbackData =
     status === 'ready'
       ? {
-          drmContentId: `drm_${job.processingJobId}`,
+          drmContentId: processingDrmContentId(job.processingJobId),
           expiresAt:
             asset.expiresAt ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           playReadyPackaged,

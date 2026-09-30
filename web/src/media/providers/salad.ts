@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { ProcessingJobId, ProviderJobId } from '../identifiers'
+import { processingDrmContentId } from '../transcode-control.mjs'
 import type { OutputVerification, Rendition, TranscodeProvider } from './contracts'
 import {
   InvalidTranscodeMetadataError,
@@ -148,7 +149,7 @@ function validatedInput(
     attempt: input.attempt,
     callbackOrigin: canonicalCallbackOrigin,
     callbackSecret,
-    drmContentId: `drm_${input.idempotencyKey}`,
+    drmContentId: processingDrmContentId(input.idempotencyKey),
     mediaAssetId: input.mediaAssetId,
     objectKey: input.objectKey,
     outputPrefix: input.outputPrefix,

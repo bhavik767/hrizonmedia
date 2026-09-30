@@ -94,6 +94,7 @@ describe('DoveRunner DRM provider', () => {
   it('proxies a Widevine challenge with a just-in-time nonpersistent streaming policy', async () => {
     const challenge = Uint8Array.from([1, 2, 3, 4])
     const grant = newPlaybackGrantId()
+    const drmContentId = 'drm00000000000040008000000000000000'
     const fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
       async () => new Response(Uint8Array.from([9, 8, 7])),
     )
@@ -110,7 +111,7 @@ describe('DoveRunner DRM provider', () => {
       drm.acquireTemporaryLicence({
         browser: widevinePlaybackBrowser,
         challenge,
-        drmContentId: 'drm_processing_00000000-0000-4000-8000-000000000000',
+        drmContentId,
         playbackGrantId: grant,
       }),
     ).resolves.toEqual(Uint8Array.from([9, 8, 7]))
@@ -128,7 +129,7 @@ describe('DoveRunner DRM provider', () => {
     expect(customData).toBeTruthy()
     const { policy, token } = decodeProviderToken(customData!)
     expect(token).toMatchObject({
-      cid: 'drm_processing_00000000-0000-4000-8000-000000000000',
+      cid: drmContentId,
       drm_type: 'Widevine',
       site_id: 'GXIW',
       timestamp: '2026-09-17T12:00:00Z',
