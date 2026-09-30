@@ -200,9 +200,13 @@ function failureMarker(error, stage) {
   const exitCode = Number.isInteger(error?.code) ? error.code : undefined
   const classification = /check siteid or package key/i.test(stderr)
     ? 'provider_credentials_rejected'
-    : /cpix|kms/i.test(stderr)
-      ? 'provider_kms_request_failed'
-      : undefined
+    : /can not parse the enc token/i.test(stderr)
+      ? 'provider_token_invalid'
+      : /unable to communicate with packageManager server via --enc_token/i.test(stderr)
+        ? 'provider_kms_communication_failed'
+        : /cpix|kms/i.test(stderr)
+          ? 'provider_kms_request_failed'
+          : undefined
 
   return JSON.stringify({
     version: 1,
