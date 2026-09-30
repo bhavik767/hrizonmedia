@@ -692,6 +692,8 @@ describe('Salad transcoder worker contract', () => {
         'enc-token',
         '--dash',
         '--hls',
+        '--transport_stream_timestamp_offset_ms',
+        '120000',
         '--mpd_filename',
         'manifest.mpd',
         '--m3u8_filename',

@@ -33,6 +33,9 @@ const ENCODING_OVERHEAD_MS = 5 * 60 * 1000
 const ENCODING_MODES = new Set(['cpu', 'nvenc'])
 const STORAGE_CONNECTION_TIMEOUT_MS = 10_000
 const STORAGE_SOCKET_TIMEOUT_MS = 5 * 60 * 1000
+// Shaka's MPEG-TS muxer needs room for the negative timestamp observed on
+// Salad after DoveRunner's DASH pass (about 100 seconds on this source).
+const HLS_TIMESTAMP_OFFSET_MS = 120_000
 export const STORAGE_PUBLICATION_CONCURRENCY = 4
 
 export function validateJob(value) {
@@ -301,6 +304,8 @@ export function packagerArguments(job, clearFiles, packagedDirectory, encryption
     job.drmContentId,
     '--dash',
     '--hls',
+    '--transport_stream_timestamp_offset_ms',
+    String(HLS_TIMESTAMP_OFFSET_MS),
     '-i',
     ...clearFiles.map(({ absolute }) => absolute),
     '-o',
