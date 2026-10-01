@@ -1,5 +1,7 @@
+import { MAX_MEDIA_ASSET_BYTES } from './limits'
+
 export const MULTIPART_PART_SIZE_BYTES = 16 * 1024 * 1024
-export const MAX_MULTIPART_PARTS = 128
+export const MAX_MULTIPART_PARTS = Math.ceil(MAX_MEDIA_ASSET_BYTES / MULTIPART_PART_SIZE_BYTES)
 
 export function multipartPartCount(sourceSize: number): number {
   return Math.ceil(sourceSize / MULTIPART_PART_SIZE_BYTES)

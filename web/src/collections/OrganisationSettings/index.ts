@@ -1,5 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
+import { MAX_MEDIA_ASSET_BYTES } from '@/media/limits'
+
 export const OrganisationSettings: CollectionConfig = {
   slug: 'organisation-settings',
   access: {
@@ -27,7 +29,12 @@ export const OrganisationSettings: CollectionConfig = {
     },
     { name: 'drmRequired', type: 'checkbox', defaultValue: false },
     { name: 'defaultRetentionDays', type: 'number', defaultValue: 30, required: true },
-    { name: 'maximumUploadSizeBytes', type: 'number', defaultValue: 2 * 1024 * 1024 * 1024, required: true },
+    {
+      name: 'maximumUploadSizeBytes',
+      type: 'number',
+      defaultValue: MAX_MEDIA_ASSET_BYTES,
+      required: true,
+    },
     { name: 'setupCompletedAt', type: 'date', required: true },
     { name: 'logoDataUrl', type: 'textarea' },
   ],

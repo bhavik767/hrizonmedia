@@ -1,6 +1,7 @@
 import { getPayload, type Payload } from 'payload'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
+import { MAX_MEDIA_ASSET_BYTES } from '@/media/limits'
 import {
   completeInitialOrganisationSetup,
   removeOrganisationLogo,
@@ -50,7 +51,11 @@ describe('Organisation Settings', () => {
     )
     const organisation = await payload.create({
       collection: 'organisations',
-      data: { initialAdministrator: initialAdministrator.id, name: 'Example Organisation', status: 'active' },
+      data: {
+        initialAdministrator: initialAdministrator.id,
+        name: 'Example Organisation',
+        status: 'active',
+      },
       overrideAccess: true,
     })
     await payload.create({
@@ -69,13 +74,13 @@ describe('Organisation Settings', () => {
         defaultRetentionDays: 30,
         drmDefault: 'protected',
         drmRequired: false,
-        maximumUploadSizeBytes: 1024 * 1024 * 1024,
+        maximumUploadSizeBytes: MAX_MEDIA_ASSET_BYTES,
       }),
     ).resolves.toMatchObject({
       defaultRetentionDays: 30,
       drmDefault: 'protected',
       drmRequired: false,
-      maximumUploadSizeBytes: 1024 * 1024 * 1024,
+      maximumUploadSizeBytes: MAX_MEDIA_ASSET_BYTES,
       setupCompletedAt: expect.any(String),
     })
   })
@@ -86,7 +91,11 @@ describe('Organisation Settings', () => {
     )
     const organisation = await payload.create({
       collection: 'organisations',
-      data: { initialAdministrator: initialAdministrator.id, name: 'Policy Organisation', status: 'active' },
+      data: {
+        initialAdministrator: initialAdministrator.id,
+        name: 'Policy Organisation',
+        status: 'active',
+      },
       overrideAccess: true,
     })
     await payload.create({
@@ -119,15 +128,26 @@ describe('Organisation Settings', () => {
       drmRequired: true,
       maximumUploadSizeBytes: 512 * 1024 * 1024,
     })
+
+    await expect(
+      updateOrganisationSettings(payload, initialAdministrator, organisation.id, {
+        defaultRetentionDays: 14,
+        drmDefault: 'standard',
+        drmRequired: true,
+        maximumUploadSizeBytes: MAX_MEDIA_ASSET_BYTES + 1,
+      }),
+    ).rejects.toMatchObject({ status: 400 })
   })
 
   it('accepts a PNG Organisation Logo up to 3 MB and lets an Organisation Administrator remove it', async () => {
-    const initialAdministrator = await createMember(
-      'logo-administrator@organisation-settings.test',
-    )
+    const initialAdministrator = await createMember('logo-administrator@organisation-settings.test')
     const organisation = await payload.create({
       collection: 'organisations',
-      data: { initialAdministrator: initialAdministrator.id, name: 'Branded Organisation', status: 'active' },
+      data: {
+        initialAdministrator: initialAdministrator.id,
+        name: 'Branded Organisation',
+        status: 'active',
+      },
       overrideAccess: true,
     })
     await payload.create({
@@ -148,7 +168,12 @@ describe('Organisation Settings', () => {
     })
 
     const logo = await updateOrganisationLogo(payload, initialAdministrator, organisation.id, {
-      bytes: new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9aAAAAABJRU5ErkJggg==', 'base64')),
+      bytes: new Uint8Array(
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9aAAAAABJRU5ErkJggg==',
+          'base64',
+        ),
+      ),
       mimeType: 'image/png',
     })
 
@@ -162,25 +187,41 @@ describe('Organisation Settings', () => {
     const initialAdministrator = await createMember('invalid-logo@organisation-settings.test')
     const organisation = await payload.create({
       collection: 'organisations',
-      data: { initialAdministrator: initialAdministrator.id, name: 'Validated Organisation', status: 'active' },
+      data: {
+        initialAdministrator: initialAdministrator.id,
+        name: 'Validated Organisation',
+        status: 'active',
+      },
       overrideAccess: true,
     })
     await payload.create({
       collection: 'organisation-memberships',
-      data: { member: initialAdministrator.id, organisation: organisation.id, role: 'administrator', status: 'active' },
+      data: {
+        member: initialAdministrator.id,
+        organisation: organisation.id,
+        role: 'administrator',
+        status: 'active',
+      },
       overrideAccess: true,
     })
     await completeInitialOrganisationSetup(payload, initialAdministrator, organisation.id, {
-      defaultRetentionDays: 30, drmDefault: 'protected', drmRequired: false, maximumUploadSizeBytes: 1024 * 1024 * 1024,
+      defaultRetentionDays: 30,
+      drmDefault: 'protected',
+      drmRequired: false,
+      maximumUploadSizeBytes: 1024 * 1024 * 1024,
     })
 
-    await expect(updateOrganisationLogo(payload, initialAdministrator, organisation.id, {
-      bytes: new Uint8Array(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')),
-      mimeType: 'image/svg+xml',
-    })).rejects.toMatchObject({ status: 400 })
-    await expect(updateOrganisationLogo(payload, initialAdministrator, organisation.id, {
-      bytes: new Uint8Array(3 * 1024 * 1024 + 1),
-      mimeType: 'image/png',
-    })).rejects.toMatchObject({ status: 400 })
+    await expect(
+      updateOrganisationLogo(payload, initialAdministrator, organisation.id, {
+        bytes: new Uint8Array(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')),
+        mimeType: 'image/svg+xml',
+      }),
+    ).rejects.toMatchObject({ status: 400 })
+    await expect(
+      updateOrganisationLogo(payload, initialAdministrator, organisation.id, {
+        bytes: new Uint8Array(3 * 1024 * 1024 + 1),
+        mimeType: 'image/png',
+      }),
+    ).rejects.toMatchObject({ status: 400 })
   })
 })
