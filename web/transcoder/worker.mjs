@@ -18,6 +18,11 @@ import {
 } from '@aws-sdk/client-s3'
 import { NodeHttpHandler } from '@smithy/node-http-handler'
 
+import {
+  attemptSupersessionMarkerKey,
+  processingDrmContentId,
+} from '../src/media/transcode-control.mjs'
+
 const execFile = promisify(execFileCallback)
 const PROCESSING_ID = /^processing_[0-9a-f-]{36}$/
 const SOURCE_KEY = /^sources\/upload_[0-9a-f-]{36}\/source\.(?:mp4|mkv)$/
@@ -28,6 +33,9 @@ const ENCODING_OVERHEAD_MS = 5 * 60 * 1000
 const ENCODING_MODES = new Set(['cpu', 'nvenc'])
 const STORAGE_CONNECTION_TIMEOUT_MS = 10_000
 const STORAGE_SOCKET_TIMEOUT_MS = 5 * 60 * 1000
+// Shaka's MPEG-TS muxer needs room for the negative timestamp observed on
+// Salad after DoveRunner's DASH pass (about 100 seconds on this source).
+const HLS_TIMESTAMP_OFFSET_MS = 120_000
 export const STORAGE_PUBLICATION_CONCURRENCY = 4
 
 export function validateJob(value) {
@@ -40,7 +48,7 @@ export function validateJob(value) {
     !PROCESSING_ID.test(job.processingJobId) ||
     job.outputPrefix !== `outputs/${job.processingJobId}/` ||
     !SOURCE_KEY.test(job.objectKey) ||
-    !/^drm_processing_[0-9a-f-]{36}$/.test(job.drmContentId) ||
+    job.drmContentId !== processingDrmContentId(job.processingJobId) ||
     !Number.isInteger(job.attempt) ||
     job.attempt < 1 ||
     job.attempt > 3 ||
@@ -96,7 +104,7 @@ function encodingMode(environment) {
 }
 
 export function encodingTimeoutMs(job) {
-  return ENCODING_OVERHEAD_MS + job.source.durationSeconds * 2 * 1000
+  return Math.ceil(ENCODING_OVERHEAD_MS + job.source.durationSeconds * 2 * 1000)
 }
 
 export function ffmpegArguments(job, sourcePath, clearDirectory, mode) {
@@ -191,6 +199,30 @@ function logWorkerDiagnostic(level, event, job, stage) {
   )
 }
 
+function failureMarker(error, stage) {
+  const providerOutput = `${String(error?.stdout ?? '')}\n${String(error?.stderr ?? '')}`
+  const providerResponseCode = providerOutput.match(/response error code\s*:?\s*(\d+)/i)?.[1]
+  const providerOperation = providerOutput.match(/ERROR:\s*([A-Za-z0-9_]+\(\)) failed/i)?.[1]
+  const exitCode = Number.isInteger(error?.code) ? error.code : undefined
+  const classification = /check siteid or package key/i.test(providerOutput)
+    ? 'provider_credentials_rejected'
+    : /can not parse the enc token/i.test(providerOutput)
+      ? 'provider_token_invalid'
+      : /unable to communicate with packageManager server via --enc_token/i.test(providerOutput)
+        ? 'provider_kms_communication_failed'
+        : /cpix|kms/i.test(providerOutput)
+          ? 'provider_kms_request_failed'
+          : undefined
+  return JSON.stringify({
+    version: 1,
+    stage,
+    ...(exitCode === undefined ? {} : { exitCode }),
+    ...(providerResponseCode ? { providerResponseCode: Number(providerResponseCode) } : {}),
+    ...(providerOperation ? { providerOperation } : {}),
+    ...(classification ? { classification } : {}),
+  })
+}
+
 async function encodeRenditions(job, sourcePath, clearDirectory, environment, run) {
   const executable = environment.FFMPEG_BIN ?? 'ffmpeg'
   const mode = encodingMode(environment)
@@ -218,13 +250,35 @@ function createStorageClient(environment) {
 }
 
 export function packagerArguments(job, clearFiles, packagedDirectory, encryptionToken) {
+  let credentialArguments = ['--enc_token', encryptionToken]
+  try {
+    const credentials = JSON.parse(Buffer.from(encryptionToken, 'base64').toString('utf8'))
+    if (
+      credentials &&
+      typeof credentials === 'object' &&
+      /^[A-Za-z0-9]{4}$/.test(credentials.site_id) &&
+      typeof credentials.access_key === 'string' &&
+      /^[A-Za-z0-9]{32}$/.test(credentials.access_key)
+    ) {
+      credentialArguments = [
+        '--site_id',
+        credentials.site_id,
+        '--access_key',
+        credentials.access_key,
+      ]
+    }
+  } catch {
+    // Current CPIX encryption tokens are passed through unchanged. Older
+    // deployments store a base64-encoded site/access-key credential bundle.
+  }
   return [
-    '--enc_token',
-    encryptionToken,
+    ...credentialArguments,
     '--content_id',
     job.drmContentId,
     '--dash',
     '--hls',
+    '--transport_stream_timestamp_offset_ms',
+    String(HLS_TIMESTAMP_OFFSET_MS),
     '-i',
     ...clearFiles.map(({ absolute }) => absolute),
     '-o',
@@ -281,6 +335,7 @@ async function sendCallback(job, status, environment, fetcher) {
     callbackId: `worker:${job.processingJobId}:${job.attempt}:${status}`,
     outputPrefix: job.outputPrefix,
     processingJobId: job.processingJobId,
+    ...(status === 'failed' ? { retryFailure: true } : {}),
     status,
   })
   const signature = createHmac('sha256', job.callbackSecret)
@@ -312,11 +367,7 @@ export function verifyDashProtection(manifestText) {
 async function isAttemptCancelled(client, bucket, job) {
   return (
     (await exists(client, bucket, `transcode-tombstones/${job.processingJobId}`)) ||
-    (await exists(
-      client,
-      bucket,
-      `transcode-control/${job.processingJobId}/attempt-${job.attempt}.superseded`,
-    ))
+    (await exists(client, bucket, attemptSupersessionMarkerKey(job.processingJobId, job.attempt)))
   )
 }
 
@@ -500,10 +551,15 @@ export async function processJob(value, dependencies = {}) {
       )
     })
     return { ready: true }
-  } catch {
+  } catch (error) {
     logWorkerDiagnostic('error', 'transcoder_stage_failed', job, stage)
     await client.send(
-      new PutObjectCommand({ Body: '{}', Bucket: bucket, Key: `${controlPrefix}.failed` }),
+      new PutObjectCommand({
+        Body: failureMarker(error, stage),
+        Bucket: bucket,
+        ContentType: 'application/json',
+        Key: `${controlPrefix}.failed`,
+      }),
     )
     try {
       await sendCallback(job, 'failed', environment, fetcher)

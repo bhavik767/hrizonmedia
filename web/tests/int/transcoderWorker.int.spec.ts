@@ -19,7 +19,7 @@ const job = {
   attempt: 1,
   callbackOrigin: 'https://staging.example.test',
   callbackSecret: 'callback-secret-with-at-least-thirty-two-characters',
-  drmContentId: `drm_${processingJobId}`,
+  drmContentId: `drm${processingJobId.slice('processing_'.length).replaceAll('-', '')}`,
   objectKey: 'sources/upload_00000000-0000-4000-8000-000000000000/source.mp4',
   outputPrefix: `outputs/${processingJobId}/`,
   processingJobId,
@@ -46,7 +46,7 @@ const renditionLadderCases: Array<[string, TestRendition[]]> = [
   ],
 ]
 
-type WorkerCommand = { constructor: { name: string }; input?: { Key?: string } }
+type WorkerCommand = { constructor: { name: string }; input?: { Body?: string; Key?: string } }
 type WorkerDependenciesOptions = {
   callbackOK?: boolean
   callbackStatus?: number
@@ -54,6 +54,7 @@ type WorkerDependenciesOptions = {
   gpuAvailable?: boolean
   gpuEncoderAvailable?: boolean
   gpuEncodingFailure?: Error
+  packagingFailure?: Error
   sourceFailure?: Error
   supersededAtCheck?: number
 }
@@ -65,6 +66,7 @@ function workerDependencies({
   gpuAvailable = true,
   gpuEncoderAvailable = true,
   gpuEncodingFailure,
+  packagingFailure,
   sourceFailure,
   supersededAtCheck,
 }: WorkerDependenciesOptions = {}) {
@@ -116,6 +118,7 @@ function workerDependencies({
       await Promise.all(outputs.map((output) => writeFile(output, 'clear video')))
       return { stdout: '' }
     }
+    if (packagingFailure) throw packagingFailure
     const packagedDirectory = args[args.indexOf('-o') + 1]!
     await mkdir(`${packagedDirectory}/video`, { recursive: true })
     await Promise.all([
@@ -322,6 +325,15 @@ describe('Salad transcoder worker contract', () => {
     expect(encodingTimeoutMs(job)).toBe(25 * 60 * 1000)
   })
 
+  it('returns an integer timeout for fractional source durations', () => {
+    const fractionalDurationJob = {
+      ...job,
+      source: { ...job.source, durationSeconds: 15.582132 },
+    }
+
+    expect(encodingTimeoutMs(fractionalDurationJob)).toBe(331_165)
+  })
+
   it('bounds concurrent publication work', async () => {
     let active = 0
     let peak = 0
@@ -370,6 +382,7 @@ describe('Salad transcoder worker contract', () => {
         attempt: job.attempt,
         callbackId: `worker:${job.processingJobId}:${job.attempt}:failed`,
         processingJobId: job.processingJobId,
+        retryFailure: true,
         status: 'failed',
       })
     } finally {
@@ -510,6 +523,128 @@ describe('Salad transcoder worker contract', () => {
     }
   })
 
+  it('records a non-secret provider failure classification in the attempt marker', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const packagingFailure = Object.assign(new Error('packaging failed'), {
+      code: 210,
+      stderr:
+        'response error code: 1001\nmessage: Please check siteid or package key in console page.\nERROR: GetServerInfo() failed',
+    })
+    const dependencies = workerDependencies({ packagingFailure })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      const marker = dependencies.commands.find(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+      )
+
+      expect(JSON.parse(String(marker?.input?.Body))).toEqual({
+        classification: 'provider_credentials_rejected',
+        exitCode: 210,
+        providerOperation: 'GetServerInfo()',
+        providerResponseCode: 1001,
+        stage: 'packaging',
+        version: 1,
+      })
+      expect(String(marker?.input?.Body)).not.toContain(job.callbackSecret)
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
+  it('classifies the current DoveRunner CPIX communication failure without persisting stderr', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const packagingFailure = Object.assign(new Error('packaging failed'), {
+      code: 1,
+      stderr:
+        '*** CurlHttpError Exception ***\nERROR: Unable to communicate with packageManager server via --enc_token.\nhttps://example.invalid/private-path',
+    })
+    const dependencies = workerDependencies({ packagingFailure })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      const marker = dependencies.commands.find(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+      )
+
+      expect(JSON.parse(String(marker?.input?.Body))).toEqual({
+        classification: 'provider_kms_communication_failed',
+        exitCode: 1,
+        stage: 'packaging',
+        version: 1,
+      })
+      expect(String(marker?.input?.Body)).not.toContain('example.invalid')
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
+  it('classifies DoveRunner failures emitted on stdout without persisting provider output', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const packagingFailure = Object.assign(new Error('packaging failed'), {
+      code: 1,
+      stdout:
+        '*** CurlHttpError Exception ***\nERROR: Unable to communicate with packageManager server via --enc_token.\nhttps://example.invalid/private-path',
+    })
+    const dependencies = workerDependencies({ packagingFailure })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      const marker = dependencies.commands.find(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+      )
+
+      expect(JSON.parse(String(marker?.input?.Body))).toEqual({
+        classification: 'provider_kms_communication_failed',
+        exitCode: 1,
+        stage: 'packaging',
+        version: 1,
+      })
+      expect(String(marker?.input?.Body)).not.toContain('example.invalid')
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
+  it('does not persist unclassified packager output in a failure marker', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const packagingFailure = Object.assign(new Error('packaging failed'), {
+      code: 1,
+      stderr: 'private provider output',
+    })
+    const dependencies = workerDependencies({ packagingFailure })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      const marker = dependencies.commands.find(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+      )
+      expect(JSON.parse(String(marker?.input?.Body))).toEqual({
+        exitCode: 1,
+        stage: 'packaging',
+        version: 1,
+      })
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
   it('requests separately named DASH/CENC and HLS/CBCS delivery packages', () => {
     expect(
       packagerArguments(
@@ -520,14 +655,63 @@ describe('Salad transcoder worker contract', () => {
       ),
     ).toEqual(
       expect.arrayContaining([
+        '--enc_token',
+        'enc-token',
         '--dash',
         '--hls',
+        '--transport_stream_timestamp_offset_ms',
+        '120000',
         '--mpd_filename',
         'manifest.mpd',
         '--m3u8_filename',
         'master.m3u8',
       ]),
     )
+  })
+
+  it('uses a configured legacy DoveRunner credential bundle without treating it as an encryption token', () => {
+    const credentials = Buffer.from(
+      JSON.stringify({ access_key: '0123456789abcdef0123456789ABCDEF', site_id: 'GXIW' }),
+    ).toString('base64')
+    const arguments_ = packagerArguments(
+      job,
+      [{ absolute: '/work/clear/video-360.mp4' }],
+      '/work/packaged',
+      credentials,
+    )
+
+    expect(arguments_).toEqual(
+      expect.arrayContaining([
+        '--site_id',
+        'GXIW',
+        '--access_key',
+        '0123456789abcdef0123456789ABCDEF',
+        '--dash',
+        '--hls',
+      ]),
+    )
+    expect(arguments_).not.toContain('--enc_token')
+    expect(arguments_).not.toContain(credentials)
+  })
+
+  it('passes a CPIX KMS token through even when its payload contains site and access keys', () => {
+    const kmsToken = Buffer.from(
+      JSON.stringify({
+        access_key: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
+        site_id: 'GXIW',
+      }),
+    ).toString('base64')
+
+    const arguments_ = packagerArguments(
+      job,
+      [{ absolute: '/work/clear/video-360.mp4' }],
+      '/work/packaged',
+      kmsToken,
+    )
+
+    expect(arguments_).toEqual(expect.arrayContaining(['--enc_token', kmsToken, '--dash', '--hls']))
+    expect(arguments_).not.toContain('--site_id')
+    expect(arguments_).not.toContain('--access_key')
   })
 
   it('normalizes DoveRunner v4 combined DASH and HLS output for delivery', () => {

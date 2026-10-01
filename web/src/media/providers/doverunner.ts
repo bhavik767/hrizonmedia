@@ -8,7 +8,7 @@ import { PermanentTranscodeError, TransientTranscodeError } from './errors'
 const LICENCE_URL =
   'https://drm-license.doverunner.com/ri/licenseManager.do?response_format=original'
 const TOKEN_IV = Buffer.from('0123456789abcdef', 'utf8')
-const CONTENT_ID = /^drm_processing_[0-9a-f-]{36}$/
+const CONTENT_ID = /^(?:drm[0-9a-f]{32}|drm_processing_[0-9a-f-]{36})$/
 
 export interface DoveRunnerDrmConfiguration {
   accessKey: string
