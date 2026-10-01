@@ -33,7 +33,7 @@ abort, exact deletion, prefix deletion, 60-second asset scoping, and fail-closed
 provider selection. Existing Payload tests continue to cover ownership, resume,
 expiry, playback grants, and lifecycle cleanup.
 
-Live Railway/S3/CloudFront acceptance must be recorded without credential values.
+Live Hetzner/S3/CloudFront acceptance must be recorded without credential values.
 Before closing the issue, capture: real browser multipart/resume/abort; direct S3 and
 unsigned CloudFront 403s; cross-member denial; repeated signature rotation during
 playback; source/output deletion; required response content types/cache headers; and

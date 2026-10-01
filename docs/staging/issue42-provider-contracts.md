@@ -7,10 +7,10 @@ Updated: 2026-09-16. Source: [issue #42](https://github.com/bhavik767/hrizonmedi
 and its [parent specification #29](https://github.com/bhavik767/hrizonmedia/issues/29).
 Branch review fixed point: `24f5293a9d75372debb2ba4c5aaaee29c5989aec`.
 
-This document supplies the non-secret handoff for later real adapters. The
-application still uses deterministic fake providers. Values saved in Railway do
-not activate real storage, transcoding, delivery or DRM. Production remains gated
-under [ADR 0006](../adr/0006-deterministic-provider-boundaries.md).
+This document records the 2026-09-16 non-secret handoff for later real adapters.
+At that time, the application still used deterministic fake providers; stored
+configuration alone did not activate real storage, transcoding, delivery or DRM.
+For current operations, use the [deployment guide](../../web/DEPLOYMENT.md).
 
 ## Owner decisions
 
@@ -40,13 +40,13 @@ avoid disrupting eSaral playback.
 
 | Purpose | Contract or location | Evidence |
 | --- | --- | --- |
-| Staging app | `https://hrizonmedia-staging-web-staging.up.railway.app` | Recorded in [issue #41 staging evidence](issue41.md) |
+| Application origin | `https://wecloud.biz` | See [deployment guide](../../web/DEPLOYMENT.md) |
 | S3 regional API | `https://hrizonmedia-video-staging-1.s3.ap-south-1.amazonaws.com` | An unauthenticated HEAD on 2026-09-16 returned 403 and `x-amz-bucket-region: ap-south-1`, confirming the private bucket and region without proving credential access |
 | Video namespace | `s3://hrizonmedia-video-staging-1/` | Dedicated bucket; no global application prefix |
 | CloudFront playback origin | `https://dbjfbyqkep4un.cloudfront.net` | Unauthenticated root and nonexistent-manifest requests returned CloudFront 403 on 2026-09-16; signed playback remains unverified end to end |
 | Salad public API | `https://api.salad.com/api/public` | [Official API quickstart](https://docs.salad.com/container-engine/tutorials/quickstart-api) |
 | DoveRunner licence service | `https://drm-license.doverunner.com/ri/licenseManager.do` | [Official player integration](https://support.doverunner.com/hc/en-us/articles/47901652969881-What-client-players-does-DoveRunner-Multi-DRM-support); account policy unverified |
-| Processing callback | `https://hrizonmedia-staging-web-staging.up.railway.app/api/internal/transcode/callback` | Existing application receiver |
+| Processing callback | `https://wecloud.biz/api/internal/transcode/callback` | Existing application receiver |
 
 The application requires logical output prefixes `outputs/{processingJobId}/`.
 The S3 adapter will store those physical keys unchanged. CloudFront's `/outputs`
@@ -56,10 +56,11 @@ This mapping is not implemented or verified. Source-key and manifest filename
 rules remain pending. Because the origin is rooted at `/outputs`, uploaded originals
 under `sources/` are outside the delivery namespace.
 
-The owner reports that the bucket blocks public access, uses ACLs-disabled object
-ownership and SSE-S3, and has versioning disabled. Browser CORS permits `PUT` only
-from `https://hrizonmedia-staging-web-staging.up.railway.app`, permits all request
-headers, and exposes `ETag` and `x-amz-checksum-sha256`. A lifecycle rule aborts
+The owner reported that the bucket blocked public access, used ACLs-disabled object
+ownership and SSE-S3, and had versioning disabled. Browser CORS then permitted `PUT`
+from the old staging origin, permitted all request headers, and exposed `ETag` and
+`x-amz-checksum-sha256`. Verify CORS against the current application origin before
+relying on browser upload. A lifecycle rule aborts
 incomplete multipart uploads after two days. The application IAM user
 `hrizonmedia-staging-media` has bucket-location/list/multipart-list permissions and
 object get/put/delete/abort/list-parts permissions scoped to this bucket. These are
@@ -94,45 +95,9 @@ Support routes: [AWS Support Center](https://console.aws.amazon.com/support/home
 Named account contacts, support plans and escalation response times remain pending;
 no direct account-specific contact has been supplied.
 
-## Railway configuration inventory
+## Provider configuration
 
-Target: existing project `hrizonmedia`, environment `staging`, service
-`hrizonmedia-staging-web`. The owner installed values directly, not through GitHub.
-Only names and non-secret settings are recorded here. These are proposed real
-adapter settings and are not currently consumed by the fake-provider runtime.
-
-| Variable | Purpose / future consumer | Installation evidence |
-| --- | --- | --- |
-| `VIDEO_S3_ACCESS_KEY_ID` | Server S3 adapter; worker provisioning to be decided | Missing in the Railway CLI name-only audit on 2026-09-16 |
-| `VIDEO_S3_SECRET_ACCESS_KEY` | Server S3 adapter; worker provisioning to be decided | Missing in the Railway CLI name-only audit on 2026-09-16 |
-| `VIDEO_S3_BUCKET`, `VIDEO_S3_REGION` | Dedicated bucket and Mumbai region above | Installed without deployment and verified present by name on 2026-09-16 |
-| `VIDEO_S3_PREFIX` | Must be absent; logical `sources/` and `outputs/` keys are bucket-root relative | Correctly absent in the 2026-09-16 audit |
-| `VIDEO_CLOUDFRONT_DOMAIN` | Server delivery adapter | Installed without deployment and verified present by name on 2026-09-16 |
-| `VIDEO_CLOUDFRONT_KEY_PAIR_ID` | CloudFront signing key ID `K3C8Y1YFXKCO19` | Installed without deployment and verified present by name on 2026-09-16 |
-| `VIDEO_CLOUDFRONT_PRIVATE_KEY` | Server-only signed-URL private key | Owner confirms it is set in the Railway staging dashboard; value remains outside Git |
-| `DOVERUNNER_ENC_TOKEN` | CLI packaging worker | Owner confirms it is set in Railway staging; later worker provisioning must install it in the worker runtime |
-| `DOVERUNNER_SITE_KEY`, `DOVERUNNER_ACCESS_KEY` | Server-side licence token generation | Owner confirms both are set in the Railway staging dashboard |
-| `DOVERUNNER_SITE_ID` | Server DRM adapter; `GXIW` | Installed without deployment and verified present by name on 2026-09-16 |
-| `SALAD_API_KEY` | Server dispatch/control adapter | Owner confirms it is set in the Railway staging dashboard |
-| `SALAD_ORGANIZATION_NAME`, `SALAD_PROJECT_NAME` | Server Salad API scope | Owner confirms both are set in Railway staging for organization `hrizonmedia` and project `hrizonmedia-staging` |
-
-CloudFront public key `K3C8Y1YFXKCO19` belongs to key group
-`d3876259-cc9f-4b5e-a55a-f8eaa1691f2e`. The owner reports that the default cache
-behavior trusts this key group, the origin uses recommended private S3 access, and
-the generated bucket policy names the CloudFront service and distribution. The
-matching private key was installed directly in Railway and remains outside Git.
-Actual signed manifest and segment requests, expiry and revocation are unverified.
-
-The Railway CLI view used during the 2026-09-16 review did not enumerate every
-provider variable visible to the owner in the dashboard. The owner dashboard
-confirmation is the access-handoff evidence for issue #42; later real-adapter
-connectivity tests, rather than secret-value inspection, must prove the values.
-
-The CMS variables `BUCKET`, `ENDPOINT`, `ACCESS_KEY_ID`, and `SECRET_ACCESS_KEY`
-belong to CMS storage and must remain separate. Never use `NEXT_PUBLIC_*` for
-provider credentials. Worker secret installation, installation dates and
-credential-safe connectivity evidence remain pending; do not dump Railway
-variables or provider responses into logs to collect that evidence.
+Configure application and worker secrets in their respective active runtimes; see [`web/DEPLOYMENT.md`](../../web/DEPLOYMENT.md) for the application deployment. Never commit or print credential values. Keep CMS storage variables separate from video-provider variables, and never expose provider credentials through `NEXT_PUBLIC_*`.
 
 ## Limits and cost
 
@@ -192,9 +157,8 @@ and lifecycle rules allow this without deleting other applications' objects.
 - [x] Official operation documentation and public support routes linked.
 - [x] Sandbox endpoints, regions, path rules, callback URLs and public support routes recorded without secrets.
 - [x] Provider-neutral interface mappings are explicit and backed by primary sources.
-- [x] Required AWS, CloudFront and Salad credentials installed directly in Railway
-  staging without exposing values; DoveRunner staging credentials are also recorded
-  for the parent DRM flow.
+- [x] Required AWS, CloudFront, Salad and DoveRunner credential names recorded
+  without exposing values; runtime installation is covered by the deployment guide.
 - [x] Provider cost components, public limits, two-job application concurrency and
   required dedicated production settings documented. Account quotas, live hardware
   rates, budgets and paid support SLAs remain operational provisioning inputs.
@@ -206,7 +170,7 @@ performance checks gate activation of the later real adapters. They are not
 evidence that can be produced by this provider-selection handoff alone.
 
 After real adapters are implemented, use the parent issue's pre-agreed route/Payload
-and Playwright seams, then Railway security/performance verification. Prove private
+and Playwright seams, then Hetzner security/performance verification. Prove private
 delivery, cross-member denial, callback integrity/replay, retries, deletion/retention,
 five-minute grant semantics and Chrome/Edge Widevine playback. FairPlay and
 PlayReady require separate verification before Multi-DRM marketing claims ship.

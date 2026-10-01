@@ -111,7 +111,7 @@ The existing application deliberately keeps its delivery token valid for two
 hours and five minutes so a video that starts inside the five-minute playback
 grant can continue to its maximum two-hour duration. Long-lived edge credentials
 would make revocation too weak. The selected distribution exposes its native
-`cloudfront.net` domain, so the Railway application cannot set a valid session
+`cloudfront.net` domain, so the application cannot set a valid session
 cookie for that unrelated domain; browsers reject such a `Domain` attribute.
 **Implementation correction:** keep the long-lived delivery token as a
 backend-validated bearer and exchange it through an authenticated refresh route
@@ -301,7 +301,7 @@ evidence rather than interface-design questions:
 - a numeric monthly/all-in spending ceiling and alert recipients (AWS budgets
   and provider balance alerts monitor spend but do not substitute for an owner
   ceiling);
-- presence of every required Railway and Salad worker secret, checked only by
+- presence of every required application and Salad worker secret, checked only by
   name/connectivity without printing values;
 - an account-specific escalation contact or purchased support SLA beyond the
   public [AWS Support Center](https://console.aws.amazon.com/support/home),
