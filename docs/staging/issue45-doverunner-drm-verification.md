@@ -17,7 +17,7 @@ or provider token. The provider token uses the nonpersistent streaming policy
 The five-minute application grant limits new licence acquisition; it does not cut
 off a nonpersistent playback session already issued by Widevine.
 
-## Required non-secret Railway configuration
+## Required non-secret application configuration
 
 The staging web service needs `DOVERUNNER_SITE_ID`, `DOVERUNNER_SITE_KEY`, and
 `DOVERUNNER_ACCESS_KEY`, alongside the existing real S3, CloudFront, and Salad
