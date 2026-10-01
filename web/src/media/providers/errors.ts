@@ -2,6 +2,7 @@ export class InvalidMediaError extends Error {}
 export class MultipartUploadError extends Error {}
 export class PermanentTranscodeError extends Error {}
 export class TransientTranscodeError extends Error {}
+export class FailedTranscodeJobError extends TransientTranscodeError {}
 
 export type TranscodeMetadataReason =
   | 'attempt'

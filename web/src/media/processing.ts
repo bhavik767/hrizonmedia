@@ -15,7 +15,11 @@ import {
   type ProcessingJobId,
   type ProviderJobId,
 } from './identifiers'
-import { InvalidTranscodeMetadataError, PermanentTranscodeError } from './providers/errors'
+import {
+  FailedTranscodeJobError,
+  InvalidTranscodeMetadataError,
+  PermanentTranscodeError,
+} from './providers/errors'
 import { getMediaProviders } from './providers'
 import { logMediaDiagnostic } from './diagnostics'
 import type {
@@ -367,7 +371,7 @@ async function reconcileCancelledAttempts(
               UPDATE processing_jobs
               SET status = 'failed',
                   failed_at = ${now},
-                  failure_code = 'processing_timeout',
+                  failure_code = ${job.failureCode ?? 'processing_timeout'},
                   failure_message = ${FAILURE_MESSAGE},
                   ${clearedAttemptState}
               WHERE id = ${job.id}
@@ -538,6 +542,21 @@ async function pollProcessingJobs(payload: Payload, now: Date, provider: Transco
     } catch (error) {
       if (error instanceof PermanentTranscodeError) {
         await failProcessingJob(payload, job, now, 'provider_rejected')
+      } else if (error instanceof FailedTranscodeJobError) {
+        await inTransaction(payload, async (transaction) =>
+          transaction.execute(sql`
+            UPDATE processing_jobs
+            SET status = 'cancelling',
+                failure_code = 'provider_unavailable',
+                lease_token = NULL,
+                leased_until = NULL,
+                updated_at = ${now}
+            WHERE id = ${job.id}
+              AND status = 'processing'
+              AND attempts = ${job.attempts}
+              AND provider_job_id = ${job.providerJobId}
+          `),
+        )
       } else {
         // A status lookup can fail while the remote attempt is still running. Keep
         // tracking that attempt and let its persisted deadline drive cancellation;

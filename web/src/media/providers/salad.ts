@@ -4,6 +4,7 @@ import type { ProcessingJobId, ProviderJobId } from '../identifiers'
 import { processingDrmContentId } from '../transcode-control.mjs'
 import type { OutputVerification, Rendition, TranscodeProvider } from './contracts'
 import {
+  FailedTranscodeJobError,
   InvalidTranscodeMetadataError,
   PermanentTranscodeError,
   TransientTranscodeError,
@@ -226,6 +227,11 @@ async function cancelNativeJob(
     throw new TransientTranscodeError('SaladCloud cancellation failed.', { cause: error })
   })
   if (response.ok || response.status === 404) return
+  if (response.status === 409) {
+    const job = await requestJob(fetcher, url, { headers, method: 'GET' })
+    if (['cancelled', 'failed', 'succeeded'].includes(job.status)) return
+    throw new TransientTranscodeError('SaladCloud job is still active.')
+  }
   if (response.status === 429 || response.status >= 500) {
     throw new TransientTranscodeError('SaladCloud cancellation is temporarily unavailable.')
   }
@@ -286,7 +292,7 @@ export function createSaladTranscodeProvider(
       })
       if (job.status === 'pending' || job.status === 'running') return 'processing'
       if (job.status === 'failed') {
-        throw new TransientTranscodeError('SaladCloud job failed and may be retried.')
+        throw new FailedTranscodeJobError('SaladCloud job failed and may be retried.')
       }
       if (job.status === 'cancelled') {
         throw new PermanentTranscodeError('SaladCloud job was cancelled.')
