@@ -173,6 +173,49 @@ describe('reliable Processing Jobs', () => {
     })
   })
 
+  it('keeps tracking a live attempt when its provider status lookup is transiently unavailable', async () => {
+    const status = vi
+      .fn<TranscodeProvider['status']>()
+      .mockRejectedValue(new TransientTranscodeError('private provider response'))
+    const provider = { ...fakeTranscodeProvider, status }
+    await upload(fixture(), provider)
+    const job = (
+      await payload.find({
+        collection: 'processing-jobs',
+        limit: 1,
+        overrideAccess: true,
+        where: {},
+      })
+    ).docs[0]!
+    const diagnostic = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    await runProcessingCycle(payload, {
+      now: at('2026-09-14T12:00:02.000Z'),
+      provider,
+    })
+
+    await expect(
+      payload.findByID({
+        collection: 'processing-jobs',
+        id: job.id,
+        overrideAccess: true,
+      }),
+    ).resolves.toMatchObject({
+      attempts: 1,
+      processingDeadlineAt: job.processingDeadlineAt,
+      providerJobId: job.providerJobId,
+      status: 'processing',
+    })
+    expect(status).toHaveBeenCalledOnce()
+    expect(diagnostic).toHaveBeenCalledWith(
+      expect.stringContaining('processing_poll_unavailable'),
+    )
+    expect(diagnostic.mock.calls.flat().map(String).join(' ')).not.toContain(
+      'private provider response',
+    )
+    diagnostic.mockRestore()
+  })
+
   it('preserves aspect ratio for narrow sources without upscaling', async () => {
     const provider = { ...fakeTranscodeProvider, queue: vi.fn(fakeTranscodeProvider.queue) }
     await upload(fixture('640x1080:2'), provider)

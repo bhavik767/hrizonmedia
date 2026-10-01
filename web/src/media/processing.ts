@@ -539,7 +539,10 @@ async function pollProcessingJobs(payload: Payload, now: Date, provider: Transco
       if (error instanceof PermanentTranscodeError) {
         await failProcessingJob(payload, job, now, 'provider_rejected')
       } else {
-        await scheduleRetry(payload, job, now, 'provider_unavailable')
+        // A status lookup can fail while the remote attempt is still running. Keep
+        // tracking that attempt and let its persisted deadline drive cancellation;
+        // replacing it here would orphan live provider work and consume retries.
+        logMediaDiagnostic('error', 'processing_poll_unavailable', job.id)
       }
     }
   }
