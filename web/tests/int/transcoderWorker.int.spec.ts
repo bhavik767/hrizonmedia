@@ -693,7 +693,7 @@ describe('Salad transcoder worker contract', () => {
         '--dash',
         '--hls',
         '--transport_stream_timestamp_offset_ms',
-        '120000',
+        '180000',
         '--mpd_filename',
         'manifest.mpd',
         '--m3u8_filename',
