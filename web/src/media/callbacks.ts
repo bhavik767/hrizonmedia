@@ -52,6 +52,7 @@ export async function applyProcessingCallback(
         details.providerJobId === input.providerJobId &&
         'status' in details &&
         details.status === input.status &&
+        (!('retryFailure' in details) || details.retryFailure === input.retryFailure) &&
         (!('attempt' in details) || details.attempt === input.attempt)
       if (!sameEvent) {
         throw Object.assign(new Error('Callback event ID has already been used.'), { status: 409 })
@@ -140,6 +141,7 @@ export async function applyProcessingCallback(
         packageVerified,
         outputPrefix: input.outputPrefix,
         providerJobId: input.providerJobId,
+        retryFailure: input.retryFailure,
         status: input.status,
       },
       eventKey: `processing-callback:${input.callbackId}`,

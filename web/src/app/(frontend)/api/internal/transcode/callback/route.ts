@@ -84,6 +84,7 @@ export async function POST(request: Request): Promise<Response> {
     outputPrefix?: unknown
     processingJobId?: unknown
     providerJobId?: unknown
+    retryFailure?: unknown
     status?: unknown
   }
   try {
@@ -109,6 +110,7 @@ export async function POST(request: Request): Promise<Response> {
     typeof input.outputPrefix !== 'string' ||
     input.outputPrefix.length > 200 ||
     !/^outputs\/processing_[0-9a-f-]{36}\/$/.test(input.outputPrefix) ||
+    (input.retryFailure !== undefined && typeof input.retryFailure !== 'boolean') ||
     (input.status !== 'ready' && input.status !== 'failed')
   ) {
     return rejectCallback('invalid_body', 400, 'Callback body is invalid.')
@@ -136,6 +138,7 @@ export async function POST(request: Request): Promise<Response> {
         callbackId: input.callbackId,
         outputPrefix: input.outputPrefix,
         providerJobId,
+        retryFailure: input.status === 'failed' && input.retryFailure === true,
         status: input.status,
       },
       new Date(timestampMs),

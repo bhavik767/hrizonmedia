@@ -102,7 +102,7 @@ function workerDependencies({
       return {}
     }),
   }
-  const execFile = vi.fn(async (_executable: string, args: string[]) => {
+  const execFile = vi.fn(async (_executable: string, args: string[], _options?: { timeout?: number }) => {
     if (args[0] === '--query-gpu=name') return { stdout: gpuAvailable ? 'GPU 0' : '' }
     if (args.includes('-encoders'))
       return {
