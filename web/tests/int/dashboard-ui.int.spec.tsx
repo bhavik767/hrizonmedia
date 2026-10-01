@@ -5,13 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DashboardOverview } from '@/app/(frontend)/demo/DashboardOverview'
 import { DashboardShell } from '@/app/(frontend)/demo/DashboardShell'
 import { MediaLibrary } from '@/app/(frontend)/demo/MediaLibrary'
+import { MAX_MEDIA_ASSET_BYTES } from '@/media/limits'
 
 const uploadOrganisation = {
   defaultRetentionDays: 30,
   drmDefault: 'protected' as const,
   drmRequired: false,
   id: 7,
-  maximumUploadSizeBytes: 2 * 1024 * 1024 * 1024,
+  maximumUploadSizeBytes: MAX_MEDIA_ASSET_BYTES,
   name: 'Demo Organisation',
 }
 
@@ -74,7 +75,7 @@ describe('dashboard interaction regressions', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Upload Video' })
     expect(dialog.textContent).toContain('MP4 or MKV')
-    expect(dialog.textContent).toContain('2.0 GB maximum')
+    expect(dialog.textContent).toContain('5.0 GB maximum')
     expect(dialog.textContent).not.toContain('MOV')
     expect(dialog.textContent).not.toContain('ProRes')
     const startButton = screen.getByRole('button', { name: 'Start Upload' })

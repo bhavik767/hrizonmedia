@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 
 import { getMember } from '@/members/session'
+import { MAX_MEDIA_ASSET_BYTES } from '@/media/limits'
 import { getOrganisationSettingsState } from '@/organisations/settings'
 import config from '@/payload.config'
 
@@ -46,7 +47,7 @@ export default async function OrganisationSetupPage({
             defaultRetentionDays: 30,
             drmDefault: 'protected',
             drmRequired: false,
-            maximumUploadSizeBytes: 2 * 1024 * 1024 * 1024,
+            maximumUploadSizeBytes: MAX_MEDIA_ASSET_BYTES,
           }}
           submitLabel="Complete setup"
         />

@@ -101,7 +101,7 @@ Configure application and worker secrets in their respective active runtimes; se
 
 ## Limits and cost
 
-- Pilot contract: MP4/MKV up to 2 GiB/two hours; 24-hour Upload Session; no
+- Pilot contract: MP4/MKV up to 5 GiB/two hours; 24-hour Upload Session; no
   upload-count quotas. S3 permits 10,000 parts, 5 MiB minimum except the final
   part, and paginates part listings at 1,000. Use the linked multipart specification
   rather than treating a multipart ETag as a content checksum.
