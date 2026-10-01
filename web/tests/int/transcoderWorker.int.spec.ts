@@ -301,6 +301,7 @@ describe('Salad transcoder worker contract', () => {
           args.includes('--enc_token'),
         )
         expect(packagerCalls).toHaveLength(1)
+        expect(packagerCalls[0]![2]).toEqual({ timeout: 15 * 60 * 1000 })
         for (const { height } of renditions) {
           expect(packagerCalls[0]![1].some((argument) => argument.endsWith(`${height}p.mp4`))).toBe(
             true,

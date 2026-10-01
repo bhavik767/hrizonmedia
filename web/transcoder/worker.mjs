@@ -37,6 +37,7 @@ const STORAGE_SOCKET_TIMEOUT_MS = 5 * 60 * 1000
 // Salad's NVENC path. A long 23.976 fps source reached -125.25 seconds, so keep
 // a full minute of headroom beyond that observed boundary.
 const HLS_TIMESTAMP_OFFSET_MS = 180_000
+const PACKAGING_TIMEOUT_MS = 15 * 60 * 1000
 export const STORAGE_PUBLICATION_CONCURRENCY = 4
 
 export function validateJob(value) {
@@ -488,7 +489,7 @@ export async function processJob(value, dependencies = {}) {
     await run(
       environment.DOVERUNNER_PACKAGER_BIN ?? 'PallyConPackager',
       packagerArguments(job, clearFiles, packagedDirectory, environment.DOVERUNNER_ENC_TOKEN),
-      { timeout: 3 * 60 * 1000 },
+      { timeout: PACKAGING_TIMEOUT_MS },
     )
     logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
     stage = 'validation'
