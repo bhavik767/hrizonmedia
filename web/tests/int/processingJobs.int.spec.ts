@@ -918,6 +918,53 @@ describe('reliable Processing Jobs', () => {
     vi.unstubAllEnvs()
   })
 
+  it('queues another attempt for a signed retryable worker failure', async () => {
+    const session = await upload()
+    const job = (
+      await payload.find({ collection: 'processing-jobs', limit: 1, overrideAccess: true, where: {} })
+    ).docs[0]!
+    const secret = 'callback-test-secret'
+    const timestamp = String(Date.now())
+    const body = JSON.stringify({
+      attempt: 1,
+      callbackId: `worker:${job.processingJobId}:1:failed`,
+      outputPrefix: processingOutputPrefix(job.processingJobId),
+      processingJobId: job.processingJobId,
+      retryFailure: true,
+      status: 'failed',
+    })
+    vi.stubEnv('TRANSCODER_CALLBACK_SECRET', secret)
+    try {
+      const response = await processingCallback(
+        new Request('http://localhost/api/internal/transcode/callback', {
+          body,
+          headers: {
+            'content-type': 'application/json',
+            'x-hrizon-signature': createHmac('sha256', secret)
+              .update(`${timestamp}.${body}`)
+              .digest('base64url'),
+            'x-hrizon-timestamp': timestamp,
+          },
+          method: 'POST',
+        }),
+      )
+      expect(response.status).toBe(204)
+      await expect(
+        payload.findByID({ collection: 'processing-jobs', id: job.id, overrideAccess: true }),
+      ).resolves.toMatchObject({
+        attempts: 1,
+        failureCode: 'provider_callback_failed',
+        providerJobId: null,
+        status: 'queued',
+      })
+      await expect(getVisibleAsset(payload, uploader, session.asset.mediaAssetId)).resolves.toMatchObject({
+        status: 'queued',
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('rejects a late shared-worker callback from an older processing attempt', async () => {
     const session = await upload()
     const job = (
