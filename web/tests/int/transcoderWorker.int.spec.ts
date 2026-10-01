@@ -618,13 +618,12 @@ describe('Salad transcoder worker contract', () => {
     }
   })
 
-  it('persists only a redacted diagnostic for an otherwise unclassified packaging failure', async () => {
+  it('does not persist unclassified packager output in a failure marker', async () => {
     const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
-    const opaqueValue = 'abcdefghijklmnopqrstuvwxyz0123456789'
     const packagingFailure = Object.assign(new Error('packaging failed'), {
       code: 1,
-      stderr: `Packaging unexpectedly aborted never-log-this-encryption-token ${opaqueValue} https://example.invalid/private`,
+      stderr: 'private provider output',
     })
     const dependencies = workerDependencies({ packagingFailure })
 
@@ -635,43 +634,11 @@ describe('Salad transcoder worker contract', () => {
           command.constructor.name === 'PutObjectCommand' &&
           command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
       )
-      const body = String(marker?.input?.Body)
-
-      expect(JSON.parse(body)).toMatchObject({
+      expect(JSON.parse(String(marker?.input?.Body))).toEqual({
         exitCode: 1,
-        providerDiagnostic: 'Packaging unexpectedly aborted <redacted> <redacted> <url>',
         stage: 'packaging',
         version: 1,
       })
-      expect(body).not.toContain('never-log-this-encryption-token')
-      expect(body).not.toContain(opaqueValue)
-      expect(body).not.toContain('example.invalid')
-    } finally {
-      diagnostics.mockRestore()
-      progress.mockRestore()
-    }
-  })
-
-  it('retains the redacted tail of a long provider diagnostic', async () => {
-    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
-    const packagingFailure = Object.assign(new Error('packaging failed'), {
-      code: 1,
-      stderr: `${'provider progress line\n'.repeat(300)}final post-packaging failure`,
-    })
-    const dependencies = workerDependencies({ packagingFailure })
-
-    try {
-      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
-      const marker = dependencies.commands.find(
-        (command) =>
-          command.constructor.name === 'PutObjectCommand' &&
-          command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
-      )
-      const body = JSON.parse(String(marker?.input?.Body))
-
-      expect(body.providerDiagnostic).toContain('<diagnostic-truncated>')
-      expect(body.providerDiagnostic).toContain('final post-packaging failure')
     } finally {
       diagnostics.mockRestore()
       progress.mockRestore()

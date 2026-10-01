@@ -199,28 +199,7 @@ function logWorkerDiagnostic(level, event, job, stage) {
   )
 }
 
-function safeProviderDiagnostic(providerOutput, encryptionToken) {
-  let diagnostic = providerOutput
-  const secrets = [encryptionToken]
-  try {
-    const credentials = JSON.parse(Buffer.from(encryptionToken, 'base64').toString('utf8'))
-    secrets.push(credentials?.site_id, credentials?.access_key)
-  } catch {
-    // Non-JSON CPIX tokens are still removed by their exact configured value.
-  }
-  for (const secret of secrets.filter((value) => typeof value === 'string' && value.length > 0)) {
-    diagnostic = diagnostic.replaceAll(secret, '<redacted>')
-  }
-  const sanitized = diagnostic
-    .replace(/https?:\/\/\S+/gi, '<url>')
-    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '<ip>')
-    .replace(/\b[A-Za-z0-9+/=_-]{24,}\b/g, '<redacted>')
-    .trim()
-  if (sanitized.length <= 4_000) return sanitized
-  return `${sanitized.slice(0, 2_000)}\n<diagnostic-truncated>\n${sanitized.slice(-2_000)}`
-}
-
-function failureMarker(error, stage, encryptionToken) {
+function failureMarker(error, stage) {
   const providerOutput = `${String(error?.stdout ?? '')}\n${String(error?.stderr ?? '')}`
   const providerResponseCode = providerOutput.match(/response error code\s*:?\s*(\d+)/i)?.[1]
   const providerOperation = providerOutput.match(/ERROR:\s*([A-Za-z0-9_]+\(\)) failed/i)?.[1]
@@ -234,11 +213,6 @@ function failureMarker(error, stage, encryptionToken) {
         : /cpix|kms/i.test(providerOutput)
           ? 'provider_kms_request_failed'
           : undefined
-  const providerDiagnostic =
-    stage === 'packaging' && !classification
-      ? safeProviderDiagnostic(providerOutput, encryptionToken)
-      : ''
-
   return JSON.stringify({
     version: 1,
     stage,
@@ -246,7 +220,6 @@ function failureMarker(error, stage, encryptionToken) {
     ...(providerResponseCode ? { providerResponseCode: Number(providerResponseCode) } : {}),
     ...(providerOperation ? { providerOperation } : {}),
     ...(classification ? { classification } : {}),
-    ...(providerDiagnostic ? { providerDiagnostic } : {}),
   })
 }
 
@@ -582,7 +555,7 @@ export async function processJob(value, dependencies = {}) {
     logWorkerDiagnostic('error', 'transcoder_stage_failed', job, stage)
     await client.send(
       new PutObjectCommand({
-        Body: failureMarker(error, stage, environment.DOVERUNNER_ENC_TOKEN),
+        Body: failureMarker(error, stage),
         Bucket: bucket,
         ContentType: 'application/json',
         Key: `${controlPrefix}.failed`,
