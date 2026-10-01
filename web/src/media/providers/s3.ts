@@ -31,6 +31,7 @@ import {
   newS3UploadState,
   readS3UploadState,
   type S3UploadDescriptor,
+  validateDeletableTranscodePrefix,
   validateOutputPrefix,
   validateSourceKey,
 } from './s3-upload-state'
@@ -483,7 +484,7 @@ export function createS3StorageProvider(
     },
 
     async deletePrefix(prefix) {
-      validateOutputPrefix(prefix)
+      validateDeletableTranscodePrefix(prefix)
       let continuationToken: string | undefined
       do {
         const listed = await client.send(

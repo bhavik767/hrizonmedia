@@ -508,6 +508,34 @@ describe('S3 storage provider', () => {
     )
   })
 
+  it('accepts only an exact processing attempt prefix for cleanup', async () => {
+    const processingJobId = newProcessingJobId()
+    const prefix = `transcode-attempts/${processingJobId}/1/`
+    const { client, send } = commandSender([
+      { Contents: [{ Key: `${prefix}manifest.mpd` }], IsTruncated: false },
+      {},
+    ])
+    const provider = createS3StorageProvider(
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
+      { client, presign: vi.fn(), probe: vi.fn() },
+    )
+
+    await provider.deletePrefix(prefix)
+    expect(send.mock.calls.map(([command]) => command.constructor)).toEqual([
+      ListObjectsV2Command,
+      DeleteObjectsCommand,
+    ])
+    await expect(provider.deletePrefix(`transcode-attempts/${processingJobId}/`)).rejects.toBeInstanceOf(
+      MultipartUploadError,
+    )
+    await expect(provider.deletePrefix('sources/')).rejects.toBeInstanceOf(MultipartUploadError)
+  })
+
   it('makes abort and exact source deletion idempotent without broad object keys', async () => {
     const uploadSessionId = newUploadSessionId()
     const missing = Object.assign(new Error('gone'), { name: 'NoSuchUpload' })
