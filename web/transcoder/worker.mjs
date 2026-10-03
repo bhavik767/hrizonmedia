@@ -36,6 +36,7 @@ const ENCODING_OVERHEAD_MS = 5 * 60 * 1000
 const ENCODING_MODES = new Set(['cpu', 'nvenc'])
 const STORAGE_CONNECTION_TIMEOUT_MS = 10_000
 const STORAGE_SOCKET_TIMEOUT_MS = 5 * 60 * 1000
+const PACKAGING_TIMEOUT_MS = 15 * 60 * 1000
 export const STORAGE_PUBLICATION_CONCURRENCY = 4
 
 export function validateJob(value) {
@@ -199,7 +200,40 @@ function logWorkerDiagnostic(level, event, job, stage) {
   )
 }
 
-function failureMarker(error, stage) {
+function safeProviderDiagnostic(providerOutput, environment) {
+  const secretValues = [
+    environment.DOVERUNNER_ENC_TOKEN,
+    environment.AWS_ACCESS_KEY_ID,
+    environment.AWS_SECRET_ACCESS_KEY,
+  ]
+  try {
+    const credentials = JSON.parse(
+      Buffer.from(environment.DOVERUNNER_ENC_TOKEN ?? '', 'base64').toString('utf8'),
+    )
+    secretValues.push(credentials?.access_key, credentials?.site_id)
+  } catch {
+    // Current CPIX tokens are opaque rather than base64-encoded credential bundles.
+  }
+  let diagnostic = providerOutput
+    .split(/\r?\n/)
+    .filter((line) => !/https?:\/\//i.test(line))
+    .filter((line) =>
+      /error|exception|fail|invalid|timestamp|segment|track|stream|mux|duration/i.test(line),
+    )
+    .join('\n')
+  for (const secret of secretValues) {
+    if (typeof secret === 'string' && secret) diagnostic = diagnostic.replaceAll(secret, '[redacted]')
+  }
+  diagnostic = diagnostic
+    .replace(/https?:\/\/\S+/gi, '[redacted-url]')
+    .replace(/--(?:enc_token|access_key|site_id)\s+\S+/gi, '[redacted-argument]')
+    .replace(/\/tmp\/hrizon-transcode-[^/\s]+/g, '[workdir]')
+    .replace(/\b[A-Za-z0-9+/_=-]{24,}\b/g, '[redacted-token]')
+    .trim()
+  return diagnostic ? diagnostic.slice(-2_000) : undefined
+}
+
+function failureMarker(error, stage, environment) {
   const providerOutput = `${String(error?.stdout ?? '')}\n${String(error?.stderr ?? '')}`
   const providerResponseCode = providerOutput.match(/response error code\s*:?\s*(\d+)/i)?.[1]
   const providerOperation = providerOutput.match(/ERROR:\s*([A-Za-z0-9_]+\(\)) failed/i)?.[1]
@@ -213,6 +247,9 @@ function failureMarker(error, stage) {
         : /cpix|kms/i.test(providerOutput)
           ? 'provider_kms_request_failed'
           : undefined
+  const providerDiagnostic = classification
+    ? undefined
+    : safeProviderDiagnostic(providerOutput, environment)
   return JSON.stringify({
     version: 1,
     stage,
@@ -220,6 +257,7 @@ function failureMarker(error, stage) {
     ...(providerResponseCode ? { providerResponseCode: Number(providerResponseCode) } : {}),
     ...(providerOperation ? { providerOperation } : {}),
     ...(classification ? { classification } : {}),
+    ...(providerDiagnostic ? { providerDiagnostic } : {}),
   })
 }
 
@@ -449,7 +487,7 @@ export async function processJob(value, dependencies = {}) {
     await run(
       environment.DOVERUNNER_PACKAGER_BIN ?? 'PallyConPackager',
       packagerArguments(job, clearFiles, packagedDirectory, environment.DOVERUNNER_ENC_TOKEN),
-      { timeout: 3 * 60 * 1000 },
+      { timeout: PACKAGING_TIMEOUT_MS },
     )
     logWorkerDiagnostic('info', 'transcoder_stage_completed', job, stage)
     stage = 'validation'
@@ -552,7 +590,7 @@ export async function processJob(value, dependencies = {}) {
     logWorkerDiagnostic('error', 'transcoder_stage_failed', job, stage)
     await client.send(
       new PutObjectCommand({
-        Body: failureMarker(error, stage),
+        Body: failureMarker(error, stage, environment),
         Bucket: bucket,
         ContentType: 'application/json',
         Key: `${controlPrefix}.failed`,

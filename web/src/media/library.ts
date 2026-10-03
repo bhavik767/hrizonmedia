@@ -17,6 +17,7 @@ import {
   type ProviderUploadId,
   type UploadSessionId,
 } from './identifiers'
+import { MAX_MEDIA_ASSET_BYTES, MAX_MEDIA_ASSET_SIZE_LABEL } from './limits'
 import type { CompletedPart } from './multipart'
 import type { MediaProviders, StorageProvider } from './providers/contracts'
 import { InvalidMediaError, MultipartUploadError } from './providers/errors'
@@ -36,7 +37,6 @@ import type {
   UploadMetadata,
 } from './types'
 
-const MAX_ASSET_BYTES = 2 * 1024 * 1024 * 1024
 const MAX_DURATION_SECONDS = 2 * 60 * 60
 const UPLOAD_SESSION_LIFETIME_MS = 24 * 60 * 60 * 1000
 
@@ -260,7 +260,7 @@ export async function deleteMediaFolder(
 
 function validateMetadata(
   input: UploadMetadata,
-  maximumUploadSizeBytes = MAX_ASSET_BYTES,
+  maximumUploadSizeBytes = MAX_MEDIA_ASSET_BYTES,
 ): UploadMetadata {
   if (
     input.fileName.length === 0 ||
@@ -279,7 +279,7 @@ function validateMetadata(
   if (
     !Number.isSafeInteger(input.size) ||
     input.size <= 0 ||
-    input.size > Math.min(MAX_ASSET_BYTES, maximumUploadSizeBytes)
+    input.size > Math.min(MAX_MEDIA_ASSET_BYTES, maximumUploadSizeBytes)
   ) {
     throw new MediaLibraryError("The video exceeds this Organisation's upload limit.", 400)
   }
@@ -421,7 +421,10 @@ export async function createUploadSession(
   await assertMediaActivityAllowed(payload)
   const organisation = await organisationUploadDetails(payload, owner, input)
   const folder = await folderForUpload(payload, owner, input, organisation?.organisationID)
-  const metadata = validateMetadata(input, organisation?.maximumUploadSizeBytes ?? MAX_ASSET_BYTES)
+  const metadata = validateMetadata(
+    input,
+    organisation?.maximumUploadSizeBytes ?? MAX_MEDIA_ASSET_BYTES,
+  )
   await cleanupAbandonedUploads(payload, new Date(), providers)
   const now = new Date()
   const mediaAssetId = newMediaAssetId()
@@ -555,7 +558,7 @@ export async function resumeUploadSession(
 }
 
 function validatePartNumber(session: UploadSession, partNumber: number): void {
-  const maximumParts = Math.ceil(MAX_ASSET_BYTES / session.partSize)
+  const maximumParts = Math.ceil(MAX_MEDIA_ASSET_BYTES / session.partSize)
   if (!Number.isSafeInteger(partNumber) || partNumber < 1 || partNumber > maximumParts) {
     throw new MediaLibraryError('Invalid upload part number.', 400)
   }
@@ -686,12 +689,12 @@ export async function completeUpload(
       'The completed video container does not match its file name.',
     )
   }
-  if (probe.size <= 0 || probe.size > MAX_ASSET_BYTES) {
+  if (probe.size <= 0 || probe.size > MAX_MEDIA_ASSET_BYTES) {
     return rejectCompletedUpload(
       payload,
       session,
       providers,
-      'The video must be no larger than 2 GB.',
+      `The video must be no larger than ${MAX_MEDIA_ASSET_SIZE_LABEL}.`,
     )
   }
   if (

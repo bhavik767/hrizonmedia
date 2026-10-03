@@ -5,6 +5,7 @@ import { POST as createUpload } from '@/app/(frontend)/api/demo/uploads/route'
 import { PUT as uploadPart } from '@/app/(frontend)/api/demo/uploads/[uploadSessionId]/parts/[partNumber]/content/route'
 import { POST as renewPart } from '@/app/(frontend)/api/demo/uploads/[uploadSessionId]/parts/[partNumber]/route'
 import { POST as completeUpload } from '@/app/(frontend)/api/demo/uploads/[uploadSessionId]/complete/route'
+import { MAX_MULTIPART_PARTS, MULTIPART_PART_SIZE_BYTES } from '@/media/multipart'
 import config from '@/payload.config'
 
 let payload: Payload
@@ -119,13 +120,13 @@ describe('Demo mutation security', () => {
     }
   })
 
-  it('accepts the completion manifest size required for a supported 2 GB upload', async () => {
+  it('accepts the completion manifest size required for a supported 5 GiB upload', async () => {
     const uploadSessionId = 'upload_00000000-0000-0000-0000-000000000000'
-    const parts = Array.from({ length: 128 }, (_, index) => ({
+    const parts = Array.from({ length: MAX_MULTIPART_PARTS }, (_, index) => ({
       checksumSHA256: 'a'.repeat(64),
       etag: 'b'.repeat(64),
       partNumber: index + 1,
-      size: 16 * 1024 * 1024,
+      size: MULTIPART_PART_SIZE_BYTES,
     }))
     const response = await completeUpload(
       new Request(`http://localhost:3000/api/demo/uploads/${uploadSessionId}/complete`, {
@@ -138,13 +139,13 @@ describe('Demo mutation security', () => {
     expect(response.status).toBe(404)
   })
 
-  it('rejects a 129-part completion manifest', async () => {
+  it('rejects a completion manifest over the platform part limit', async () => {
     const uploadSessionId = 'upload_00000000-0000-0000-0000-000000000000'
-    const parts = Array.from({ length: 129 }, (_, index) => ({
+    const parts = Array.from({ length: MAX_MULTIPART_PARTS + 1 }, (_, index) => ({
       checksumSHA256: 'a'.repeat(64),
       etag: 'b'.repeat(64),
       partNumber: index + 1,
-      size: 16 * 1024 * 1024,
+      size: MULTIPART_PART_SIZE_BYTES,
     }))
     const response = await completeUpload(
       new Request(`http://localhost:3000/api/demo/uploads/${uploadSessionId}/complete`, {

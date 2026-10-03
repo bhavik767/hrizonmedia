@@ -1,5 +1,6 @@
 import { getPayload } from 'payload'
 
+import { MAX_MEDIA_ASSET_BYTES } from '../../src/media/limits.js'
 import config from '../../src/payload.config.js'
 import { cleanMediaRecords } from './cleanMediaRecords.js'
 
@@ -87,7 +88,7 @@ export async function seedUploaders(): Promise<void> {
         defaultRetentionDays: 30,
         drmDefault: 'protected',
         drmRequired: false,
-        maximumUploadSizeBytes: 2 * 1024 * 1024 * 1024,
+        maximumUploadSizeBytes: MAX_MEDIA_ASSET_BYTES,
         organisation: organisation.id,
         setupCompletedAt: new Date().toISOString(),
       },

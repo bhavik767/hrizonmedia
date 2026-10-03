@@ -1,5 +1,6 @@
 import type { Payload } from 'payload'
 
+import { MAX_MEDIA_ASSET_BYTES } from '@/media/limits'
 import type { Member } from '@/payload-types'
 
 export async function createTestOrganisation(
@@ -9,7 +10,11 @@ export async function createTestOrganisation(
 ): Promise<number> {
   const organisation = await payload.create({
     collection: 'organisations',
-    data: { initialAdministrator: member.id, name: `${member.email} Organisation`, status: 'active' },
+    data: {
+      initialAdministrator: member.id,
+      name: `${member.email} Organisation`,
+      status: 'active',
+    },
     overrideAccess: true,
   })
   await payload.create({
@@ -23,7 +28,7 @@ export async function createTestOrganisation(
       defaultRetentionDays: 30,
       drmDefault: 'protected',
       drmRequired: false,
-      maximumUploadSizeBytes: 2 * 1024 * 1024 * 1024,
+      maximumUploadSizeBytes: MAX_MEDIA_ASSET_BYTES,
       organisation: organisation.id,
       setupCompletedAt: new Date().toISOString(),
     },
@@ -32,7 +37,10 @@ export async function createTestOrganisation(
   return organisation.id
 }
 
-export async function createTestPlatformAdministrator(payload: Payload, member: Member): Promise<void> {
+export async function createTestPlatformAdministrator(
+  payload: Payload,
+  member: Member,
+): Promise<void> {
   await payload.create({
     collection: 'platform-administrators',
     data: { member: member.id, status: 'active' },
