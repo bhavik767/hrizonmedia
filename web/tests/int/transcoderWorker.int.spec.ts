@@ -102,7 +102,7 @@ function workerDependencies({
       return {}
     }),
   }
-  const execFile = vi.fn(async (_executable: string, args: string[]) => {
+  const execFile = vi.fn(async (_executable: string, args: string[], _options?: { timeout?: number }) => {
     if (args[0] === '--query-gpu=name') return { stdout: gpuAvailable ? 'GPU 0' : '' }
     if (args.includes('-encoders'))
       return {
@@ -301,6 +301,7 @@ describe('Salad transcoder worker contract', () => {
           args.includes('--enc_token'),
         )
         expect(packagerCalls).toHaveLength(1)
+        expect(packagerCalls[0]![2]).toEqual({ timeout: 15 * 60 * 1000 })
         for (const { height } of renditions) {
           expect(packagerCalls[0]![1].some((argument) => argument.endsWith(`${height}p.mp4`))).toBe(
             true,
@@ -645,6 +646,39 @@ describe('Salad transcoder worker contract', () => {
     }
   })
 
+  it('retains only a bounded, redacted diagnostic for an unclassified packager error', async () => {
+    const diagnostics = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const progress = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    const packagingFailure = Object.assign(new Error('packaging failed'), {
+      code: 1,
+      stderr: `ignored detail\nERROR: Failed to mux stream at timestamp -123456 using ${job.callbackSecret}\nhttps://example.invalid/private-path`,
+    })
+    const dependencies = workerDependencies({ packagingFailure })
+
+    try {
+      await expect(processJob({ input: job }, dependencies)).resolves.toEqual({ failed: true })
+      const marker = dependencies.commands.find(
+        (command) =>
+          command.constructor.name === 'PutObjectCommand' &&
+          command.input?.Key === `transcode-control/${job.processingJobId}/attempt-1.failed`,
+      )
+      const body = String(marker?.input?.Body)
+
+      expect(JSON.parse(body)).toEqual({
+        exitCode: 1,
+        providerDiagnostic: 'ERROR: Failed to mux stream at timestamp -123456 using [redacted-token]',
+        stage: 'packaging',
+        version: 1,
+      })
+      expect(body).not.toContain(job.callbackSecret)
+      expect(body).not.toContain('example.invalid')
+      expect(body).not.toContain('ignored detail')
+    } finally {
+      diagnostics.mockRestore()
+      progress.mockRestore()
+    }
+  })
+
   it('requests separately named DASH/CENC and HLS/CBCS delivery packages', () => {
     expect(
       packagerArguments(
@@ -660,7 +694,7 @@ describe('Salad transcoder worker contract', () => {
         '--dash',
         '--hls',
         '--transport_stream_timestamp_offset_ms',
-        '120000',
+        '180000',
         '--mpd_filename',
         'manifest.mpd',
         '--m3u8_filename',

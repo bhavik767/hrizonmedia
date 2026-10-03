@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { newMediaAssetId, newProcessingJobId, processingOutputPrefix } from '@/media/identifiers'
 import { createSaladTranscodeProvider } from '@/media/providers/salad'
 import {
+  FailedTranscodeJobError,
   InvalidTranscodeMetadataError,
   PermanentTranscodeError,
   TransientTranscodeError,
@@ -192,7 +193,7 @@ describe('SaladCloud transcode provider', () => {
         source,
         startedAt: new Date(),
       }),
-    ).rejects.toBeInstanceOf(TransientTranscodeError)
+    ).rejects.toBeInstanceOf(FailedTranscodeJobError)
 
     const rejected = provider(vi.fn(async () => new Response(null, { status: 401 }))).transcode
     await expect(
@@ -251,6 +252,42 @@ describe('SaladCloud transcode provider', () => {
       )
     },
   )
+
+  it('reconciles a conflict when Salad has already failed the job', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(Response.json({ id: nativeJobId, status: 'failed' }))
+    const supersedeAttempt = vi.fn(async () => undefined)
+    const { transcode } = provider(fetch, undefined, supersedeAttempt)
+
+    await expect(
+      transcode.cancelAttempt({
+        attempt: 1,
+        processingJobId: newProcessingJobId(),
+        providerJobId: `provider_job_${nativeJobId}`,
+      }),
+    ).resolves.toBeUndefined()
+    expect(supersedeAttempt).toHaveBeenCalledOnce()
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch.mock.calls[1]?.[1]).toMatchObject({ method: 'GET' })
+  })
+
+  it('keeps a conflicting cancellation pending while Salad still reports a running job', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(Response.json({ id: nativeJobId, status: 'running' }))
+    const { transcode } = provider(fetch)
+
+    await expect(
+      transcode.cancelAttempt({
+        attempt: 1,
+        processingJobId: newProcessingJobId(),
+        providerJobId: `provider_job_${nativeJobId}`,
+      }),
+    ).rejects.toBeInstanceOf(TransientTranscodeError)
+  })
 
   it.each([429, 500])('keeps retryable Salad cancellation responses pending (%s)', async (status) => {
     const fetch = vi.fn(async () => new Response('private provider body', { status }))

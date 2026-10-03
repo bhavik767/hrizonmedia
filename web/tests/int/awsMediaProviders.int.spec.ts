@@ -15,6 +15,8 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 
 import { newMediaAssetId, newProcessingJobId, newUploadSessionId } from '@/media/identifiers'
+import { MAX_MEDIA_ASSET_BYTES } from '@/media/limits'
+import { MAX_MULTIPART_PARTS, MULTIPART_PART_SIZE_BYTES } from '@/media/multipart'
 import { createCloudFrontDeliveryProvider } from '@/media/providers/cloudfront'
 import { MultipartUploadError } from '@/media/providers/errors'
 import { getMediaProviders } from '@/media/providers'
@@ -420,13 +422,13 @@ describe('S3 storage provider', () => {
     expect(send.mock.calls[3]![0]).toBeInstanceOf(HeadObjectCommand)
   })
 
-  it('completes a maximum-size 2 GiB source as 128 full parts', async () => {
+  it('completes a maximum-size 5 GiB source as 320 full parts', async () => {
     const uploadSessionId = newUploadSessionId()
-    const partSize = 16 * 1024 * 1024
-    const sourceSize = 2 * 1024 * 1024 * 1024
+    const partSize = MULTIPART_PART_SIZE_BYTES
+    const sourceSize = MAX_MEDIA_ASSET_BYTES
     const checksumSHA256 = '44'.repeat(32)
     const providerChecksum = Buffer.from(checksumSHA256, 'hex').toString('base64')
-    const parts = Array.from({ length: 128 }, (_, index) => ({
+    const parts = Array.from({ length: MAX_MULTIPART_PARTS }, (_, index) => ({
       checksumSHA256,
       etag: `etag-${index + 1}`,
       partNumber: index + 1,
@@ -468,7 +470,7 @@ describe('S3 storage provider', () => {
       }),
     ).resolves.toEqual({ objectKey: `sources/${uploadSessionId}/source.mp4` })
     const completion = send.mock.calls[2]![0] as CompleteMultipartUploadCommand
-    expect(completion.input.MultipartUpload?.Parts).toHaveLength(128)
+    expect(completion.input.MultipartUpload?.Parts).toHaveLength(MAX_MULTIPART_PARTS)
   })
 
   it('deletes every object under one validated processing output prefix', async () => {
@@ -504,6 +506,34 @@ describe('S3 storage provider', () => {
     await expect(provider.deletePrefix('outputs/not-safe/')).rejects.toBeInstanceOf(
       MultipartUploadError,
     )
+  })
+
+  it('accepts only an exact processing attempt prefix for cleanup', async () => {
+    const processingJobId = newProcessingJobId()
+    const prefix = `transcode-attempts/${processingJobId}/1/`
+    const { client, send } = commandSender([
+      { Contents: [{ Key: `${prefix}manifest.mpd` }], IsTruncated: false },
+      {},
+    ])
+    const provider = createS3StorageProvider(
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
+      { client, presign: vi.fn(), probe: vi.fn() },
+    )
+
+    await provider.deletePrefix(prefix)
+    expect(send.mock.calls.map(([command]) => command.constructor)).toEqual([
+      ListObjectsV2Command,
+      DeleteObjectsCommand,
+    ])
+    await expect(provider.deletePrefix(`transcode-attempts/${processingJobId}/`)).rejects.toBeInstanceOf(
+      MultipartUploadError,
+    )
+    await expect(provider.deletePrefix('sources/')).rejects.toBeInstanceOf(MultipartUploadError)
   })
 
   it('makes abort and exact source deletion idempotent without broad object keys', async () => {

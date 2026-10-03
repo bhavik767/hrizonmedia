@@ -65,6 +65,15 @@ export function validateOutputPrefix(prefix: string): void {
   }
 }
 
+export function validateDeletableTranscodePrefix(prefix: string): void {
+  if (
+    !/^outputs\/processing_[0-9a-f-]{36}\/$/.test(prefix) &&
+    !/^transcode-attempts\/processing_[0-9a-f-]{36}\/[1-3]\/$/.test(prefix)
+  ) {
+    throw new MultipartUploadError('Transcode prefix is invalid.')
+  }
+}
+
 export function validateSourceKey(objectKey: string): void {
   if (!/^sources\/upload_[0-9a-f-]{36}\/source\.(mp4|mkv)$/.test(objectKey)) {
     throw new MultipartUploadError('Source object key is invalid.')

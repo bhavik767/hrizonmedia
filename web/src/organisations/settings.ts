@@ -4,10 +4,10 @@ import { Buffer } from 'node:buffer'
 import type { Payload } from 'payload'
 import sharp from 'sharp'
 
+import { MAX_MEDIA_ASSET_BYTES, MAX_MEDIA_ASSET_SIZE_LABEL } from '@/media/limits'
 import { authorizeOrganisationMedia, OrganisationAuthorizationError } from './authorization'
 import type { OrganisationSetting, Member } from '@/payload-types'
 
-const MAXIMUM_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024 * 1024
 const MAXIMUM_LOGO_SIZE_BYTES = 3 * 1024 * 1024
 
 export class OrganisationSettingsError extends Error {
@@ -53,9 +53,12 @@ function validateInput(input: OrganisationSettingsInput): OrganisationSettingsIn
   }
   if (
     !validPositiveInteger(input.maximumUploadSizeBytes) ||
-    input.maximumUploadSizeBytes > MAXIMUM_UPLOAD_SIZE_BYTES
+    input.maximumUploadSizeBytes > MAX_MEDIA_ASSET_BYTES
   ) {
-    throw new OrganisationSettingsError('Maximum upload size must be no larger than 2 GB.', 400)
+    throw new OrganisationSettingsError(
+      `Maximum upload size must be no larger than ${MAX_MEDIA_ASSET_SIZE_LABEL}.`,
+      400,
+    )
   }
   return input
 }

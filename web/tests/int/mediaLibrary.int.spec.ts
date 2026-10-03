@@ -13,10 +13,8 @@ import {
   receiveUploadPart,
   renewUploadPart,
 } from '@/media/library'
-import {
-  getFakeProviders,
-  resetFakeMediaStorage,
-} from '@/media/providers/fake'
+import { MAX_MEDIA_ASSET_BYTES } from '@/media/limits'
+import { getFakeProviders, resetFakeMediaStorage } from '@/media/providers/fake'
 import { MultipartUploadError } from '@/media/providers/errors'
 import { runProcessingCycle } from '@/media/processing'
 import config from '@/payload.config'
@@ -292,14 +290,14 @@ describe('Media Asset library persistence', () => {
     ).resolves.toMatchObject({ fileName: 'lesson.mkv', status: 'queued' })
   })
 
-  it('rejects advisory metadata over 2 GB before starting storage', async () => {
+  it('rejects advisory metadata over 5 GiB before starting storage', async () => {
     await expect(
       createUploadSession(payload, firstUploader, {
         fileFingerprint: 'oversized',
         fileName: 'oversized.mp4',
         mimeType: 'video/mp4',
         organisationID: firstOrganisationID,
-        size: 2 * 1024 * 1024 * 1024 + 1,
+        size: MAX_MEDIA_ASSET_BYTES + 1,
       }),
     ).rejects.toMatchObject({ status: 400 })
   })
