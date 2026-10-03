@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 import { getPayload } from 'payload'
+import { randomUUID } from 'node:crypto'
 
 import config from '@/payload.config'
+import type { MediaAssetStatus } from '@/media/types'
 
 import {
   cleanupMembers,
@@ -24,6 +26,88 @@ async function uploadVideo(page: Page, file: { buffer: Buffer; mimeType: string;
   await page.getByRole('button', { name: 'Upload Video' }).click()
   await page.getByLabel('Video file').setInputFiles(file)
   await page.getByRole('button', { name: 'Start Upload' }).click()
+}
+
+async function seedWorkspaceAsset(status: MediaAssetStatus, name: string, size: number) {
+  const payload = await getPayload({ config })
+  const member = await payload.find({
+    collection: 'members',
+    overrideAccess: true,
+    where: { email: { equals: testInvitee.email } },
+  })
+  const organisation = await payload.find({
+    collection: 'organisations',
+    overrideAccess: true,
+    where: { name: { equals: `${testInvitee.name} Organisation` } },
+  })
+  const owner = member.docs[0]!
+  const tenant = organisation.docs[0]!
+  const now = new Date().toISOString()
+  const asset = await payload.create({
+    collection: 'media-assets',
+    overrideAccess: true,
+    data: {
+      mediaAssetId: `asset_${randomUUID()}`,
+      organisation: tenant.id,
+      owner: owner.id,
+      fileName: name,
+      mimeType: 'video/mp4',
+      size,
+      status,
+      statusChangedAt: now,
+      mediaProtectionPolicy: 'protected',
+    },
+  })
+  await payload.create({
+    collection: 'upload-sessions',
+    overrideAccess: true,
+    data: {
+      uploadSessionId: `upload_${randomUUID()}`,
+      organisation: tenant.id,
+      asset: asset.id,
+      owner: owner.id,
+      fileName: name,
+      mimeType: 'video/mp4',
+      size,
+      fileFingerprint: randomUUID(),
+      providerUploadId: `provider_upload_${randomUUID()}`,
+      partSize: 1024,
+      objectKey: status === 'failed' ? `sources/${asset.mediaAssetId}` : undefined,
+      status: 'completed',
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+    },
+  })
+  if (status === 'ready' || status === 'failed') {
+    await payload.create({
+      collection: 'processing-jobs',
+      overrideAccess: true,
+      data: {
+        processingJobId: `processing_${randomUUID()}`,
+        organisation: tenant.id,
+        asset: asset.id,
+        owner: owner.id,
+        status,
+        queuedAt: now,
+        dispatchBy: now,
+        nextAttemptAt: now,
+        attempts: 0,
+        objectKey: `sources/${asset.mediaAssetId}`,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+        sourceDurationSeconds: 60,
+        renditions:
+          status === 'ready'
+            ? [
+                { width: 640, height: 360, audioCodec: 'aac', videoCodec: 'h264' },
+                { width: 1280, height: 720, audioCodec: 'aac', videoCodec: 'h264' },
+              ]
+            : [],
+        readyAt: status === 'ready' ? now : undefined,
+        failureMessage: status === 'failed' ? 'Processing could not be completed.' : undefined,
+      },
+    })
+  }
+  return asset.mediaAssetId
 }
 
 async function controlMultipartUpload(
@@ -148,6 +232,94 @@ test.describe('Media Asset tracer bullet', () => {
     await cleanupMembers()
   })
 
+  test('issue 162: shows the same workspace across Media Asset lifecycle states', async ({
+    page,
+  }) => {
+    const readyID = await seedWorkspaceAsset('ready', 'ready-lesson.mp4', 2_500_000)
+    const processingID = await seedWorkspaceAsset('processing', 'processing-lesson.mp4', 3_000_000)
+    const failedID = await seedWorkspaceAsset('failed', 'failed-lesson.mp4', 4_000_000)
+    await signIn(page, testInvitee)
+
+    await page.goto(`/demo/assets/${readyID}`)
+    await expect(page.getByRole('heading', { name: 'ready-lesson.mp4', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Video', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(
+      page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Videos' }),
+    ).toHaveAttribute('href', '/demo/videos')
+    await expect(page.getByRole('button', { name: 'Start secure playback' })).toBeVisible()
+    const details = page.getByRole('region', { name: 'Media Asset details' })
+    await expect(details).toContainText(readyID)
+    await expect(details).toContainText('Updated')
+    await expect(details).toContainText('Original filename')
+    const information = page.getByRole('region', { name: 'Video Information' })
+    await expect(information).toContainText('360p Mobile')
+    await expect(information).toContainText('720p HD')
+    await expect(information).toContainText('2.38 MB')
+    for (const section of [
+      'Advanced Settings',
+      'Thumbnail Management',
+      'Video Analytics',
+      'Organisation and Folder',
+      'Danger Zone',
+    ]) {
+      await expect(page.getByRole('region', { name: section })).toBeVisible()
+    }
+    for (const name of [
+      'Copy Media Asset ID',
+      'Copy Embed Code',
+      'Download Original',
+      'Replace Video',
+      'Upload custom poster',
+      'Move Media Asset',
+      'Remove tag',
+    ]) {
+      await expect(page.getByRole('button', { name })).toBeDisabled()
+    }
+    await expect(page.getByLabel('Allowed web domains')).toBeDisabled()
+    const analytics = page.getByRole('region', { name: 'Video Analytics' })
+    await expect(analytics).toContainText('48,290')
+    await expect(analytics).toContainText('34,120 hrs')
+    await expect(analytics).toContainText('1.84 TB')
+    await expect(analytics).toContainText('41m 18s')
+    const readyAnalytics = await analytics.innerText()
+
+    for (const width of [1440, 1200, 768, 390, 360]) {
+      await page.setViewportSize({ width, height: 844 })
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+          ),
+        )
+        .toBe(true)
+      if (width === 390) {
+        await page.reload()
+      }
+    }
+
+    await page.goto(`/demo/assets/${processingID}`)
+    await expect(page.getByRole('region', { name: 'Playback status' })).toContainText(
+      'Preparing playback',
+    )
+    await expect(
+      page.getByRole('heading', { name: 'processing-lesson.mp4', exact: true }),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Start secure playback' })).toHaveCount(0)
+    await expect
+      .poll(() => page.getByRole('region', { name: 'Video Analytics' }).innerText())
+      .toBe(readyAnalytics)
+
+    await page.goto(`/demo/assets/${failedID}`)
+    await expect(page.getByRole('heading', { name: 'Processing failed' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Retry processing' })).toBeVisible()
+    await expect
+      .poll(() => page.getByRole('region', { name: 'Video Analytics' }).innerText())
+      .toBe(readyAnalytics)
+  })
+
   test('opens the upload dialog before choosing a file', async ({ page }) => {
     await signIn(page, testInvitee)
 
@@ -181,19 +353,57 @@ test.describe('Media Asset tracer bullet', () => {
     await expect(page.getByRole('heading', { name: 'private-lesson.mp4' })).toBeVisible({
       timeout: 45_000,
     })
+    await expect(page.getByRole('link', { name: 'Video', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    const breadcrumb = page.getByRole('navigation', { name: 'Breadcrumb' })
+    await expect(breadcrumb.getByRole('link', { name: 'Videos' })).toHaveAttribute(
+      'href',
+      '/demo/videos',
+    )
     const details = page.getByRole('region', { name: 'Media Asset details' })
     await expect(details.getByText('Status', { exact: true })).toBeVisible({ timeout: 45_000 })
     await expect(details.getByText('Media Asset ID', { exact: true })).toBeVisible()
     await expect(details.getByText('Uploaded', { exact: true })).toBeVisible()
+    await expect(details.getByText('Original filename', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Start secure playback' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Video Information' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Advanced Settings' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Thumbnail Management' })).toBeVisible()
+    const analytics = page.getByRole('region', { name: 'Video Analytics' })
+    await expect(analytics).toContainText('48,290')
+    await expect(analytics).toContainText('34,120 hrs')
+    await expect(analytics).toContainText('1.84 TB')
+    await expect(analytics).toContainText('41m 18s')
+    await expect(page.getByRole('region', { name: 'Organisation and Folder' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Danger Zone' })).toBeVisible()
+
+    for (const name of [
+      'Copy Media Asset ID',
+      'Copy Embed Code',
+      'Download Original',
+      'Replace Video',
+      'Upload custom poster',
+      'Move Media Asset',
+    ]) {
+      await expect(page.getByRole('button', { name })).toBeDisabled()
+    }
+    await expect(page.getByLabel('Allowed web domains')).toBeDisabled()
     await expect(page.getByText('Upload Session ID', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Processing Job ID', { exact: true })).toHaveCount(0)
     await expect(page.getByText('Provider Job ID', { exact: true })).toHaveCount(0)
-    await expect(
-      page.getByRole('button', { name: /edit|embed|download original|replace video/i }),
-    ).toHaveCount(0)
     const assetID = page.url().split('/').at(-1)
     expect(assetID).toMatch(/^asset_/)
+
+    await page.setViewportSize({ height: 844, width: 390 })
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+      )
+      .toBe(true)
 
     await page.getByRole('button', { name: 'Sign out' }).click()
     await signIn(page, testSecondUploader)

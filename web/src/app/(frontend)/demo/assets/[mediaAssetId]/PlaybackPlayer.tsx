@@ -4,6 +4,7 @@ import 'shaka-player/dist/controls.css'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { Play } from 'lucide-react'
 
 interface PlaybackGrantContract {
   deliveryExpiresAt: string
@@ -338,9 +339,11 @@ export function PlaybackPlayer({
           <p className="eyebrow">Protected streaming</p>
           <h2 id="secure-playback-title">Secure playback</h2>
         </div>
-        <button disabled={starting} onClick={startPlayback} type="button">
-          {starting ? 'Starting secure playback…' : 'Restart secure playback'}
-        </button>
+        {watermark && (
+          <button disabled={starting} onClick={startPlayback} type="button">
+            {starting ? 'Starting secure playback…' : 'Restart secure playback'}
+          </button>
+        )}
       </div>
       <div className="secure-playback__video" ref={videoContainerRef}>
         <video
@@ -353,6 +356,17 @@ export function PlaybackPlayer({
           playsInline
           ref={videoRef}
         />
+        {!watermark && (
+          <button
+            aria-label="Start secure playback"
+            className="secure-playback__start"
+            disabled={starting}
+            onClick={startPlayback}
+            type="button"
+          >
+            <Play aria-hidden="true" fill="currentColor" size={29} />
+          </button>
+        )}
         {watermark && (
           <div
             aria-label="Recording attribution watermark"
