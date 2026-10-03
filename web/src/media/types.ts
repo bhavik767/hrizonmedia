@@ -42,12 +42,14 @@ export interface MediaAssetDetail extends MediaAssetSummary {
   dispatchedAt: string | null
   failureMessage: string | null
   mimeType: string
+  mediaProtectionPolicy: MediaProtectionPolicy
   organisationID: number | null
   processingJobId: ProcessingJobId | null
   providerJobId: ProviderJobId | null
   readyAt: string | null
   renditions: Rendition[] | null
   uploadSessionId: UploadSessionId
+  updatedAt: string
 }
 
 export interface UploadMetadata {

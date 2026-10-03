@@ -927,12 +927,14 @@ export async function getVisibleAsset(
     dispatchedAt: jobs.docs[0]?.dispatchedAt ?? null,
     failureMessage: jobs.docs[0]?.failureMessage ?? null,
     mimeType: asset.mimeType,
+    mediaProtectionPolicy: (asset.mediaProtectionPolicy ?? 'protected') as MediaProtectionPolicy,
     organisationID: optionalRelationID(asset.organisation),
     processingJobId: (jobs.docs[0]?.processingJobId as MediaAssetDetail['processingJobId']) ?? null,
     providerJobId: (jobs.docs[0]?.providerJobId as MediaAssetDetail['providerJobId']) ?? null,
     readyAt: jobs.docs[0]?.readyAt ?? null,
     renditions: (jobs.docs[0]?.renditions as MediaAssetDetail['renditions']) ?? null,
     uploadSessionId: session.uploadSessionId as UploadSessionId,
+    updatedAt: asset.updatedAt,
   }
 }
 

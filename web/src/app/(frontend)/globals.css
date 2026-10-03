@@ -1264,6 +1264,29 @@ h2 {
   width: 100%;
 }
 
+.secure-playback__start {
+  align-items: center;
+  background: var(--signal);
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  height: clamp(64px, 7vw, 84px);
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: clamp(64px, 7vw, 84px);
+  z-index: 2;
+}
+
+.secure-playback__start:focus-visible {
+  outline: 3px solid var(--heading);
+  outline-offset: 4px;
+}
+
 .secure-playback__watermark {
   color: #fff;
   display: grid;

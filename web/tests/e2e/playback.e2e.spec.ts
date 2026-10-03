@@ -46,7 +46,10 @@ async function openReadyAsset(page: Page, fileName: string) {
   await page.getByRole('button', { name: 'Start Upload' }).click()
   const asset = page.getByRole('article', { name: fileName })
   await expect(asset.getByText('ready', { exact: true })).toBeVisible({ timeout: 45_000 })
-  await asset.getByRole('link', { name: 'Inspect asset' }).click()
+  const detailURL = await asset
+    .getByRole('link', { name: fileName, exact: true })
+    .getAttribute('href')
+  await page.goto(detailURL!.split('?')[0])
 }
 
 test.describe('encrypted playback contract', () => {
