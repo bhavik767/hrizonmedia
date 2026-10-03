@@ -19,7 +19,10 @@ import {
 import { NodeHttpHandler } from '@smithy/node-http-handler'
 
 import {
+  CMAF_COMPLETION_MARKER_VERSION,
+  CMAF_PACKAGE_TYPE,
   attemptSupersessionMarkerKey,
+  hasFairPlayProtection,
   processingDrmContentId,
 } from '../src/media/transcode-control.mjs'
 
@@ -33,10 +36,6 @@ const ENCODING_OVERHEAD_MS = 5 * 60 * 1000
 const ENCODING_MODES = new Set(['cpu', 'nvenc'])
 const STORAGE_CONNECTION_TIMEOUT_MS = 10_000
 const STORAGE_SOCKET_TIMEOUT_MS = 5 * 60 * 1000
-// Shaka's MPEG-TS muxer needs room for the negative timestamp produced by
-// Salad's NVENC path. A long 23.976 fps source reached -125.25 seconds, so keep
-// a full minute of headroom beyond that observed boundary.
-const HLS_TIMESTAMP_OFFSET_MS = 180_000
 const PACKAGING_TIMEOUT_MS = 15 * 60 * 1000
 export const STORAGE_PUBLICATION_CONCURRENCY = 4
 
@@ -314,10 +313,7 @@ export function packagerArguments(job, clearFiles, packagedDirectory, encryption
     ...credentialArguments,
     '--content_id',
     job.drmContentId,
-    '--dash',
-    '--hls',
-    '--transport_stream_timestamp_offset_ms',
-    String(HLS_TIMESTAMP_OFFSET_MS),
+    '--cmaf',
     '-i',
     ...clearFiles.map(({ absolute }) => absolute),
     '-o',
@@ -353,10 +349,12 @@ async function filesUnder(directory, root = directory) {
 }
 
 export function normalizePackagedFiles(files) {
-  const normalized = files.map((file) => ({
-    ...file,
-    relative: file.relative.replace(/^(?:dash|hls)\//, ''),
-  }))
+  const normalized = files.map((file) => {
+    if (!file.relative.startsWith('cmaf/')) {
+      throw new Error('DoveRunner created output outside its CMAF package.')
+    }
+    return { ...file, relative: file.relative.slice('cmaf/'.length) }
+  })
   const paths = new Set()
   for (const file of normalized) {
     if (paths.has(file.relative)) {
@@ -502,17 +500,14 @@ export async function processJob(value, dependencies = {}) {
     if (!hlsManifest) throw new Error('DoveRunner did not create master.m3u8.')
     const manifestText = await readFile(manifest.absolute, 'utf8')
     verifyDashProtection(manifestText)
-    const hlsPlaylists = packaged.filter(({ relative }) => relative.endsWith('.m3u8'))
+    const hlsPlaylists = packaged.filter(
+      ({ relative }) => relative.endsWith('.m3u8') && relative !== 'master.m3u8',
+    )
     const hlsPlaylistTexts = await Promise.all(
       hlsPlaylists.map(async ({ absolute }) => readFile(absolute, 'utf8')),
     )
     if (
-      !/^#EXTM3U/m.test(await readFile(hlsManifest.absolute, 'utf8')) ||
-      !hlsPlaylistTexts.some(
-        (playlist) =>
-          /#EXT-X-KEY:METHOD=SAMPLE-AES,/i.test(playlist) &&
-          /KEYFORMAT="com\.apple\.streamingkeydelivery"/i.test(playlist),
-      )
+      !hasFairPlayProtection(await readFile(hlsManifest.absolute, 'utf8'), hlsPlaylistTexts)
     ) {
       throw new Error('DoveRunner HLS manifest is invalid.')
     }
@@ -562,8 +557,9 @@ export async function processJob(value, dependencies = {}) {
         Body: JSON.stringify({
           attempt: job.attempt,
           outputPrefix: job.outputPrefix,
+          packageType: CMAF_PACKAGE_TYPE,
           renditions: job.renditions,
-          version: 1,
+          version: CMAF_COMPLETION_MARKER_VERSION,
         }),
         Bucket: bucket,
         ContentType: 'application/json',

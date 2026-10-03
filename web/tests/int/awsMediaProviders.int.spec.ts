@@ -38,6 +38,16 @@ function commandSender(responses: unknown[]) {
   return { client: { send }, send }
 }
 
+function cmafCompletionMarker(outputPrefix: string, renditions: unknown) {
+  return JSON.stringify({
+    attempt: 1,
+    outputPrefix,
+    packageType: 'cmaf',
+    renditions,
+    version: 2,
+  })
+}
+
 describe('S3 storage provider', () => {
   it('writes an attempt-scoped supersession marker', async () => {
     const processingJobId = newProcessingJobId()
@@ -74,8 +84,7 @@ describe('S3 storage provider', () => {
     const { client, send } = commandSender([
       {
         Body: {
-          transformToString: async () =>
-            JSON.stringify({ attempt: 1, outputPrefix, renditions, version: 1 }),
+          transformToString: async () => cmafCompletionMarker(outputPrefix, renditions),
         },
         ContentLength: 512,
       },
@@ -145,8 +154,7 @@ describe('S3 storage provider', () => {
     const { client, send } = commandSender([
       {
         Body: {
-          transformToString: async () =>
-            JSON.stringify({ attempt: 1, outputPrefix, renditions, version: 1 }),
+          transformToString: async () => cmafCompletionMarker(outputPrefix, renditions),
         },
         ContentLength: 512,
       },
@@ -207,6 +215,61 @@ describe('S3 storage provider', () => {
     )
   })
 
+  it('rejects a CMAF package when any referenced media playlist lacks FairPlay protection', async () => {
+    const processingJobId = newProcessingJobId()
+    const outputPrefix = `outputs/${processingJobId}/`
+    const renditions = [
+      { audioCodec: 'aac' as const, height: 360 as const, videoCodec: 'h264' as const, width: 640 },
+    ]
+    const { client } = commandSender([
+      {
+        Body: {
+          transformToString: async () => cmafCompletionMarker(outputPrefix, renditions),
+        },
+        ContentLength: 512,
+      },
+      {
+        Body: {
+          transformToString: async () =>
+            '<MPD><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><ContentProtection schemeIdUri="urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95"/><Representation codecs="avc1.64001f" height="360"/><Representation codecs="mp4a.40.2"/></MPD>',
+        },
+        ContentLength: 1024,
+        ContentType: 'application/dash+xml',
+      },
+      {
+        Body: { transformToString: async () => '#EXTM3U\nvideo.m3u8\naudio.m3u8\n' },
+        ContentLength: 1024,
+        ContentType: 'application/vnd.apple.mpegurl',
+      },
+      {
+        Body: {
+          transformToString: async () =>
+            '#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://asset",KEYFORMAT="com.apple.streamingkeydelivery"\n',
+        },
+        ContentLength: 1024,
+        ContentType: 'application/vnd.apple.mpegurl',
+      },
+      {
+        Body: { transformToString: async () => '#EXTM3U\n#EXTINF:4,\naudio-1.m4s\n' },
+        ContentLength: 1024,
+        ContentType: 'application/vnd.apple.mpegurl',
+      },
+    ])
+    const verify = createS3OutputVerifier(
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
+      { client },
+    )
+
+    await expect(verify({ attempt: 1, outputPrefix, renditions })).rejects.toThrow(
+      'Transcoder HLS playlist is not FairPlay encrypted.',
+    )
+  })
+
   it('rejects a DASH output without PlayReady protection', async () => {
     const processingJobId = newProcessingJobId()
     const outputPrefix = `outputs/${processingJobId}/`
@@ -216,8 +279,7 @@ describe('S3 storage provider', () => {
     const { client } = commandSender([
       {
         Body: {
-          transformToString: async () =>
-            JSON.stringify({ attempt: 1, outputPrefix, renditions, version: 1 }),
+          transformToString: async () => cmafCompletionMarker(outputPrefix, renditions),
         },
         ContentLength: 512,
       },
@@ -242,6 +304,36 @@ describe('S3 storage provider', () => {
 
     await expect(verify({ attempt: 1, outputPrefix, renditions })).rejects.toThrow(
       'Transcoder manifest does not contain the approved encrypted ladder.',
+    )
+  })
+
+  it('rejects a legacy dual-package completion marker', async () => {
+    const processingJobId = newProcessingJobId()
+    const outputPrefix = `outputs/${processingJobId}/`
+    const renditions = [
+      { audioCodec: 'aac' as const, height: 360 as const, videoCodec: 'h264' as const, width: 640 },
+    ]
+    const { client } = commandSender([
+      {
+        Body: {
+          transformToString: async () =>
+            JSON.stringify({ attempt: 1, outputPrefix, renditions, version: 1 }),
+        },
+        ContentLength: 512,
+      },
+    ])
+    const verify = createS3OutputVerifier(
+      {
+        accessKeyId: 'access',
+        bucket: 'private-bucket',
+        region: 'ap-south-1',
+        secretAccessKey: 'secret',
+      },
+      { client },
+    )
+
+    await expect(verify({ attempt: 1, outputPrefix, renditions })).rejects.toThrow(
+      'Transcoder completion marker does not match the Processing Job.',
     )
   })
 
