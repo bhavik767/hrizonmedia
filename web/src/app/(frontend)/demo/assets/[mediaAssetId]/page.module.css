@@ -105,35 +105,54 @@
   align-items: start;
   display: grid;
   gap: 2rem;
+  grid-template-areas:
+    'player information'
+    'actions information'
+    'advanced thumbnail'
+    'analytics placement'
+    'danger .';
   grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr);
   margin-top: 2rem;
 }
-.primary,
-.secondary {
-  display: grid;
-  gap: 1.75rem;
+.playerSlot {
+  grid-area: player;
   min-width: 0;
 }
-.primary :global(.secure-playback) {
+.playerSlot :global(.secure-playback) {
   gap: 0.8rem;
   margin: 0;
 }
-.primary :global(.secure-playback__video) {
+.playerSlot :global(.secure-playback__video) {
   border-radius: 16px;
   max-height: none;
 }
-.primary :global(.secure-playback__heading) {
+.playerSlot :global(.secure-playback__heading) {
   align-items: center;
 }
-.primary :global(.secure-playback__heading h2) {
+.playerSlot :global(.secure-playback__heading h2) {
   font-size: 1rem;
   margin: 0;
 }
-.primary :global(.secure-playback__heading .eyebrow) {
+.playerSlot :global(.secure-playback__heading .eyebrow) {
   margin: 0 0 0.2rem;
 }
-.primary :global(.secure-playback__disclosure) {
+.playerSlot :global(.secure-playback__disclosure) {
   font-size: 0.78rem;
+}
+.information {
+  grid-area: information;
+}
+.advanced {
+  grid-area: advanced;
+}
+.thumbnail {
+  grid-area: thumbnail;
+}
+.analytics {
+  grid-area: analytics;
+}
+.placement {
+  grid-area: placement;
 }
 .playbackState {
   align-items: center;
@@ -163,6 +182,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
+  grid-area: actions;
 }
 .actionRow button,
 .fullButton,
@@ -503,6 +523,9 @@
 .signOut {
   margin-top: 2rem;
 }
+.danger {
+  grid-area: danger;
+}
 @media (max-width: 1200px) {
   .columns {
     gap: 1.25rem;
@@ -514,21 +537,16 @@
 }
 @media (max-width: 1050px) {
   .columns {
+    grid-template-areas:
+      'player'
+      'information'
+      'actions'
+      'advanced'
+      'thumbnail'
+      'analytics'
+      'placement'
+      'danger';
     grid-template-columns: 1fr;
-  }
-  .secondary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .secondary > :first-child {
-    grid-row: span 2;
-  }
-}
-@media (max-width: 700px) {
-  .secondary {
-    grid-template-columns: 1fr;
-  }
-  .secondary > :first-child {
-    grid-row: auto;
   }
 }
 @media (max-width: 520px) {

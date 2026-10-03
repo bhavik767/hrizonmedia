@@ -297,6 +297,19 @@ test.describe('Media Asset tracer bullet', () => {
         .toBe(true)
       if (width === 390) {
         await page.reload()
+        const sectionOrder = [
+          'Secure playback',
+          'Video Information',
+          'Advanced Settings',
+          'Thumbnail Management',
+          'Video Analytics',
+          'Organisation and Folder',
+          'Danger Zone',
+        ]
+        const headings = (await page.getByRole('heading').allTextContents())
+          .map((heading) => heading.trim())
+          .filter((heading) => sectionOrder.includes(heading))
+        expect(headings).toEqual(sectionOrder)
       }
     }
 

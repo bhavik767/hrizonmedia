@@ -170,7 +170,7 @@ export default async function AssetPage({
         </header>
 
         <div className={styles.columns}>
-          <div className={styles.primary}>
+          <div className={styles.playerSlot}>
             {asset.status === 'ready' ? (
               <PlaybackPlayer
                 autoStart={(await searchParams).autoplay === '1'}
@@ -201,207 +201,212 @@ export default async function AssetPage({
                 )}
               </section>
             )}
-
-            <div aria-label="Media Asset actions" className={styles.actionRow}>
-              <button disabled type="button">
-                <Code2 aria-hidden="true" size={17} /> Copy Embed Code
-              </button>
-              <button disabled type="button">
-                <Download aria-hidden="true" size={17} /> Download Original
-              </button>
-              <button disabled type="button">
-                <RotateCcw aria-hidden="true" size={17} /> Replace Video
-              </button>
-            </div>
-
-            <section aria-label="Advanced Settings" className={styles.card}>
-              <div className={styles.cardHeading}>
-                <h2>
-                  <Settings2 aria-hidden="true" size={19} /> Advanced Settings
-                </h2>
-                <span className={styles.cardPill}>Playback &amp; domain security</span>
-              </div>
-              <div className={styles.cardBody}>
-                <p className={styles.sectionLabel}>Playback settings</p>
-                <div className={styles.setting}>
-                  <div>
-                    <strong>Autoplay</strong>
-                    <p>Begin playback automatically when in view (muted by default).</p>
-                  </div>
-                  <input aria-label="Autoplay" disabled type="checkbox" />
-                </div>
-                <div className={styles.setting}>
-                  <div>
-                    <strong>Loop Video</strong>
-                    <p>Automatically replay after completion.</p>
-                  </div>
-                  <input aria-label="Loop Video" disabled type="checkbox" />
-                </div>
-                <div className={styles.setting}>
-                  <div>
-                    <strong>Player Controls</strong>
-                    <p>Show scrubbing, volume, and quality controls to viewers.</p>
-                  </div>
-                  <input aria-label="Player Controls" checked disabled readOnly type="checkbox" />
-                </div>
-                <p className={styles.sectionLabel}>Domain restrictions &amp; security</p>
-                <label className={styles.domainField}>
-                  Allowed web domains
-                  <input
-                    aria-label="Allowed web domains"
-                    disabled
-                    readOnly
-                    value={presentation.allowedDomains}
-                  />
-                </label>
-              </div>
-            </section>
-
-            <section aria-label="Video Analytics" className={styles.card}>
-              <div className={styles.cardHeading}>
-                <h2>
-                  <Activity aria-hidden="true" size={19} /> Video Analytics
-                </h2>
-                <span className={styles.cardPill}>{presentation.analyticsPeriod}</span>
-              </div>
-              <div className={styles.analyticsGrid}>
-                {presentation.analytics.map((metric) => (
-                  <div className={styles.metric} key={metric.label}>
-                    <span>{metric.label}</span>
-                    <strong>{metric.value}</strong>
-                    <small>{metric.detail}</small>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section aria-label="Danger Zone" className={`${styles.card} ${styles.danger}`}>
-              <div className={styles.cardHeading}>
-                <h2>
-                  <AlertTriangle aria-hidden="true" size={19} /> Danger Zone
-                </h2>
-              </div>
-              <p>
-                Deleting this Media Asset stops protected playback and removes its generated
-                Renditions. This action cannot be undone.
-              </p>
-              {asset.canManage && <DeleteAssetButton mediaAssetId={asset.mediaAssetId} />}
-            </section>
           </div>
 
-          <div className={styles.secondary}>
-            <section aria-label="Video Information" className={styles.card}>
-              <div className={styles.cardHeading}>
-                <h2>
-                  <Info aria-hidden="true" size={19} /> Video Information
-                </h2>
+          <section
+            aria-label="Video Information"
+            className={`${styles.card} ${styles.information}`}
+          >
+            <div className={styles.cardHeading}>
+              <h2>
+                <Info aria-hidden="true" size={19} /> Video Information
+              </h2>
+            </div>
+            <div className={styles.cardBody}>
+              <p className={styles.sectionLabel}>Available Renditions</p>
+              <div className={styles.renditions}>
+                {renditions.length ? (
+                  renditions.map((rendition) => (
+                    <span
+                      className={styles.rendition}
+                      key={`${rendition.width}x${rendition.height}`}
+                    >
+                      {formatRendition(rendition.height)}
+                    </span>
+                  ))
+                ) : (
+                  <span className={styles.muted}>No Renditions available</span>
+                )}
               </div>
-              <div className={styles.cardBody}>
-                <p className={styles.sectionLabel}>Available Renditions</p>
-                <div className={styles.renditions}>
-                  {renditions.length ? (
-                    renditions.map((rendition) => (
-                      <span
-                        className={styles.rendition}
-                        key={`${rendition.width}x${rendition.height}`}
-                      >
-                        {formatRendition(rendition.height)}
-                      </span>
-                    ))
-                  ) : (
-                    <span className={styles.muted}>No Renditions available</span>
-                  )}
+              <dl className={styles.infoPairs}>
+                <div>
+                  <dt>Video DRM</dt>
+                  <dd>{asset.mediaProtectionPolicy === 'protected' ? 'Enabled' : 'Not enabled'}</dd>
                 </div>
-                <dl className={styles.infoPairs}>
-                  <div>
-                    <dt>Video DRM</dt>
-                    <dd>
-                      {asset.mediaProtectionPolicy === 'protected' ? 'Enabled' : 'Not enabled'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Original source size</dt>
-                    <dd>{formatBytes(asset.size)}</dd>
-                  </div>
-                  <div>
-                    <dt>Total storage</dt>
-                    <dd>{presentation.totalStorage}</dd>
-                  </div>
-                </dl>
-                <div className={styles.infoSection}>
-                  <p className={styles.sectionLabel}>Subtitles</p>
-                  <span>{presentation.subtitleLanguages}</span>
-                  <button disabled type="button">
-                    Manage subtitles
-                  </button>
+                <div>
+                  <dt>Original source size</dt>
+                  <dd>{formatBytes(asset.size)}</dd>
                 </div>
-                <div className={styles.infoSection}>
-                  <p className={styles.sectionLabel}>Storage by Rendition</p>
-                  <div className={styles.storageTable} role="table" aria-label="Rendition storage">
-                    <div role="row">
-                      <span role="columnheader">Asset / Rendition</span>
-                      <span role="columnheader">Size</span>
-                    </div>
-                    <div role="row">
-                      <span role="cell">Original source</span>
-                      <span role="cell">{formatBytes(asset.size)}</span>
-                    </div>
-                    {renditions.map((rendition) => (
-                      <div role="row" key={`${rendition.width}x${rendition.height}`}>
-                        <span role="cell">{formatRendition(rendition.height)}</span>
-                        <span role="cell">
-                          {presentation.renditionSizes[rendition.height] ??
-                            presentation.unavailableSize}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                <div>
+                  <dt>Total storage</dt>
+                  <dd>{presentation.totalStorage}</dd>
                 </div>
-              </div>
-            </section>
-
-            <section aria-label="Thumbnail Management" className={styles.card}>
-              <div className={styles.cardHeading}>
-                <h2>
-                  <ImageIcon aria-hidden="true" size={19} /> Thumbnail Management
-                </h2>
-                <span className={styles.cardPill}>Poster</span>
-              </div>
-              <div className={styles.cardBody}>
-                <div className={styles.poster}>
-                  <ThumbnailPreview src={thumbnailSrc} title={title} />
-                </div>
-                <button className={styles.fullButton} disabled type="button">
-                  <Upload aria-hidden="true" size={17} /> Upload custom poster
+              </dl>
+              <div className={styles.infoSection}>
+                <p className={styles.sectionLabel}>Subtitles</p>
+                <span>{presentation.subtitleLanguages}</span>
+                <button disabled type="button">
+                  Manage subtitles
                 </button>
               </div>
-            </section>
+              <div className={styles.infoSection}>
+                <p className={styles.sectionLabel}>Storage by Rendition</p>
+                <div className={styles.storageTable} role="table" aria-label="Rendition storage">
+                  <div role="row">
+                    <span role="columnheader">Asset / Rendition</span>
+                    <span role="columnheader">Size</span>
+                  </div>
+                  <div role="row">
+                    <span role="cell">Original source</span>
+                    <span role="cell">{formatBytes(asset.size)}</span>
+                  </div>
+                  {renditions.map((rendition) => (
+                    <div role="row" key={`${rendition.width}x${rendition.height}`}>
+                      <span role="cell">{formatRendition(rendition.height)}</span>
+                      <span role="cell">
+                        {presentation.renditionSizes[rendition.height] ??
+                          presentation.unavailableSize}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
 
-            <section aria-label="Organisation and Folder" className={styles.card}>
-              <div className={styles.cardHeading}>
-                <h2>
-                  <Folder aria-hidden="true" size={19} /> Organisation and Folder
-                </h2>
-                <span className={styles.cardPill}>{organisationName}</span>
-              </div>
-              <div className={styles.cardBody}>
-                <div className={styles.folderRow}>
-                  <span>
-                    <Folder aria-hidden="true" size={19} /> {folderName}
-                  </span>
-                  <button disabled type="button">
-                    Move Media Asset
-                  </button>
-                </div>
-                <div className={styles.tag}>
-                  {presentation.tag}{' '}
-                  <button aria-label="Remove tag" disabled type="button">
-                    ×
-                  </button>
-                </div>
-              </div>
-            </section>
+          <div aria-label="Media Asset actions" className={styles.actionRow}>
+            <button disabled type="button">
+              <Code2 aria-hidden="true" size={17} /> Copy Embed Code
+            </button>
+            <button disabled type="button">
+              <Download aria-hidden="true" size={17} /> Download Original
+            </button>
+            <button disabled type="button">
+              <RotateCcw aria-hidden="true" size={17} /> Replace Video
+            </button>
           </div>
+
+          <section aria-label="Advanced Settings" className={`${styles.card} ${styles.advanced}`}>
+            <div className={styles.cardHeading}>
+              <h2>
+                <Settings2 aria-hidden="true" size={19} /> Advanced Settings
+              </h2>
+              <span className={styles.cardPill}>Playback &amp; domain security</span>
+            </div>
+            <div className={styles.cardBody}>
+              <p className={styles.sectionLabel}>Playback settings</p>
+              <div className={styles.setting}>
+                <div>
+                  <strong>Autoplay</strong>
+                  <p>Begin playback automatically when in view (muted by default).</p>
+                </div>
+                <input aria-label="Autoplay" disabled type="checkbox" />
+              </div>
+              <div className={styles.setting}>
+                <div>
+                  <strong>Loop Video</strong>
+                  <p>Automatically replay after completion.</p>
+                </div>
+                <input aria-label="Loop Video" disabled type="checkbox" />
+              </div>
+              <div className={styles.setting}>
+                <div>
+                  <strong>Player Controls</strong>
+                  <p>Show scrubbing, volume, and quality controls to viewers.</p>
+                </div>
+                <input aria-label="Player Controls" checked disabled readOnly type="checkbox" />
+              </div>
+              <p className={styles.sectionLabel}>Domain restrictions &amp; security</p>
+              <label className={styles.domainField}>
+                Allowed web domains
+                <input
+                  aria-label="Allowed web domains"
+                  disabled
+                  readOnly
+                  value={presentation.allowedDomains}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section
+            aria-label="Thumbnail Management"
+            className={`${styles.card} ${styles.thumbnail}`}
+          >
+            <div className={styles.cardHeading}>
+              <h2>
+                <ImageIcon aria-hidden="true" size={19} /> Thumbnail Management
+              </h2>
+              <span className={styles.cardPill}>Poster</span>
+            </div>
+            <div className={styles.cardBody}>
+              <div className={styles.poster}>
+                <ThumbnailPreview src={thumbnailSrc} title={title} />
+              </div>
+              <button className={styles.fullButton} disabled type="button">
+                <Upload aria-hidden="true" size={17} /> Upload custom poster
+              </button>
+            </div>
+          </section>
+
+          <section aria-label="Video Analytics" className={`${styles.card} ${styles.analytics}`}>
+            <div className={styles.cardHeading}>
+              <h2>
+                <Activity aria-hidden="true" size={19} /> Video Analytics
+              </h2>
+              <span className={styles.cardPill}>{presentation.analyticsPeriod}</span>
+            </div>
+            <div className={styles.analyticsGrid}>
+              {presentation.analytics.map((metric) => (
+                <div className={styles.metric} key={metric.label}>
+                  <span>{metric.label}</span>
+                  <strong>{metric.value}</strong>
+                  <small>{metric.detail}</small>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section
+            aria-label="Organisation and Folder"
+            className={`${styles.card} ${styles.placement}`}
+          >
+            <div className={styles.cardHeading}>
+              <h2>
+                <Folder aria-hidden="true" size={19} /> Organisation and Folder
+              </h2>
+              <span className={styles.cardPill}>{organisationName}</span>
+            </div>
+            <div className={styles.cardBody}>
+              <div className={styles.folderRow}>
+                <span>
+                  <Folder aria-hidden="true" size={19} /> {folderName}
+                </span>
+                <button disabled type="button">
+                  Move Media Asset
+                </button>
+              </div>
+              <div className={styles.tag}>
+                {presentation.tag}{' '}
+                <button aria-label="Remove tag" disabled type="button">
+                  ×
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section aria-label="Danger Zone" className={`${styles.card} ${styles.danger}`}>
+            <div className={styles.cardHeading}>
+              <h2>
+                <AlertTriangle aria-hidden="true" size={19} /> Danger Zone
+              </h2>
+            </div>
+            <p>
+              Deleting this Media Asset stops protected playback and removes its generated
+              Renditions. This action cannot be undone.
+            </p>
+            {asset.canManage && <DeleteAssetButton mediaAssetId={asset.mediaAssetId} />}
+          </section>
         </div>
 
         {asset.canShare && (
