@@ -21,9 +21,10 @@ image or expose them through Salad job input.
 
 The worker validates the server-owned source/output paths and attempt budget,
 acquires an S3 conditional lease for that attempt, transcodes the approved H.264/AAC
-ladder in one FFmpeg process without upscaling, packages DASH/CENC for Widevine and
-HLS/CBCS for FairPlay with the distinct DRM Content ID, uploads to an attempt prefix,
-promotes verified files to the canonical prefix, and writes `completion.json` last.
+ladder in one FFmpeg process without upscaling, creates one DoveRunner CMAF package
+with protected DASH and HLS manifests for Widevine, PlayReady, and FairPlay using the
+distinct DRM Content ID, uploads to an attempt prefix, promotes verified files to the
+canonical prefix, and writes a CMAF-versioned `completion.json` last.
 Deletion tombstones are checked before compute and again before publication. A handled
 processing failure sends an authenticated `failed` callback and returns 2xx to suppress
 Salad's extra delivery retries; the application alone owns the three-attempt budget.

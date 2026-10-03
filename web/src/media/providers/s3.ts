@@ -17,7 +17,12 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 import type { ProcessingJobId } from '../identifiers'
-import { attemptSupersessionMarkerKey } from '../transcode-control.mjs'
+import {
+  CMAF_COMPLETION_MARKER_VERSION,
+  CMAF_PACKAGE_TYPE,
+  attemptSupersessionMarkerKey,
+  hasFairPlayProtection,
+} from '../transcode-control.mjs'
 import {
   expectedMultipartPartSize,
   MULTIPART_PART_SIZE_BYTES,
@@ -145,7 +150,8 @@ export function createS3OutputVerifier(
     if (
       typeof marker !== 'object' ||
       marker === null ||
-      (marker as { version?: unknown }).version !== 1 ||
+      (marker as { version?: unknown }).version !== CMAF_COMPLETION_MARKER_VERSION ||
+      (marker as { packageType?: unknown }).packageType !== CMAF_PACKAGE_TYPE ||
       (marker as { attempt?: unknown }).attempt !== input.attempt ||
       (marker as { outputPrefix?: unknown }).outputPrefix !== input.outputPrefix ||
       JSON.stringify((marker as { renditions?: unknown }).renditions) !==
@@ -169,6 +175,7 @@ export function createS3OutputVerifier(
     }
     const manifestText = await manifest.Body.transformToString()
     if (
+      !/<MPD(?:\s|>)[\s\S]*<\/MPD>\s*$/i.test(manifestText) ||
       !/codecs=["'][^"']*avc1/i.test(manifestText) ||
       !/codecs=["'][^"']*mp4a/i.test(manifestText) ||
       !/edef8ba9-79d6-4ace-a3c8-27dcd51d21ed/i.test(manifestText) ||
@@ -221,13 +228,7 @@ export function createS3OutputVerifier(
         return playlist.Body.transformToString()
       }),
     )
-    if (
-      !hlsPlaylistTexts.some(
-        (playlist) =>
-          /#EXT-X-KEY:METHOD=SAMPLE-AES,/i.test(playlist) &&
-          /KEYFORMAT="com\.apple\.streamingkeydelivery"/i.test(playlist),
-      )
-    ) {
+    if (!hasFairPlayProtection(hlsManifestText, hlsPlaylistTexts)) {
       throw new Error('Transcoder HLS playlist is not FairPlay encrypted.')
     }
     const listed = await client.send(

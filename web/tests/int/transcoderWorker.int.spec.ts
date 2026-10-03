@@ -120,18 +120,19 @@ function workerDependencies({
     }
     if (packagingFailure) throw packagingFailure
     const packagedDirectory = args[args.indexOf('-o') + 1]!
-    await mkdir(`${packagedDirectory}/video`, { recursive: true })
+    const cmafDirectory = `${packagedDirectory}/cmaf`
+    await mkdir(`${cmafDirectory}/video`, { recursive: true })
     await Promise.all([
       writeFile(
-        `${packagedDirectory}/manifest.mpd`,
+        `${cmafDirectory}/manifest.mpd`,
         '<MPD>edef8ba9-79d6-4ace-a3c8-27dcd51d21ed 9a04f079-9840-4286-ab92-e65be0885f95</MPD>',
       ),
-      writeFile(`${packagedDirectory}/master.m3u8`, '#EXTM3U'),
+      writeFile(`${cmafDirectory}/master.m3u8`, '#EXTM3U'),
       writeFile(
-        `${packagedDirectory}/video/stream.m3u8`,
-        '#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,KEYFORMAT="com.apple.streamingkeydelivery"',
+        `${cmafDirectory}/video/stream.m3u8`,
+        '#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://asset",KEYFORMAT="com.apple.streamingkeydelivery"',
       ),
-      writeFile(`${packagedDirectory}/video/segment.m4s`, 'segment'),
+      writeFile(`${cmafDirectory}/video/segment.m4s`, 'segment'),
     ])
     return { stdout: '' }
   })
@@ -306,6 +307,15 @@ describe('Salad transcoder worker contract', () => {
             true,
           )
         }
+        const completion = dependencies.commands.find(
+          (command) =>
+            command.constructor.name === 'PutObjectCommand' &&
+            command.input?.Key === `${job.outputPrefix}completion.json`,
+        )
+        expect(JSON.parse(String(completion?.input?.Body))).toMatchObject({
+          packageType: 'cmaf',
+          version: 2,
+        })
       } finally {
         diagnostics.mockRestore()
       }
@@ -645,53 +655,52 @@ describe('Salad transcoder worker contract', () => {
     }
   })
 
-  it('requests separately named DASH/CENC and HLS/CBCS delivery packages', () => {
-    expect(
-      packagerArguments(
-        job,
-        [{ absolute: '/work/clear/video-360.mp4' }],
-        '/work/packaged',
-        'enc-token',
-      ),
-    ).toEqual(
+  it('requests one CMAF package with DASH and HLS manifests', () => {
+    const packagerArgs = packagerArguments(
+      job,
+      [{ absolute: '/work/clear/video-360.mp4' }],
+      '/work/packaged',
+      'enc-token',
+    )
+
+    expect(packagerArgs).toEqual(
       expect.arrayContaining([
         '--enc_token',
         'enc-token',
-        '--dash',
-        '--hls',
-        '--transport_stream_timestamp_offset_ms',
-        '120000',
+        '--cmaf',
         '--mpd_filename',
         'manifest.mpd',
         '--m3u8_filename',
         'master.m3u8',
       ]),
     )
+    expect(packagerArgs).not.toContain('--dash')
+    expect(packagerArgs).not.toContain('--hls')
+    expect(packagerArgs).not.toContain('--transport_stream_timestamp_offset_ms')
   })
 
   it('uses a configured legacy DoveRunner credential bundle without treating it as an encryption token', () => {
     const credentials = Buffer.from(
       JSON.stringify({ access_key: '0123456789abcdef0123456789ABCDEF', site_id: 'GXIW' }),
     ).toString('base64')
-    const arguments_ = packagerArguments(
+    const packagerArgs = packagerArguments(
       job,
       [{ absolute: '/work/clear/video-360.mp4' }],
       '/work/packaged',
       credentials,
     )
 
-    expect(arguments_).toEqual(
+    expect(packagerArgs).toEqual(
       expect.arrayContaining([
         '--site_id',
         'GXIW',
         '--access_key',
         '0123456789abcdef0123456789ABCDEF',
-        '--dash',
-        '--hls',
+        '--cmaf',
       ]),
     )
-    expect(arguments_).not.toContain('--enc_token')
-    expect(arguments_).not.toContain(credentials)
+    expect(packagerArgs).not.toContain('--enc_token')
+    expect(packagerArgs).not.toContain(credentials)
   })
 
   it('passes a CPIX KMS token through even when its payload contains site and access keys', () => {
@@ -702,44 +711,50 @@ describe('Salad transcoder worker contract', () => {
       }),
     ).toString('base64')
 
-    const arguments_ = packagerArguments(
+    const packagerArgs = packagerArguments(
       job,
       [{ absolute: '/work/clear/video-360.mp4' }],
       '/work/packaged',
       kmsToken,
     )
 
-    expect(arguments_).toEqual(expect.arrayContaining(['--enc_token', kmsToken, '--dash', '--hls']))
-    expect(arguments_).not.toContain('--site_id')
-    expect(arguments_).not.toContain('--access_key')
+    expect(packagerArgs).toEqual(expect.arrayContaining(['--enc_token', kmsToken, '--cmaf']))
+    expect(packagerArgs).not.toContain('--site_id')
+    expect(packagerArgs).not.toContain('--access_key')
   })
 
-  it('normalizes DoveRunner v4 combined DASH and HLS output for delivery', () => {
+  it('normalizes only DoveRunner CMAF output for delivery', () => {
     expect(
       normalizePackagedFiles([
-        { absolute: '/work/packaged/dash/manifest.mpd', relative: 'dash/manifest.mpd' },
+        { absolute: '/work/packaged/cmaf/manifest.mpd', relative: 'cmaf/manifest.mpd' },
         {
-          absolute: '/work/packaged/dash/video/avc1/1/seg-1.m4s',
-          relative: 'dash/video/avc1/1/seg-1.m4s',
+          absolute: '/work/packaged/cmaf/video/avc1/1/seg-1.m4s',
+          relative: 'cmaf/video/avc1/1/seg-1.m4s',
         },
-        { absolute: '/work/packaged/hls/master.m3u8', relative: 'hls/master.m3u8' },
+        { absolute: '/work/packaged/cmaf/master.m3u8', relative: 'cmaf/master.m3u8' },
         {
-          absolute: '/work/packaged/hls/video/avc1/1/stream.m3u8',
-          relative: 'hls/video/avc1/1/stream.m3u8',
+          absolute: '/work/packaged/cmaf/video/avc1/1/stream.m3u8',
+          relative: 'cmaf/video/avc1/1/stream.m3u8',
         },
       ]),
     ).toEqual([
-      { absolute: '/work/packaged/dash/manifest.mpd', relative: 'manifest.mpd' },
+      { absolute: '/work/packaged/cmaf/manifest.mpd', relative: 'manifest.mpd' },
       {
-        absolute: '/work/packaged/dash/video/avc1/1/seg-1.m4s',
+        absolute: '/work/packaged/cmaf/video/avc1/1/seg-1.m4s',
         relative: 'video/avc1/1/seg-1.m4s',
       },
-      { absolute: '/work/packaged/hls/master.m3u8', relative: 'master.m3u8' },
+      { absolute: '/work/packaged/cmaf/master.m3u8', relative: 'master.m3u8' },
       {
-        absolute: '/work/packaged/hls/video/avc1/1/stream.m3u8',
+        absolute: '/work/packaged/cmaf/video/avc1/1/stream.m3u8',
         relative: 'video/avc1/1/stream.m3u8',
       },
     ])
+
+    expect(() =>
+      normalizePackagedFiles([
+        { absolute: '/work/packaged/dash/manifest.mpd', relative: 'dash/manifest.mpd' },
+      ]),
+    ).toThrow('DoveRunner created output outside its CMAF package.')
   })
 
   it('rejects a DASH package that is missing PlayReady protection', () => {
